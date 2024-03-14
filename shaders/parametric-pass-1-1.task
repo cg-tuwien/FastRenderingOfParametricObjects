@@ -1,0 +1,198 @@
+#version 460
+#extension GL_EXT_shader_16bit_storage                   : require
+#extension GL_EXT_shader_8bit_storage                    : require
+#extension GL_EXT_mesh_shader                            : require
+#extension GL_EXT_nonuniform_qualifier                   : require
+#extension GL_EXT_shader_image_int64                     : require
+#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
+#extension GL_GOOGLE_include_directive                   : enable
+#extension GL_ARB_shader_draw_parameters                 : require
+#extension GL_KHR_shader_subgroup_arithmetic             : require
+#extension GL_KHR_shader_subgroup_ballot                 : require
+#extension GL_KHR_shader_subgroup_shuffle                : require
+#extension GL_EXT_debug_printf                           : enable
+
+layout (constant_id = 0) const uint NUM_TASK_SHADER_INVOCATIONS_X = 1;
+layout (constant_id = 1) const uint NUM_TASK_SHADER_INVOCATIONS_Y = 1;
+layout (constant_id = 2) const uint NUM_MESH_SHADER_INVOCATIONS_X = 1;
+layout (constant_id = 3) const uint NUM_MESH_SHADER_INVOCATIONS_Y = 1;
+layout(local_size_x_id = 0, local_size_y_id = 1, local_size_z = 1) in;
+
+#include "../shader_includes/util/ui64_conv.glsl"
+#include "../shader_includes/util/glsl_helpers.glsl"
+#include "../shader_includes/types.glsl"
+#include "../shader_includes/param/shape_functions.glsl"
+#include "../shader_includes/common_ubo.glsl"
+#include "../shader_includes/parametric_curve_helpers.glsl"
+#include "../shader_includes/task_mesh_shared_1st.glsl"
+
+#define MAX_COLORS 7
+vec3 groupcolors[MAX_COLORS] = {
+    vec3(0.7, 0.2, 0.2),
+    vec3(0.2, 0.5, 0.7),
+    vec3(0.9, 0.6, 0.1),
+    vec3(0.5, 0.3, 0.8),
+    vec3(0.8, 0.4, 0.6),
+    vec3(0.3, 0.7, 0.5),
+    vec3(0.6, 0.2, 0.9)
+};
+
+// ###### COMBINED ATTACHMENT #############################
+layout(set = 1, binding = 0, r64ui) uniform restrict u64image2D uCombinedAttachment;
+layout(set = 1, binding = 1, r32ui) uniform restrict uimage2D   uHeatmapImage;
+// -------------------------------------------------------
+#include "../shader_includes/combined_attachment_shared.glsl"
+
+// A struct to hold auxiliary data of the neighboring invocation:
+struct NeighborData 
+{
+	uint  invocationIndex;
+	vec2  screenCoords;
+	uint  isOff;
+};
+
+// ###### MAIN ###########################
+void main() 
+{
+	if (pushConstants.mGatherPipelineStats) {
+		atomicAdd(uCounters.mCounters[0], 1);
+	}
+
+	// We split our uv parameter range into x-times-y GROUP-TILES:
+	const float startX = pushConstants.mParams[0].mFrom;
+	const float rangeX = pushConstants.mParams[0].mTo - startX;
+	const float startY = pushConstants.mParams[1].mFrom;
+	const float rangeY = pushConstants.mParams[1].mTo - startY;
+	const vec2 groupParamRange = vec2(rangeX, rangeY) / vec2(gl_NumWorkGroups.xy);
+	const vec2 groupParamStart = vec2(startX, startY) + groupParamRange * vec2(gl_WorkGroupID.xy);
+	const vec2 groupParamEnd   = groupParamStart + groupParamRange;
+
+	// Within each GROUP-TILE, we split again, namely into INVOCATION-TILES:
+	//   Note: We can safely assume that it divides without remainder:
+	const uvec2 numInvocTiles = ubo.mTileSizes.xy / gl_WorkGroupSize.xy;
+	// FYI:    tileParamRange = (groupParamEnd - groupParamStart) / vec2(numInvocTiles);
+	const vec2 tileParamStep  = (groupParamEnd - groupParamStart) / vec2((gl_WorkGroupSize.xy - uvec2(1, 1)) * numInvocTiles);
+
+	uint numMeshGroupsToSpawn = 0;
+
+	for (uint ix = 0; ix < numInvocTiles.x; ++ix) {
+		for (uint iy = 0; iy < numInvocTiles.y; ++iy) {
+			const vec2 invocParams = groupParamStart + 
+				/* Tile contribution:       */ tileParamStep * vec2(ix, iy) * vec2(gl_WorkGroupSize.xy - uvec2(1, 1)) + 
+				/* Invocation contribution: */ tileParamStep * vec2(gl_LocalInvocationID.xy); 
+			// Note:   The respective LAST invocations will "overshoot" to the next tile or group. This is fine!
+
+			// Ask neighboring thread for some data, start by computing the relevant invocation indices:
+			uint myInvocationIndex = calcInvocationIndex(gl_LocalInvocationID.x, gl_LocalInvocationID.y); // <-- must result in the same as gl_LocalInvocationIndex
+			NeighborData neighborX;
+			NeighborData neighborY;
+			NeighborData neighborXY;
+			// IF we overshoot, turn it back... but not to the same invocation, s.t. we avoid divisions by zero (e.g., when normalizing vectors):
+			uint neighborShiftX = gl_LocalInvocationID.x + 1;
+			if (neighborShiftX >= gl_WorkGroupSize.x) { neighborShiftX -= 2; } // ^... therefore, -2 and not -1
+			uint neighborShiftY = gl_LocalInvocationID.y + 1;
+			if (neighborShiftY >= gl_WorkGroupSize.y) { neighborShiftY -= 2; } // TODO: Are some calculations faster than those ifs?
+			neighborX.invocationIndex = calcInvocationIndex(neighborShiftX, gl_LocalInvocationID.y);
+			neighborY.invocationIndex = calcInvocationIndex(gl_LocalInvocationID.x, neighborShiftY);
+			neighborXY.invocationIndex = calcInvocationIndex(neighborShiftX, neighborShiftY);
+
+			// ------> PARAMETRIC FUNCTION:
+			vec3 posWS = paramToWS(invocParams[0], invocParams[1]);
+			vec4 posCS = toCS(posWS);
+
+			// Is this point even inside the view frustum?
+			uint isOff = is_off_screen(posCS); 
+			// ### SUBGROUP SHUFFLE:
+			neighborX.isOff  = subgroupShuffle(isOff, neighborX.invocationIndex );
+			neighborY.isOff  = subgroupShuffle(isOff, neighborY.invocationIndex );
+			neighborXY.isOff = subgroupShuffle(isOff, neighborXY.invocationIndex);
+			bool isInsideFrustum = (isOff & neighborX.isOff & neighborY.isOff & neighborXY.isOff) == 0;
+
+			// TODO: Investigate if it is better to have a big if around the following code 
+			//       based on the isOff values -- or if it is better to let the invocations 
+			//       execute in sync.
+			//       But ATTENTION in the former case: What about those subgroup invocations when the code is branching? 
+
+			// In any case, calculate its screen coordinates:
+			vec3 vpc = toScreen(posCS);
+			vec2 screenCoords = vpc.xy;
+
+			// ### SUBGROUP SHUFFLE:
+			neighborX.screenCoords  = subgroupShuffle(screenCoords, neighborX.invocationIndex);
+			neighborY.screenCoords  = subgroupShuffle(screenCoords, neighborY.invocationIndex);
+			neighborXY.screenCoords = subgroupShuffle(screenCoords, neighborXY.invocationIndex);
+			vec2 pixelDists = vec2(
+				max(length(neighborX.screenCoords - screenCoords), length(neighborXY.screenCoords - neighborY.screenCoords)),
+				max(length(neighborY.screenCoords - screenCoords), length(neighborXY.screenCoords - neighborX.screenCoords)) // Attention: Under estimation for many (most?) cases
+			);
+
+			const bool isPixelProducingInvocation = gl_LocalInvocationID.x < (gl_WorkGroupSize.x-1) && gl_LocalInvocationID.y < (gl_WorkGroupSize.y-1);
+
+			// Either draw or spawn mesh shaders:
+			uvec2 meshShaderInvocations;
+			meshShaderInvocations.x = NUM_MESH_SHADER_INVOCATIONS_X - 1;
+			meshShaderInvocations.y = NUM_MESH_SHADER_INVOCATIONS_Y - 1;
+			uvec2 meshShaderGroupsRequired = isPixelProducingInvocation && isInsideFrustum && (pixelDists.x > 1.0 || pixelDists.y > 1.0)
+				? (uvec2(ceil(pixelDists)) + meshShaderInvocations - uvec2(1, 1)) / meshShaderInvocations
+				: uvec2(0, 0);
+
+			uint numMeshShaderGroupsRequired = meshShaderGroupsRequired.x * meshShaderGroupsRequired.y > 0 ? 1 : 0; // turned into a bool
+			if (isPixelProducingInvocation && 0 == numMeshShaderGroupsRequired) {
+				// Not going to spawn mesh shader instances => draw directly here:
+//				if (gl_LocalInvocationIndex == 16) {
+//					imageAtomicMin(uCombinedAttachment, ivec2(mix(mix(screenCoords, neighborXscreenCoords, pushConstants.mDebugSliders[0]), neighborYscreenCoords, pushConstants.mDebugSliders[1])), data);
+//				}
+				writeToCombinedAttachment(screenCoords, vpc.z, groupcolors[myInvocationIndex % MAX_COLORS]);
+			}
+
+			// Get the insert indices for the data passed-on to mesh shaders:
+			// ### SUBGROUP EXCLUSIVE ADD:
+			uint insertIndex = subgroupExclusiveAdd(numMeshShaderGroupsRequired);
+			if (1 == numMeshShaderGroupsRequired) {
+				// x:
+				payload[insertIndex].mParams[0].mFrom = invocParams.x;
+				payload[insertIndex].mParams[0].mTo   = invocParams.x + tileParamStep.x;
+				// y:
+				payload[insertIndex].mParams[1].mFrom = invocParams.y;
+				payload[insertIndex].mParams[1].mTo   = invocParams.y + tileParamStep.y;
+				// this task shader's index:
+				payload[insertIndex].mTaskGroupIndex  = calcGroupIndex(gl_WorkGroupID.x, gl_WorkGroupID.y);
+			}
+
+//			for (uint sx = 0; sx < meshShaderGroupsRequired.x; ++sx) {
+//				float rangeX = neighborX.invocParam - invocParams.x; // Inside of the loop to avoid division by zero
+//				float invocParamsRangeX = rangeX / meshShaderGroupsRequired.x;
+//				for (uint sy = 0; sy < meshShaderGroupsRequired.y; ++sy) {
+//					float rangeY = neighborY.invocParam - invocParams.y;
+//					float invocParamsRangeY = rangeY / meshShaderGroupsRequired.y;
+//
+//					uint insertIndex = insertStartIndex + sy * meshShaderGroupsRequired.x + sx;
+//					// x:
+//					payload[insertIndex].mParams[0].mFrom = invocParams.x + invocParamsRangeX * float(sx);
+//					payload[insertIndex].mParams[0].mTo   = paramRanges[insertIndex].mParams[0].mFrom + invocParamsRangeX;
+//					// y:
+//					payload[insertIndex].mParams[1].mFrom = invocParams.y + invocParamsRangeY * float(sy);
+//					payload[insertIndex].mParams[1].mTo   = paramRanges[insertIndex].mParams[1].mFrom + invocParamsRangeY;
+//				}
+//			}
+
+			// All the last invocations (which the one at [gl_WorkGroupSize.x - 1, gl_WorkGroupSize.y - 2] is the first one of), that may not
+			// perform draws, but are merely helper invocations, knows how many mesh shader groups will be spawned in total. Get that number:
+			// ### SUBGROUP SHUFFLE:
+			numMeshGroupsToSpawn += subgroupShuffle(insertIndex, calcInvocationIndex(gl_WorkGroupSize.x - 1, gl_WorkGroupSize.y - 2));
+		}
+	}
+
+	EmitMeshTasksEXT(numMeshGroupsToSpawn, 1, 1);
+	// ^ Additional info from the VK_EXT_mesh_shader spec:
+	// 
+	// > The arguments are taken from the first invocation in each workgroup. Any invocation must 
+	// > execute this instruction exactly once and under uniform control flow. This instruction 
+	// > also serves as an OpControlBarrier instruction, and also performs and adheres to the 
+	// > description and semantics of an OpControlBarrier instruction with the 'Execution' and 
+	// > 'Memory' operands set to Workgroup and the 'Semantics' operand set to a combination of 
+	// > WorkgroupMemory and AcquireRelease. Ceases all further processing: Only instructions 
+	// > executed before OpEmitMeshTasksEXT have observable side effects.
+	// > 
+	// > This instruction must be the last instruction in a block.
+}

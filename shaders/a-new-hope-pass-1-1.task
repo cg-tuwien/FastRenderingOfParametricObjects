@@ -1,0 +1,319 @@
+#version 460
+#extension GL_EXT_shader_16bit_storage                   : require
+#extension GL_EXT_shader_8bit_storage                    : require
+#extension GL_EXT_mesh_shader                            : require
+#extension GL_EXT_nonuniform_qualifier                   : require
+#extension GL_EXT_shader_image_int64                     : require
+#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
+#extension GL_GOOGLE_include_directive                   : enable
+#extension GL_ARB_shader_draw_parameters                 : require
+#extension GL_KHR_shader_subgroup_arithmetic             : require
+#extension GL_KHR_shader_subgroup_ballot                 : require
+#extension GL_KHR_shader_subgroup_shuffle                : require
+#extension GL_EXT_debug_printf                           : enable
+
+// =============== PURPOSE OF THIS TASK SHADER ======================
+//
+// Nothing other than density estimation of the points.
+// S.t. we can spawn an as-optimal-as-possible number of mesh shaders.
+// 
+// GL HF, Let's go:
+
+layout (constant_id = 0) const uint NUM_TASK_SHADER_INVOCATIONS_X = 1;
+layout (constant_id = 1) const uint NUM_TASK_SHADER_INVOCATIONS_Y = 1;
+layout (constant_id = 2) const uint NUM_MESH_SHADER_INVOCATIONS_X = 1;
+layout (constant_id = 3) const uint NUM_MESH_SHADER_INVOCATIONS_Y = 1;
+layout(local_size_x_id = 0, local_size_y_id = 1, local_size_z = 1) in;
+
+#include "../shader_includes/util/ui64_conv.glsl"
+#include "../shader_includes/util/glsl_helpers.glsl"
+#include "../shader_includes/types.glsl"
+#include "../shader_includes/param/shape_functions.glsl"
+#include "../shader_includes/common_ubo.glsl"
+#include "../shader_includes/parametric_curve_helpers.glsl"
+#include "../shader_includes/a-new-hope-shared.glsl"
+
+#define MAX_COLORS 7
+vec3 groupcolors[MAX_COLORS] = {
+    vec3(0.7, 0.2, 0.2),
+    vec3(0.2, 0.5, 0.7),
+    vec3(0.9, 0.6, 0.1),
+    vec3(0.5, 0.3, 0.8),
+    vec3(0.8, 0.4, 0.6),
+    vec3(0.3, 0.7, 0.5),
+    vec3(0.6, 0.2, 0.9)
+};
+
+// ###### COMBINED ATTACHMENT #############################
+layout(set = 1, binding = 0, r64ui) uniform restrict u64image2D uCombinedAttachment;
+layout(set = 1, binding = 1, r32ui) uniform restrict uimage2D   uHeatmapImage;
+// -------------------------------------------------------
+#include "../shader_includes/combined_attachment_shared.glsl"
+
+// ###### SOME CONSTANTS AND SOME SHARED STORAGE: ##################################
+
+// This is going to be 32 on NVIDIA:
+const uint NUM_INVOCS = gl_WorkGroupSize.x * gl_WorkGroupSize.y;
+const uint NUM_INVOCS_MINUS_ONE = NUM_INVOCS - 1;
+const uint HALF_INVOCS = NUM_INVOCS / 2;
+
+const uvec2 GOOD_MESH_INVOCS = uvec2(128, 128); // TODO: To be empirically determined which #meshinvocations is great across various GPUs
+
+shared float results[NUM_INVOCS];
+shared vec2 vRanges[NUM_INVOCS];
+shared ivec2 meshInvocSize;
+
+// ###### DIFFERENT DENSITY ESTIMATION STRATEGIES HERE: ###########################
+
+float findMedian(float u, float v)
+{
+	uint neighborIndex = clamp(gl_LocalInvocationIndex + 1, 0, gl_LocalInvocationIndex - 1); // just produce an outlier
+	// Calc my screen coords:
+	vec3 vpc = paramToScreen(u, v); // have been clipped
+	vec2 sc = vpc.xy;
+
+	// Calc distance to neighbor in terms of screen coords:
+	vec2 scNeighbor = subgroupShuffle(sc, neighborIndex);
+	float dist = length(scNeighbor - sc); // TODO: could use lengthSquared.
+	// Now find median:
+	float groupMin = subgroupMin(dist);
+	float groupMax = subgroupMax(dist);
+	uvec4 maxes    = subgroupBallot(dist == groupMax);
+	uint  numMaxes = subgroupBallotBitCount(maxes);
+	while (numMaxes < HALF_INVOCS)
+	{
+		// Get rid of one:
+		if (dist == groupMin) dist = groupMax;
+		// Update min, and maxes:
+		groupMin = subgroupMin(dist);
+		maxes    = subgroupBallot(dist == groupMax);
+		numMaxes = subgroupBallotBitCount(maxes);
+	}
+	// The now current min is the median:
+	return groupMin;
+}
+
+// Finds the MEDIANS of u and v params in the respective middle (w.r.t. u and v) of the current tile.
+vec2 findScreenSpaceMedians(vec2 paramStart, vec2 deltaParam)
+{
+	const vec2 middleParams = paramStart + deltaParam * vec2(HALF_INVOCS);
+	const float medianU = findMedian(paramStart.x + deltaParam.x * float(gl_LocalInvocationIndex), middleParams.y);
+	const float medianV = findMedian(middleParams.x, paramStart.y + deltaParam.y * float(gl_LocalInvocationIndex));
+	return vec2(medianU, medianV);
+}
+
+// ###### MAIN ####################################################################
+void main() 
+{
+	if (pushConstants.mGatherPipelineStats) {
+		atomicAdd(uCounters.mCounters[0], 1);
+	}
+
+	// See in which TASK SHADER TILE we find ourselves in:
+	const float totalStartX = pushConstants.mParams[0].mFrom;
+	const float totalRangeX = pushConstants.mParams[0].mTo - totalStartX;
+	const float totalStartY = pushConstants.mParams[1].mFrom;
+	const float totalRangeY = pushConstants.mParams[1].mTo - totalStartY;
+	const vec2 taskTileRange = vec2(totalRangeX, totalRangeY) / vec2(gl_NumWorkGroups.xy);
+	const vec2 taskTileStart = vec2(totalStartX, totalStartY) + taskTileRange * vec2(gl_WorkGroupID.xy);
+	const vec2 taskTileEnd   = taskTileStart + taskTileRange;
+	// With the task shader tile figured out, now focus on IN-TILE PARAM RANGES:
+	//  What we are doing: Analyzing the whole thing with #NUM_INVOCS taps FOR EACH param dimension (u, v) independently from each other:
+	const vec2 deltaParam = taskTileRange / NUM_INVOCS_MINUS_ONE; // MINUS_ONE s.t. we also catch the border to the next tile
+	const vec2 paramStart = taskTileRange + deltaParam * vec2(gl_LocalInvocationIndex); // Remember: 32 steps for u, and 32 steps for v (on NVIDIA at least)
+	const vec2 paramEnd   = paramStart + deltaParam;
+
+	// Find the medians, which serve as basis for our mesh shader invocations:
+	const vec2 medianScreenDists = findScreenSpaceMedians(paramStart, deltaParam);
+
+	// Estimate the number of invocations we might need based on the median:
+	const uvec2 meshInvocsEstimation = uvec2(NUM_INVOCS) * uvec2(medianScreenDists);
+
+	// Divide the uv range based on that estimation:
+	const uvec2 meshInvocationsDim = clamp(meshInvocsEstimation / GOOD_MESH_INVOCS, uvec2(1, 1), uvec2(MAX_SPAWNED_MESH_GROUPS_X, MAX_SPAWNED_MESH_GROUPS_Y));
+	const uvec2 meshInvocationsDimMinusOne = meshInvocationsDim - uvec2(1);
+	const uint numMeshInvocations = meshInvocationsDim.x * meshInvocationsDim.y;
+	const vec2 deltaParamForMesh = taskTileRange / vec2(meshInvocationsDim);
+
+//	debugPrintfEXT("(%u, %u), %u", meshInvocationsDim.x, meshInvocationsDim.y, numMeshInvocations);
+
+	// Copy from vRanges into all the payloads in parallel:
+	for (uint shift = 0; shift < (numMeshInvocations + NUM_INVOCS_MINUS_ONE); shift += NUM_INVOCS)
+	{
+		uint payloadIndex = shift + gl_LocalInvocationIndex;
+		if (payloadIndex < numMeshInvocations)
+		{
+//			debugPrintfEXT("%u", payloadIndex);
+			uint idxY = payloadIndex / meshInvocationsDim.x;
+			uint idxX = payloadIndex - (idxY * meshInvocationsDim.x);
+		
+			float meshTileU = taskTileStart.x + deltaParamForMesh.x * float(idxX);
+			float meshTileV = taskTileStart.y + deltaParamForMesh.y * float(idxY);
+
+//			debugPrintfEXT("payloadIndex[%u], meshInvocationsDim[%u, %u], idxX[%u], idxY[%u], u[%.3f -> %.3f], v[%.3f -> %.3f]", payloadIndex, meshInvocationsDim.x, meshInvocationsDim.y, idxX, idxY, meshTileU, meshTileU + deltaParamForMesh.x, meshTileV, meshTileV + deltaParamForMesh.y);
+
+			// x:
+			payload[payloadIndex].mParams[0].mFrom = meshTileU;
+			payload[payloadIndex].mParams[0].mTo   = meshTileU + deltaParamForMesh.x;
+			// y:
+			payload[payloadIndex].mParams[1].mFrom = meshTileV;
+			payload[payloadIndex].mParams[1].mTo   = meshTileV + deltaParamForMesh.y;
+			// store the payloadIndex for debugging purposes:
+			payload[payloadIndex].mTaskGroupIndex  = calcGroupIndex(gl_WorkGroupID.x, gl_WorkGroupID.y);
+		}
+	}
+
+	EmitMeshTasksEXT(numMeshInvocations, 1, 1);
+	// ^ The arguments are taken from the first invocation in each workgroup (rtfm)
+
+	// TODO: Spawn a certain amount of mesh shaders now.
+	
+//	// Analyze u parameter range:
+//	//   - Vary u
+//	//   - Fix  v  to half the range
+//	{
+//		float du = groupParamRange.x / float(NUM_INVOCATIONS);
+//		vec2 invocParams = vec2(
+//			groupParamStart.x + du * float(gl_LocalInvocationIndex),
+//			groupParamStart.y + groupParamRange.y * 0.5
+//		);
+//		
+//		// Calc screen coords:
+//		vec3 posWS = paramToWS(invocParams[0], invocParams[1]);
+//		vec4 posCS = toCS(posWS);
+//		vec3 vpc = toScreen(posCS); // have been clipped
+//		vec2 sc = vpc.xy;
+//
+//		// Calc screen coords diff:
+//		vec2 scNeighbor = subgroupShuffle(sc, neighborIndex);
+//		float scDiff = length(scNeighbor - sc);
+//
+//		// Write it into results, s.t. invocation[0] can access it later:
+//		results[gl_LocalInvocationIndex] = scDiff;
+//
+//		// Get total range:
+//		float scDiffTotal = subgroupAdd(scDiff);
+//
+//		// Put u ranges into buckets:
+//		float targetDiff = scDiffTotal / MAX_SPAWNED_MESH_GROUPS_X;
+//		memoryBarrier();
+//		barrier();
+//		if (gl_LocalInvocationIndex == 0) {
+//			int insertIndex = 0;
+//			payload[insertIndex].mParams[0].mFrom = groupParamStart.x;
+//
+//			float accumU = groupParamStart.x;
+//			float accumDiff = 0.0;
+//			for (int i = 0; i < NUM_INVOCATIONS; ++i) {
+//				accumU += du;
+//				accumDiff += results[i];
+//				if (accumDiff > targetDiff) {
+//					payload[insertIndex].mParams[0].mTo = accumU;
+////					if (gl_WorkGroupID.xy == uvec2(1,1))
+////						debugPrintfEXT("x entry[%d] from[%.3f] to[%.3f] after accumDiff[%.3f] > targetDiff[%.3f], accumU[%.3f]", insertIndex, payload[insertIndex].mParams[0].mFrom, payload[insertIndex].mParams[0].mTo, accumDiff, targetDiff, accumU);
+//					// Initialize next element: 
+//					insertIndex++;
+//					payload[insertIndex].mParams[0].mFrom = accumU;
+//					accumDiff = 0.0;
+//				}
+//			}
+//
+//
+//			if (accumDiff > 0.0) { // Make another element for the remainder
+//				payload[insertIndex].mParams[0].mTo = accumU;
+//				insertIndex++;
+//			}
+//
+//			meshInvocSize.x = max(0, insertIndex - 1);
+//			if (gl_WorkGroupID.xy == uvec2(1,1))
+//				debugPrintfEXT("insertIndex[%u], meshInvocSize.x[%d]", insertIndex, meshInvocSize.x);
+//		}
+//	}
+//
+//	// Analyze v parameter range:
+//	//   - Fix  u  to half the range
+//	//   - Vary v
+//	{
+//		float dv = groupParamRange.y / float(NUM_INVOCATIONS);
+//		vec2 invocParams = vec2(
+//			groupParamStart.x + groupParamRange.x * 0.5,
+//			groupParamStart.y + dv * float(gl_LocalInvocationIndex)
+//		);
+//		
+//		// Calc screen coords:
+//		vec3 posWS = paramToWS(invocParams[0], invocParams[1]);
+//		vec4 posCS = toCS(posWS);
+//		vec3 vpc = toScreen(posCS); // have been clipped
+//		vec2 sc = vpc.xy;
+//
+//		// Calc screen coords diff:
+//		vec2 scNeighbor = subgroupShuffle(sc, neighborIndex);
+//		float scDiff = length(scNeighbor - sc);
+//
+//		// Write it into results, s.t. invocation[0] can access it later:
+//		results[gl_LocalInvocationIndex] = scDiff;
+//
+//		// Get total range:
+//		float scDiffTotal = subgroupAdd(scDiff);
+//
+//		// Put v ranges into buckets:
+//		float targetDiff = scDiffTotal / MAX_SPAWNED_MESH_GROUPS_X;
+//		memoryBarrier();
+//		barrier();
+//		if (gl_LocalInvocationIndex == 0) {
+//			int insertIndex = 0;
+//			vRanges[insertIndex] = vec2(groupParamStart.y);
+//
+//			float accumV = groupParamStart.y;
+//			float accumDiff = 0.0;
+//			for (int i = 0; i < NUM_INVOCATIONS; ++i) {
+//				accumV += dv;
+//				accumDiff += results[i];
+//				if (accumDiff > targetDiff) {
+//					vRanges[insertIndex][1] = accumV;
+//					// Initialize next element: 
+//					insertIndex++;
+//					vRanges[insertIndex] = vec2(accumV);
+//					accumDiff = 0.0;
+//				}
+//			}
+//
+//			if (accumDiff > 0.0) { // Make another element for the remainder
+//				vRanges[insertIndex][1] = accumV;
+//				insertIndex++;
+//			}
+//
+//			meshInvocSize.y = max(0, insertIndex - 1);
+//		}
+//
+//		// Copy from vRanges into all the payloads in parallel:
+//		memoryBarrier();
+//		barrier();
+//		if (gl_LocalInvocationIndex < meshInvocSize.y) {
+//			for (int idxX = 0; idxX < meshInvocSize.x; ++idxX) {
+//				// x:
+//				payload[gl_LocalInvocationIndex * meshInvocSize.y + idxX].mParams[0].mFrom = payload[idxX].mParams[0].mFrom;
+//				payload[gl_LocalInvocationIndex * meshInvocSize.y + idxX].mParams[0].mTo   = payload[idxX].mParams[0].mTo  ;
+//				// y:
+//				payload[gl_LocalInvocationIndex * meshInvocSize.y + idxX].mParams[1].mFrom = vRanges[gl_LocalInvocationIndex][0];
+//				payload[gl_LocalInvocationIndex * meshInvocSize.y + idxX].mParams[1].mTo   = vRanges[gl_LocalInvocationIndex][1];
+//				// this task shader's index:
+//				payload[gl_LocalInvocationIndex * meshInvocSize.y + idxX].mTaskGroupIndex  = gl_LocalInvocationIndex * meshInvocSize.y + idxX;
+//			}
+//		}
+//	}
+	
+//	if (gl_WorkGroupID.xy != uvec2(1,1)) EmitMeshTasksEXT(0, 1, 1); else
+	EmitMeshTasksEXT(meshInvocSize.x * meshInvocSize.y, 1, 1);
+	// ^ Additional info from the VK_EXT_mesh_shader spec:
+	// 
+	// > The arguments are taken from the first invocation in each workgroup. Any invocation must 
+	// > execute this instruction exactly once and under uniform control flow. This instruction 
+	// > also serves as an OpControlBarrier instruction, and also performs and adheres to the 
+	// > description and semantics of an OpControlBarrier instruction with the 'Execution' and 
+	// > 'Memory' operands set to Workgroup and the 'Semantics' operand set to a combination of 
+	// > WorkgroupMemory and AcquireRelease. Ceases all further processing: Only instructions 
+	// > executed before OpEmitMeshTasksEXT have observable side effects.
+	// > 
+	// > This instruction must be the last instruction in a block.
+}

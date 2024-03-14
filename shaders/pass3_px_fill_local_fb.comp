@@ -1,0 +1,508 @@
+#version 460
+#extension GL_EXT_shader_16bit_storage                   : require
+#extension GL_EXT_shader_8bit_storage                    : require
+#extension GL_EXT_nonuniform_qualifier                   : require
+#extension GL_EXT_shader_image_int64                     : require
+#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
+#extension GL_GOOGLE_include_directive                   : enable
+#extension GL_KHR_shader_subgroup_arithmetic             : require
+#extension GL_KHR_shader_subgroup_ballot                 : require
+#extension GL_KHR_shader_subgroup_shuffle                : require
+#extension GL_KHR_shader_subgroup_shuffle_relative       : require
+#extension GL_EXT_shader_atomic_int64                    : require
+#extension GL_EXT_debug_printf                           : enable
+#extension GL_EXT_control_flow_attributes                : enable
+#define _unroll_ [[unroll]]
+#define _loop_   [[loop]]
+
+#if PX_FILL_LOCAL_FB && !SEPARATE_PATCH_TILE_ASSIGNMENT_PASS
+#define MAX_TILE_PATCHES  3600
+shared uint NumTilePatches;
+shared uint TilePatches[MAX_TILE_PATCHES];
+#endif
+
+#include "../shader_includes/host_device_shared.h"
+shared uint64_t LocalFramebuffer[LOCAL_FB_X][LOCAL_FB_Y];
+
+// Whether or not the debug clusters should be colored (background only):
+#define DEBUG_CLUSTER_VIS 0
+#define MIX_CLUSTER_VIS_WITH_DRAW_COLOR 0
+
+// When enabled, does not render the parametric object but instead colors the tiles according to the #patches that were selected
+#define DEBUG_SHOW_PATCH_COUNTS 0
+
+// Debug define => focus on one patch only 
+#define DEBUG_PATCH_FOCUS 0
+#define DEBUG_PATCH_X 60
+#define DEBUG_PATCH_Y 25
+
+#define COOPERATIVE_GROUPS 4
+
+layout(local_size_x = 32, local_size_y = 1, local_size_z = COOPERATIVE_GROUPS) in;
+#include "../shader_includes/util/ui64_conv.glsl"
+#include "../shader_includes/util/glsl_helpers.glsl"
+#include "../shader_includes/types.glsl"
+#include "../shader_includes/common_ubo.glsl"
+#include "../shader_includes/material_handling.glsl"
+
+// +------------------------------------------------------------------------------+
+// |   Bound Resources                                                            |
+// +------------------------------------------------------------------------------+
+// layout(set = 0, binding = 0) buffer is contained within common_ubo.glsl
+layout(set = 1, binding = 0) buffer SsboCounters { uint mCounters[4]; } uCounters;
+layout(set = 2, binding = 0) buffer ObjectData   { object_data mElements[]; }  uObjectData;
+layout(set = 2, binding = 1) buffer PxFillParams { px_fill_data mElements[]; } uPxFillParams; 
+layout(set = 2, binding = 2) buffer PxFillCount  { VkDrawIndirectCommand mDrawParams; } uPxFillCount;
+layout(set = 3, binding = 0, r64ui) uniform restrict volatile u64image2D uCombinedAttachment;
+#if STATS_ENABLED
+layout(set = 3, binding = 1, r32ui) uniform restrict uimage2D   uHeatmapImage;
+#endif
+#if PX_FILL_LOCAL_FB && SEPARATE_PATCH_TILE_ASSIGNMENT_PASS
+layout(set = 4, binding = 0) buffer TilePatchesBuffer { uint mPatchIndices[]; } uTilePatches;
+#endif
+
+#include "../shader_includes/param/shape_functions.glsl"
+#include "../shader_includes/parametric_curve_helpers.glsl"
+#include "../shader_includes/combined_attachment_shared.glsl"
+// Gotta define some defines before including shading_model.glsl
+#define SHADE_ADDITIONAL_PARAMS , vec2 dx, vec2 dy
+//#define SAMPLE textureGrad
+//#define SAMPLE_ADDITIONAL_PARAMS , dx, dy
+#define SAMPLE textureLod
+#define SAMPLE_ADDITIONAL_PARAMS , 0
+#include "../shader_includes/shading_model.glsl"
+
+// +------------------------------------------------------------------------------+
+// |   PushConstants                                                              |
+// +------------------------------------------------------------------------------+
+layout(push_constant) uniform PushConstants
+{
+    bool mGatherPipelineStats;
+	float mPatchTargetResolution; // What resolution one "px fill" workgroup is supposed to fill.
+	                              // Squared resolution that is, i.e.: mPatchTargetResolution x mPatchTargetResolution
+	vec2 mPatchTargetResolutionScaler; // Scaler to increase/decrease point density
+	vec2 mParamShift;   // Shift u/v params by amount of deltaU/deltaV (in order to fill holes to neighboring tiles)
+	vec2 mParamStretch; // Stretch u/v params by amount of deltaU/deltaV (in order to fill holes to neighboring tiles)
+} pushConstants;
+
+// +------------------------------------------------------------------------------+
+// |   Colhorrrse                                                                 |
+// +------------------------------------------------------------------------------+
+//#define MAX_COLORS 7
+//vec3 groupcolors[MAX_COLORS] = {
+//    vec3(0.37, 0.63, 0.28), // Existing color: Greenish
+//    vec3(0.75, 0.95, 0.75), // Existing color: Whitish
+//    vec3(0.1, 0.4, 0.15),   // Dark green
+//    vec3(0.2, 0.6, 0.3),    // Medium green
+//    vec3(0.45, 0.8, 0.55),  // Light green
+//    vec3(0.6, 0.9, 0.65),   // Pale green
+//    vec3(0.25, 0.7, 0.4)   // Bright green
+//};
+#define MAX_COLORS 23
+vec3 groupcolors[MAX_COLORS] = {
+    vec3(0.0, 0.6, 0.0),   // Dark Green
+    vec3(0.0, 0.7, 0.0),   // Green
+    vec3(0.0, 0.8, 0.2),   // Greenish Turquoise
+    vec3(0.0, 0.8, 0.4),   // Light Green
+    vec3(0.0, 0.8, 0.6),   // Medium Green
+    vec3(0.0, 0.8, 0.8),   // Cyan-Green
+    vec3(0.0, 0.7, 0.5),   // Greenish Cyan
+    vec3(0.0, 0.6, 0.4),   // Deep Green
+    vec3(0.0, 0.5, 0.3),   // Forest Green
+    vec3(0.0, 0.4, 0.2),   // Dark Forest Green
+    vec3(0.2, 0.6, 0.0),   // Greenish Olive
+    vec3(0.3, 0.7, 0.0),   // Lime Green
+    vec3(0.4, 0.8, 0.0),   // Chartreuse Green
+    vec3(0.5, 0.9, 0.0),   // Bright Green
+    vec3(0.6, 0.9, 0.3),   // Vivid Green
+    vec3(0.6, 0.9, 0.6),   // Light Lime Green
+    vec3(0.6, 0.8, 0.8),   // Pale Green
+    vec3(0.5, 0.7, 0.7),   // Greenish Cyan
+    vec3(0.4, 0.6, 0.6),   // Dark Cyan-Green
+    vec3(0.3, 0.5, 0.5),   // Deep Cyan-Green
+    vec3(0.2, 0.4, 0.4),   // Very Deep Cyan-Green
+    vec3(0.1, 0.3, 0.3),   // Extremely Deep Cyan-Green
+    vec3(0.0, 0.2, 0.2)    // Nearly Black Cyan-Green
+};
+#if DEBUG_SHOW_PATCH_COUNTS
+#define MAX_HEATMAP_COLORS 23
+vec3 modifiedHeatmapColors[MAX_HEATMAP_COLORS] = {
+    vec3(0.18, 0.0, 0.29),  // 0 writes 
+    vec3(0.15, 0.3, 0.07),  // dark green:    
+    vec3(0.173, 0.71, 0.667),  // turquoise
+    vec3(0.627, 0.761, 0.467), // light green:   
+    vec3(0.831, 0.831, 0),   // yellow: 
+    vec3(1.0, 1.0, 1.0),    // white:         
+    vec3(0.99, 0.88, 0.94), // pink tones:    
+    vec3(0.95, 0.71, 0.85),	// from
+    vec3(0.87, 0.47, 0.68),	// light
+    vec3(0.77, 0.11, 0.49),	// to
+    vec3(0.56, 0.0, 0.32),  // dark pink
+    vec3(0.27, 0.46, 0.71), // blue tones:   
+    vec3(0.45, 0.68, 0.82),	// from dark
+    vec3(0.67, 0.85, 0.91),	// to
+    vec3(0.88, 0.95, 0.97), // light blue
+    vec3(1.0, 0.88, 0.56),  // orange tones: 
+    vec3(0.99, 0.68, 0.38),	// from light
+    vec3(0.96, 0.43, 0.26),	// to
+    vec3(0.84, 0.19, 0.15),	// very dark orange 
+    vec3(0.95, 0.0, 0.22),  // red tones:
+    vec3(0.65, 0.0, 0.15),	// from light
+    vec3(0.45, 0.0, 0.1),	// to
+    vec3(0.35, 0.0, 0.08)	// very dark red
+};
+#endif
+
+// ################## point producer ###################
+
+// Calculates a point
+// @params u, v, curveIndex    Parametric parameters + which curve 
+// @param  translation         Translation for world space position 
+// @param  scale               Scale for world space position 
+// @param  posWS               OUT parameter, returns the point's world space position 
+// @param  isOff               OUT parameter, returns is_off_screen information 
+// @return The resulting viewport coordinates as vec3
+vec3 calcPoint(float u, float v, int curveIndex, uvec3 userData, mat4 tM, out vec3 posWS, out uint isOff) 
+{
+	// Start with world space:
+	vec4 rawWS = paramToWS(u, v, curveIndex, userData);
+	vec4 traWS = tM * rawWS;
+	posWS = traWS.xyz;
+	vec4 posCS = toCS(traWS);
+	
+	// Is this point even inside the view frustum?
+	isOff = is_off_screen(posCS); 
+
+	// Onto the (3times as big as screen) local framebuffer:
+	posCS = clampCS(posCS);
+    vec3 vpc = cs_to_viewport(posCS, ubo.mResolutionAndCulling.xy * vec2(TILE_FACTOR_X, TILE_FACTOR_Y));
+	return vpc;
+}
+
+bool isInside(ivec2 coordsInQuestion, ivec2 referenceFrameLBInclusive, ivec2 referenceFrameUBExclusive) 
+{
+	return coordsInQuestion.x >= referenceFrameLBInclusive.x 
+		&& coordsInQuestion.x  < referenceFrameUBExclusive.x 
+		&& coordsInQuestion.y >= referenceFrameLBInclusive.y 
+		&& coordsInQuestion.y  < referenceFrameUBExclusive.y;
+}
+
+bool isOutside(ivec2 boxMin, ivec2 boxMax, ivec2 referenceFrameLBInclusive, ivec2 referenceFrameUBInclusive)
+{
+	// Add safety margins:
+    return 
+		(boxMin.x < referenceFrameLBInclusive.x && boxMax.x < referenceFrameLBInclusive.x) ||
+		(boxMin.x > referenceFrameUBInclusive.x && boxMax.x > referenceFrameUBInclusive.x) ||
+		(boxMin.y < referenceFrameLBInclusive.y && boxMax.y < referenceFrameLBInclusive.y) ||
+		(boxMin.y > referenceFrameUBInclusive.y && boxMax.y > referenceFrameUBInclusive.y);
+}
+
+// ################## compute shader main ###################
+void main()
+{
+#if PX_FILL_LOCAL_FB && !SEPARATE_PATCH_TILE_ASSIGNMENT_PASS
+	// Gotta find the relevant patches:
+	if (subgroupElect()) {
+		NumTilePatches = 0;
+	}
+#if COOPERATIVE_GROUPS > 1
+	memoryBarrier();
+	barrier();
+#else
+	subgroupMemoryBarrier();
+#endif
+#endif
+
+	ivec2 screenCoordsLB = ivec2(uvec2(PX_FILL_LOCAL_FB_TILE_SIZE_X, PX_FILL_LOCAL_FB_TILE_SIZE_Y) * gl_WorkGroupID.xy);
+	ivec2 screenCoordsUB = screenCoordsLB + ivec2(PX_FILL_LOCAL_FB_TILE_SIZE_X, PX_FILL_LOCAL_FB_TILE_SIZE_Y);
+
+	// +-------------------------------------------------+
+	// |                                                 |
+	// |   vvv   Select all the relevant patches   vvv   |
+	// +-------------------------------------------------+
+#if PX_FILL_LOCAL_FB && SEPARATE_PATCH_TILE_ASSIGNMENT_PASS
+	const ivec2 tileSizes  = ivec2(PX_FILL_LOCAL_FB_TILE_SIZE_X, PX_FILL_LOCAL_FB_TILE_SIZE_Y);
+	const ivec2 resolution = imageSize(uCombinedAttachment);
+	const ivec2 numTiles   = ivec2(resolution.x, resolution.y)/tileSizes;
+	const int tileBufferBaseIndex = (int(gl_WorkGroupID.y) * numTiles.x + int(gl_WorkGroupID.x)) * MAX_PATCHES_PER_TILE;
+	uint numPatches = uTilePatches.mPatchIndices[tileBufferBaseIndex];
+#elif PX_FILL_LOCAL_FB
+	const uint numPatches = uPxFillCount.mDrawParams.instanceCount;
+	if (gl_LocalInvocationID.yz == uvec2(0, 0)) {
+		for (uint p = gl_LocalInvocationID.x; p < numPatches; p += gl_WorkGroupSize.x) {
+			// Bounds check: 
+			vec4 patchScreenInfo  = uPxFillParams.mElements[p].mScreenDists;
+			ivec2 minScreenCoords = ivec2(patchScreenInfo.zw);
+#if WRITE_MAX_COORDS_IN_PASS2
+			ivec2 maxScreenCoords = ivec2(uPxFillParams.mElements[p].mScreenMax.xy);
+#else
+			// TODO: Why is this                                  vvv              buggy?
+			ivec2 maxScreenCoords = minScreenCoords + ivec2(sqrt(patchScreenInfo.x*patchScreenInfo.x + patchScreenInfo.y*patchScreenInfo.y));
+#endif
+			if (!isOutside(minScreenCoords, maxScreenCoords, screenCoordsLB, screenCoordsUB)) {
+				const uint insertIndex = atomicAdd(NumTilePatches, 1);
+				TilePatches[insertIndex] = p;
+			}
+		}
+#if COOPERATIVE_GROUPS > 1
+		memoryBarrier();
+		barrier();
+#else
+		subgroupMemoryBarrier();
+#endif
+	}
+#endif
+
+	// Gotta clear the local framebuffer:
+	const uint64_t clearValue = getUint64ClearValue();
+	for (uint x = gl_LocalInvocationID.x; x < LOCAL_FB_X; x += gl_WorkGroupSize.x) {
+		for (uint y = gl_LocalInvocationID.z; y < LOCAL_FB_Y; y += COOPERATIVE_GROUPS) { 
+			LocalFramebuffer[x][y] = clearValue;
+		}
+	}
+
+	// +---------------------------------------------------------+
+	// |                                                         |
+	// |   vvv   Now rasterize all them selected patches   vvv   |
+	// +---------------------------------------------------------+
+	// Also, go high-res:
+	screenCoordsLB *= ivec2(TILE_FACTOR_X, TILE_FACTOR_Y);
+	screenCoordsUB *= ivec2(TILE_FACTOR_X, TILE_FACTOR_Y);
+#if PX_FILL_LOCAL_FB && SEPARATE_PATCH_TILE_ASSIGNMENT_PASS
+	for (uint s = gl_LocalInvocationID.z; s < numPatches; s += COOPERATIVE_GROUPS) {
+		uint pxFillId = uTilePatches.mPatchIndices[tileBufferBaseIndex + s + 1];
+//		if (gl_LocalInvocationIndex == 0 && gl_WorkGroupID.x == 43 && gl_WorkGroupID.y == 26)
+//			debugPrintfEXT("[%u, %u]: patch %u of %u -> pxFillId[%u]", gl_WorkGroupID.x, gl_WorkGroupID.y, s, numPatches, pxFillId);
+#elif PX_FILL_LOCAL_FB
+	for (uint s = 0; s < NumTilePatches; s += 1) {
+		uint pxFillId = TilePatches[s];
+//		if (gl_LocalInvocationIndex == 0)
+//			debugPrintfEXT("[%u, %u]: patch %u of %u -> pxFillId[%u]", gl_WorkGroupID.x, gl_WorkGroupID.y, s, NumTilePatches, pxFillId);
+#else 
+	for (uint s = 0; s < 1; s+= 1) {
+		uint pxFillId = 0; // <-- this code is not supposed to be called (just implemented here to prevent shader compiler errors if PX_FILL_LOCAL_FB is disabled entirely.
+#endif
+
+		// in: 
+		vec2 paramsStart = vec2(
+			uPxFillParams.mElements[pxFillId].mParams[0],
+			uPxFillParams.mElements[pxFillId].mParams[2]
+		);
+		const vec2 paramsRange = vec2(
+			uPxFillParams.mElements[pxFillId].mParams[1] - uPxFillParams.mElements[pxFillId].mParams[0],
+			uPxFillParams.mElements[pxFillId].mParams[3] - uPxFillParams.mElements[pxFillId].mParams[2]
+		);
+		const uint objectId    = uPxFillParams.mElements[pxFillId].mObjectIdUserData[0];
+		const uvec3 userData   = uPxFillParams.mElements[pxFillId].mObjectIdUserData.yzw;
+		const mat4  tM         = uObjectData.mElements[objectId].mTransformationMatrix;
+		const int  curveIndex  = uObjectData.mElements[objectId].mCurveIndex;
+		const int  matIndex    = uObjectData.mElements[objectId].mMaterialIndex; 
+
+		// Let's see how many iterations we need in each direction:
+		const float numPixelProducingInvocs = float(gl_WorkGroupSize.x - 1);
+		float numIterationsU = ubo.mUseMaxPatchResolutionDuringPxFill 
+			? max(floor((uPxFillParams.mElements[pxFillId].mScreenDists.x * float(TILE_FACTOR_X) * pushConstants.mPatchTargetResolutionScaler.x + numPixelProducingInvocs - 1) / numPixelProducingInvocs), 1.0)
+			:     floor((pushConstants.mPatchTargetResolution             * float(TILE_FACTOR_X) * pushConstants.mPatchTargetResolutionScaler.x + numPixelProducingInvocs - 1) / numPixelProducingInvocs);
+	//	debugPrintfEXT("mPatchTargetResolution[%f], numPixelProducingInvocs[%f], numIterationsU[%f]", pushConstants.mPatchTargetResolution, numPixelProducingInvocs, numIterationsU);
+
+		// With that info, calc our deltas:
+		float iterationDeltaU = paramsRange[0] / numIterationsU;
+		float deltaU = iterationDeltaU / numPixelProducingInvocs;
+		float deltaV = ubo.mUseMaxPatchResolutionDuringPxFill 
+			? paramsRange[1] / max(uPxFillParams.mElements[pxFillId].mScreenDists.y * float(TILE_FACTOR_Y) * pushConstants.mPatchTargetResolutionScaler.y - 1.0, 1.0)  // -1.0 because we need to overshoot by one
+			: paramsRange[1] /    (pushConstants.mPatchTargetResolution             * float(TILE_FACTOR_Y) * pushConstants.mPatchTargetResolutionScaler.y - 1.0); // -1.0 because we need to overshoot by one
+	//	debugPrintfEXT("iterationDeltaU[%f], deltaU[%f], deltaV[%f]", iterationDeltaU, deltaU, deltaV);
+
+		paramsStart -= vec2(deltaU, deltaV) * pushConstants.mParamShift;
+		deltaV += deltaV * pushConstants.mParamStretch.y;
+		deltaU += deltaU * pushConstants.mParamStretch.x;
+		iterationDeltaU = deltaU * numPixelProducingInvocs;
+
+		const float vTarget = paramsRange[1] + deltaV; // Gotta run for +1 because we're wasting te top-most row.
+		const float minDeltaV      = deltaV * 0.5;
+		const float maxDeltaV      = deltaV * 2.0;
+		const float deltaVIncrease = deltaV * 0.1666;
+		const float deltaVDecrease = deltaV * 0.3333;
+
+		const float myInvocIdx  = float(gl_SubgroupInvocationID);
+		// TODO: Potential hazard: !!!!Floating point precision!!!! 
+		//       If it gets too small, then the baaaad things could happen.
+		//       E.g., what if the deltaU/deltaV is so small, that adding it doesn't change the value anymore??! :scream:
+		for (float iu = 0.0; iu < numIterationsU; iu += 1.0) {
+			const float u = paramsStart[0]   +   iu * iterationDeltaU   +   deltaU * myInvocIdx;
+			float       v = paramsStart[1];
+			// Calculate the "bottom"-most row now, because we need that values for normals calculation in subsequent loop iterations:
+			vec3 wsPing;
+			uint offPing;
+			vec3 vpcPing = calcPoint(u, v, curveIndex, userData, tM, /* out: */ wsPing, /* out: */ offPing);
+
+			// In order to calclate the normal, steal from neighbor:
+			vec3 wsNeighbor  = subgroupShuffleDown(wsPing , 1); // subgroupShuffle(wsPing, clamp(gl_SubgroupInvocationID + 1, 0, gl_WorkGroupSize.x - 1));
+			vec3 vpcNeighbor = subgroupShuffleDown(vpcPing, 1);
+
+			// Now do all the iterations ("rows") in v-direction:
+			for (float iv = deltaV; iv < vTarget; iv += deltaV) {
+				v = paramsStart[1] + iv;
+				// Calculate the next row...
+				vec3 wsPong;
+				uint offPong;
+				vec3 vpcPong = calcPoint(u, v, curveIndex, userData, tM, /* out: */ wsPong, /* out: */ offPong);
+
+				bool tryAgain = false;
+				if (ubo.mAdaptivePxFill) {
+					// Adaptive deltaV:
+					float pxDist = dot(vpcPong.xy - vpcPing.xy, vpcPong.xy - vpcPing.xy);
+					if (isnan(pxDist)) pxDist = 0.0;
+					const float subgroupMaxDist = subgroupMax(pxDist);
+					const bool  distTooLarge    = subgroupMaxDist > 1.4 && deltaV > minDeltaV;
+					const bool  distABitSmall   = subgroupMaxDist < 0.7 && deltaV < maxDeltaV;
+					if (distTooLarge) {
+						iv -= deltaV; // Try again
+						deltaV = clamp(deltaV - deltaVDecrease, minDeltaV, maxDeltaV);
+						iv += deltaV; // ...but slower.
+						tryAgain = true;
+					}
+				}
+
+				if (!tryAgain) {
+					// Attention: The very last invocations do NOT produce pixels!!!! (We have to "waste" them for calculating normals)
+					if (gl_SubgroupInvocationID < gl_WorkGroupSize.x - 1) {
+				
+						// ...but write out the previous one (now with normals information):
+						vec3 n = calculateNormalWS(wsPing, wsNeighbor, wsPong, curveIndex, userData);
+						bool backfaceCull = ubo.mResolutionAndCulling.z == 1 && normalize(mat3(ubo.mViewMatrix) * n).z < 0.0;
+						if (!backfaceCull) {
+							// PRODUCE PIXEL:
+//							vec3 myColor = groupcolors[pxFillId % MAX_COLORS];
+							vec3 myColor = groupcolors[int(paramsStart.x * 1000.0 + paramsStart.y * 123.0) % MAX_COLORS];
+
+							vec2 dfdx = vec2(deltaU, 0.0);
+							vec2 dfdy = vec2(0.0, deltaV);
+							// Gotta scale dfdx and dfdy by their pixel distances:
+							dfdx /= (vpcPong.xy     - vpcPing.xy);
+							dfdy /= (vpcNeighbor.xy - vpcPing.xy);
+
+							ivec2 globalHiResFbCoords = ivec2(vpcPing.xy);
+							if (isInside(globalHiResFbCoords, screenCoordsLB, screenCoordsUB)) {
+								uint64_t data = getUint64ForFramebuffer(
+													vpcPing.z, shade(matIndex, myColor, 
+																	getParamShadingUserParams(u, v, curveIndex, userData, wsPing.xyz),
+																	n, 
+																	getParamTexCoords(u, v, curveIndex, userData, wsPing.xyz), 
+																	dfdx, dfdy
+																)
+												);
+								ivec2 localFbCoords = globalHiResFbCoords - screenCoordsLB;
+								atomicMin(LocalFramebuffer[localFbCoords.x][localFbCoords.y], data);
+							}
+						}
+					}
+				}
+
+				// Do the ping-pong, then goto next v row:
+				wsPing = wsPong;
+				offPing = offPong;
+				vpcPing = vpcPong;
+			
+				wsNeighbor  = subgroupShuffleDown(wsPing , 1);
+				vpcNeighbor = subgroupShuffleDown(vpcPing, 1);
+			}
+		}
+	}
+
+	// +-------------------------------------------------------+
+	// |                                                       |
+	// |   vvv   Resolve local framebuffer into global   vvv   |
+	// +-------------------------------------------------------+
+#if COOPERATIVE_GROUPS > 1
+	memoryBarrier();
+	barrier();
+#else
+	subgroupMemoryBarrier();
+#endif
+	// Back to low-res:
+	screenCoordsLB /= ivec2(TILE_FACTOR_X, TILE_FACTOR_Y);
+	screenCoordsUB /= ivec2(TILE_FACTOR_X, TILE_FACTOR_Y);
+
+#if DEBUG_SHOW_PATCH_COUNTS
+	for (uint x = gl_LocalInvocationID.x; x < PX_FILL_LOCAL_FB_TILE_SIZE_X; x += gl_WorkGroupSize.x) {
+		for (uint y = gl_LocalInvocationID.z; y < PX_FILL_LOCAL_FB_TILE_SIZE_Y; y += COOPERATIVE_GROUPS) {
+			ivec2 globalFbCoords = ivec2(x, y) + screenCoordsLB;
+			writeToCombinedAttachment(globalFbCoords, getUint64ForFramebuffer(0.9999, vec4(modifiedHeatmapColors[
+#if PX_FILL_LOCAL_FB && SEPARATE_PATCH_TILE_ASSIGNMENT_PASS
+				min(numPatches, MAX_HEATMAP_COLORS-1)
+#else
+				min(NumTilePatches, MAX_HEATMAP_COLORS-1)
+#endif
+			], 1.0)));
+		}
+	}
+	return;
+#endif
+
+	for (uint x = gl_LocalInvocationID.x; x < PX_FILL_LOCAL_FB_TILE_SIZE_X; x += gl_WorkGroupSize.x) {
+		for (uint y = gl_LocalInvocationID.z; y < PX_FILL_LOCAL_FB_TILE_SIZE_Y; y += COOPERATIVE_GROUPS) {
+			float minDepth = 1.0;
+			vec4  avgColor = vec4(0.0);
+			float colorDivisor = 0.0;
+			_unroll_
+			for (int i = 0; i < TILE_FACTOR_X; ++i) {
+				_unroll_
+				for (int j = 0; j < TILE_FACTOR_Y; ++j) {
+					uint64_t data = LocalFramebuffer[x * TILE_FACTOR_X + i][y * TILE_FACTOR_Y + j];
+					if (clearValue != data) {
+						float depth;
+						vec4 color;
+						extract_depth_and_color(data, depth, color);
+						minDepth = min(minDepth, depth);
+						avgColor += color;
+						colorDivisor += 1.0;
+					}
+#if DEBUG_PATCH_FOCUS
+					if (gl_WorkGroupID.x == DEBUG_PATCH_X && gl_WorkGroupID.y == DEBUG_PATCH_Y) {
+						writeToCombinedAttachment(ivec2(
+							PX_FILL_LOCAL_FB_TILE_SIZE_X * (DEBUG_PATCH_X + 2) + x * TILE_FACTOR_X + i, 
+							PX_FILL_LOCAL_FB_TILE_SIZE_Y *  DEBUG_PATCH_Y +    + y * TILE_FACTOR_Y + j), 
+							data);
+					}
+#endif
+				}
+			}
+			avgColor /= max(1.0, colorDivisor);
+
+#if DEBUG_CLUSTER_VIS
+			vec4 debugTileBackgroundColor = vec4(float(gl_WorkGroupID.x) / float(gl_NumWorkGroups.x) / float(1 + gl_WorkGroupID.x % 2), 
+												 0.0, 
+												 float(gl_WorkGroupID.y) / float(gl_NumWorkGroups.y) / float(1 + gl_WorkGroupID.y % 2), 
+												 0.0);
+#endif
+
+			if (colorDivisor > 0.0) {
+				ivec2 globalFbCoords = ivec2(x, y) + screenCoordsLB;
+				uint64_t resolvedData = getUint64ForFramebuffer(minDepth, avgColor);
+#if DEBUG_PATCH_FOCUS
+				if (gl_WorkGroupID.x == DEBUG_PATCH_X && gl_WorkGroupID.y == DEBUG_PATCH_Y) {
+					writeToCombinedAttachment(globalFbCoords, resolvedData);
+				}
+#else
+#if DEBUG_CLUSTER_VIS && MIX_CLUSTER_VIS_WITH_DRAW_COLOR
+				writeToCombinedAttachment(globalFbCoords, getUint64ForFramebuffer(minDepth, mix(avgColor, debugTileBackgroundColor, 0.5)));
+#else
+				writeToCombinedAttachment(globalFbCoords, resolvedData);
+#endif
+#endif
+			}
+#if DEBUG_CLUSTER_VIS
+			else {
+				ivec2 globalFbCoords = ivec2(x, y) + screenCoordsLB;
+#if DEBUG_PATCH_FOCUS
+				float intensity = (gl_WorkGroupID.x == DEBUG_PATCH_X && gl_WorkGroupID.y == DEBUG_PATCH_Y) ? 1.0 : 0.2;
+#else
+				float intensity = 0.8;
+#endif
+				writeToCombinedAttachment(globalFbCoords, getUint64ForFramebuffer(0.9999, intensity * debugTileBackgroundColor));
+			}
+#endif
+		}
+	}
+}

@@ -1,0 +1,165 @@
+#version 460
+#extension GL_EXT_shader_16bit_storage                   : require
+#extension GL_EXT_shader_8bit_storage                    : require
+#extension GL_EXT_nonuniform_qualifier                   : require
+#extension GL_EXT_shader_image_int64                     : require
+#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
+#extension GL_GOOGLE_include_directive                   : enable
+#extension GL_KHR_shader_subgroup_arithmetic             : require
+#extension GL_KHR_shader_subgroup_ballot                 : require
+#extension GL_KHR_shader_subgroup_shuffle                : require
+#extension GL_EXT_debug_printf                           : enable
+
+layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+#include "../shader_includes/host_device_shared.h"
+#include "../shader_includes/util/ui64_conv.glsl"
+#include "../shader_includes/util/glsl_helpers.glsl"
+#include "../shader_includes/types.glsl"
+#include "../shader_includes/common_ubo.glsl"
+// +------------------------------------------------------------------------------+
+// |   Bound Resources                                                            |
+// +------------------------------------------------------------------------------+
+// layout(set = 0, binding = 0) buffer is contained within common_ubo.glsl
+layout(set = 1, binding = 0) buffer SsboCounters { uint mCounters[4]; } uCounters;
+layout(set = 2, binding = 0) buffer ObjectData   { object_data mElements[]; }  uObjectData;
+layout(set = 2, binding = 1) buffer PxFillParams { px_fill_data mElements[]; } uPxFillParams; 
+layout(set = 2, binding = 2) buffer PxFillCount  { VkDrawIndirectCommand mDrawParams; } uPxFillCount;
+layout(std430, set = 3, binding = 0) buffer PositionBuffer { float mData[]; }   posBuffer;
+layout(std430, set = 3, binding = 1) buffer NormalsBuffer  { float mData[]; }   nrmBuffer;
+layout(std430, set = 3, binding = 2) buffer TexCoords      { float mData[]; }   tcoBuffer;
+layout(std430, set = 3, binding = 3) buffer IndicesBuffer  { uint mIndices[]; } idxBuffer;
+layout(std430, set = 3, binding = 4) buffer OffsetsSizes   { vertex_buffers_offsets_sizes mData; } osBuffer;
+
+#include "../shader_includes/param/shape_functions.glsl"
+#include "../shader_includes/parametric_curve_helpers.glsl"
+
+// +------------------------------------------------------------------------------+
+// |   Colhorrrse                                                                 |
+// +------------------------------------------------------------------------------+
+#define MAX_COLORS 7
+vec3 groupcolors[MAX_COLORS] = {
+    vec3(0.37, 0.63, 0.28), // Existing color: Greenish
+    vec3(0.75, 0.95, 0.75), // Existing color: Whitish
+    vec3(0.1, 0.4, 0.15),   // Dark green
+    vec3(0.2, 0.6, 0.3),    // Medium green
+    vec3(0.45, 0.8, 0.55),  // Light green
+    vec3(0.6, 0.9, 0.65),   // Pale green
+    vec3(0.25, 0.7, 0.4)   // Bright green
+};
+
+// Write 3 positions into posBuffer.mData
+// @return the local index of the first position written
+uint writeNextPosition(vec3 pos)
+{
+	// First, need space for 3 floats:
+	const uint localWordIndex = atomicAdd(osBuffer.mData.mPositionsSize, 3);
+	const uint insertIndex = osBuffer.mData.mPositionsOffset + localWordIndex;
+	// Write:
+	posBuffer.mData[insertIndex    ] = pos[0];
+	posBuffer.mData[insertIndex + 1] = pos[1];
+	posBuffer.mData[insertIndex + 2] = pos[2];
+
+	const uint localVec3Index = localWordIndex / 3;
+	return localVec3Index;
+}
+
+// Write 3 normals into nrmBuffer.mData
+// @return the index of the first normal written
+uint writeNextNormal(vec3 nrm)
+{
+	// First, need space for 3 floats:
+	const uint localWordIndex = atomicAdd(osBuffer.mData.mNormalsSize, 3);
+	const uint insertIndex = osBuffer.mData.mNormalsOffset + localWordIndex;
+	// Write:
+	nrmBuffer.mData[insertIndex    ] = nrm[0];
+	nrmBuffer.mData[insertIndex + 1] = nrm[1];
+	nrmBuffer.mData[insertIndex + 2] = nrm[2];
+	
+	const uint localVec3Index = localWordIndex / 3;
+	return localVec3Index;
+}
+
+// Write 3 texture coords into tcoBuffer.mData
+// @return the index of the first position written
+uint writeNextTexCoord(vec2 tco)
+{
+	// First, need space for 2 floats:
+	const uint localWordIndex = atomicAdd(osBuffer.mData.mTexCoordsSize, 2);
+	const uint insertIndex = osBuffer.mData.mTexCoordsOffset + localWordIndex;
+	// Write:
+	tcoBuffer.mData[insertIndex    ] = tco[0];
+	tcoBuffer.mData[insertIndex + 1] = tco[1];
+	
+	const uint localVec2Index = localWordIndex / 2;
+	return localVec2Index;
+}
+
+// Write 4 indices into idxBuffer.mIndcies
+void writeNextTriangleIndices(uint idx0, uint idx1, uint idx2)
+{
+	// First, need space for 3 uints:
+	uint insertIndex = osBuffer.mData.mIndicesOffset + atomicAdd(osBuffer.mData.mIndicesSize, 3);
+	// Write:
+	idxBuffer.mIndices[insertIndex    ] = idx0;
+	idxBuffer.mIndices[insertIndex + 1] = idx1;
+	idxBuffer.mIndices[insertIndex + 2] = idx2;
+}
+
+// ################## compute shader main ###################
+void main()
+{
+	uint pxFillId = gl_WorkGroupID.x;
+
+	// in: 
+	const vec2 paramsStart = vec2(
+		uPxFillParams.mElements[pxFillId].mParams[0],
+		uPxFillParams.mElements[pxFillId].mParams[2]
+	);
+	const vec2 paramsEnd = vec2(
+		uPxFillParams.mElements[pxFillId].mParams[1],
+		uPxFillParams.mElements[pxFillId].mParams[3]
+	);
+	const uint objectId  = uPxFillParams.mElements[pxFillId].mObjectIdUserData[0];
+	const mat4 tM        = uObjectData.mElements[objectId].mTransformationMatrix;
+	const uvec3 userData = uPxFillParams.mElements[pxFillId].mObjectIdUserData.yzw;
+	const int curveIndex = uObjectData.mElements[objectId].mCurveIndex;
+
+	// Produce points:
+	vec2 uv00 = paramsStart;
+	vec2 uv01 = vec2(paramsStart.x, paramsEnd.y);
+	vec2 uv11 = paramsEnd;
+	vec2 uv10 = vec2(paramsEnd.x, paramsStart.y);
+
+	vec4 raw00 = paramToWS(uv00.x, uv00.y, curveIndex, userData);
+	vec4 pos00 = tM * raw00;
+	vec4 raw01 = paramToWS(uv01.x, uv01.y, curveIndex, userData);
+	vec4 pos01 = tM * raw01;
+	vec4 raw11 = paramToWS(uv11.x, uv11.y, curveIndex, userData);
+	vec4 pos11 = tM * raw11;
+	vec4 raw10 = paramToWS(uv10.x, uv10.y, curveIndex, userData);
+	vec4 pos10 = tM * raw10;
+	
+	vec3 n = vec3(0.0, 1.0, 0.0);
+
+	// TODO: Points into posBuffer
+	uint idx00 = writeNextPosition(pos00.xyz);
+	uint idx01 = writeNextPosition(pos01.xyz);
+	uint idx11 = writeNextPosition(pos11.xyz);
+	uint idx10 = writeNextPosition(pos10.xyz);
+
+	// TODO: Normals into nrmBuffer
+	writeNextNormal(n);
+	writeNextNormal(n);
+	writeNextNormal(n);
+	writeNextNormal(n);
+
+	// TODO: Parameters into tcoBuffer
+	writeNextTexCoord(uv00);
+	writeNextTexCoord(uv01);
+	writeNextTexCoord(uv11);
+	writeNextTexCoord(uv10);
+
+	// TODO: Indices into idxBuffer
+	writeNextTriangleIndices(idx00, idx01, idx11);
+	writeNextTriangleIndices(idx11, idx10, idx00);
+}

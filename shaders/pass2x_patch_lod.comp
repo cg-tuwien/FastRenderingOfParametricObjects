@@ -1,0 +1,492 @@
+#version 460
+#extension GL_EXT_shader_16bit_storage                   : require
+#extension GL_EXT_shader_8bit_storage                    : require
+#extension GL_EXT_nonuniform_qualifier                   : require
+#extension GL_EXT_shader_image_int64                     : require
+#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
+#extension GL_GOOGLE_include_directive                   : enable
+#extension GL_ARB_shader_draw_parameters                 : require
+#extension GL_KHR_shader_subgroup_arithmetic             : require
+#extension GL_KHR_shader_subgroup_ballot                 : require
+#extension GL_KHR_shader_subgroup_shuffle                : require
+#extension GL_KHR_shader_subgroup_vote                   : require
+#extension GL_EXT_debug_printf                           : enable
+
+// Size of the parameter range evaluations X*Y:
+#define EVAL_GRID_X 8
+#define EVAL_GRID_Y 4
+// Possible values: 1 or 2 with the following meaning:
+//  1 ... evaluate U then V all in one subgroup
+//  2 ... evaluate U and V parallel to each other, using 2x subgroups => more threads are idling for some time, but also increased concurrency => see #define CONCURRENT_U_V_EVAL
+#define EVAL_GRID_Z 1
+
+layout(local_size_x = EVAL_GRID_X, local_size_y = EVAL_GRID_Y, local_size_z = EVAL_GRID_Z) in;
+
+#if EVAL_GRID_Z == 2
+#define CONCURRENT_U_V_EVAL 1
+#endif
+
+// Set the following to:
+//  - Logical OR  ... pessimistic strategy
+//  - Logical AND ... optimistic  strategy
+#define SPLIT_OP ||
+
+#include "../shader_includes/host_device_shared.h"
+#include "../shader_includes/util/ui64_conv.glsl"
+#include "../shader_includes/util/glsl_helpers.glsl"
+#include "../shader_includes/types.glsl"
+#include "../shader_includes/common_ubo.glsl"
+
+#if SHARED_MEM_LOCAL_RASTER || PX_FILL_LOCAL_FB
+#define WRITE_OUT_MIN_MAX_SCREEN_COORDS 1
+#else 
+#define WRITE_OUT_MIN_MAX_SCREEN_COORDS 0
+#endif
+
+#define DO_ONE_TO_FOUR_SPLITS_ONLY 1
+
+// +------------------------------------------------------------------------------+
+// |   Bound Resources                                                            |
+// +------------------------------------------------------------------------------+
+// layout(set = 0, binding = 0) buffer is contained within common_ubo.glsl
+layout(set = 1, binding = 0) buffer SsboCounters { uint mCounters[4]; } uCounters;
+layout(set = 2, binding = 0) buffer ObjectData   { object_data mElements[]; }  uObjectData;
+layout(set = 2, binding = 1) buffer PxFillParams { px_fill_data mElements[]; } uPxFillParams; 
+layout(set = 2, binding = 2) buffer PxFillCount  { VkDrawIndirectCommand mDrawParams; } uPxFillCount;
+layout(set = 3, binding = 0) buffer PatchLodPing { px_fill_data mElements[]; } uPatchLodPing; 
+layout(set = 3, binding = 1) buffer PatchLodPong { px_fill_data mElements[]; } uPatchLodPong; 
+layout(set = 3, binding = 2) buffer PatchLodCount { uvec4 mDispatchCounts[]; } uPatchLodCount; 
+
+#include "../shader_includes/param/shape_functions.glsl"
+#include "../shader_includes/parametric_curve_helpers.glsl"
+
+#if DRAW_PATCH_EVAL_DEBUG_VIS
+layout(set = 4, binding = 0, r64ui) uniform restrict volatile u64image2D uCombinedAttachment;
+#if STATS_ENABLED
+layout(set = 4, binding = 1, r32ui) uniform restrict uimage2D uHeatmapImage;
+#endif
+#include "../shader_includes/combined_attachment_shared.glsl"
+
+#define DEBUG_POINT_HALF_SIZE 3
+#define DEBUG_COLOR_X         vec4(1.0, 1.0 , 0.0 , 1.0)
+#define DEBUG_COLOR_Y         vec4(1.0, 0.3 , 0.0 , 1.0)
+#define DEBUG_COLOR_XTRA      vec4(1.0, 0.05, 0.05, 1.0)
+#define DEBUG_VIS_WRAP_BEGIN  if (0 == pushConstants.mPatchLodLevel) {
+#define DEBUG_VIS_WRAP_END    }
+
+// DDA Function for line generation 
+void DDA(ivec2 pt0, ivec2 pt1, vec4 color) 
+{ 
+    // calculate dx & dy 
+    int dx = pt1.x - pt0.x; 
+    int dy = pt1.y - pt0.y; 
+  
+    // calculate steps required for generating pixels 
+    int steps = abs(dx) > abs(dy) ? abs(dx) : abs(dy); 
+  
+    // calculate increment in x & y for each steps 
+    float Xinc = dx / float(steps); 
+    float Yinc = dy / float(steps); 
+  
+    // Put pixel for each step 
+    float X = pt0.x; 
+    float Y = pt0.y; 
+    for (int i = 0; i <= steps; i++) { 
+		writeToCombinedAttachment(ivec2(round(X), round(Y)), 0.0001, color);
+        X += Xinc; // increment in x at each step 
+        Y += Yinc; // increment in y at each step 
+    } 
+} 
+#endif
+
+// +------------------------------------------------------------------------------+
+// |   PushConstants                                                              |
+// +------------------------------------------------------------------------------+
+layout(push_constant) uniform PushConstants
+{
+    bool mGatherPipelineStats;
+    uint mPatchLodLevel; // corresponding to the n-th dispatch invocation
+
+	// 0 ... none (subdivide always) 
+	// 1 ... screen dist threshold
+	int  mLodStrategy;
+
+	// for 0 ... subdiv steps (clamped to [1, MAX_PATCH_SUBDIV_STEPS-1])
+	// for 1 ... the screen dist threshold, e.g. 64.0
+	float mStrategyParam;
+
+	bool  mPerformFrustumCulling;
+} pushConstants;
+
+bool isScreenDistThresholdBasedLodStrategy() 
+{
+	return pushConstants.mLodStrategy == 1;
+}
+
+shared bool  splitU[EVAL_GRID_Y];
+shared bool  splitV[EVAL_GRID_Y];
+shared float screenDistsU[EVAL_GRID_Y];
+shared float screenDistsV[EVAL_GRID_Y];
+#if WRITE_OUT_MIN_MAX_SCREEN_COORDS
+shared vec2  minScreenCoords[EVAL_GRID_Z];
+#if WRITE_MAX_COORDS_IN_PASS2
+shared vec2  maxScreenCoords[EVAL_GRID_Z];
+#endif
+#endif
+#if CONCURRENT_U_V_EVAL
+shared uint  workgroupAnd[EVAL_GRID_Z];
+#endif
+
+// Eval if this patch shall be split.
+// @param aTransposeEval   false => eval in u direction, i.e. 8 taps u, 4 taps v => fill splitU data
+//                         true  => eval in v direction, i.e. 4 taps u, 8 taps v => fill splitV data
+// @param aParamsStart     Where u and v params start
+// @param aParamsRange     The ranges for u and v, respectively, between their start and end values.
+#if WRITE_OUT_MIN_MAX_SCREEN_COORDS
+void evalSplitDecision(bool aTransposeEval, vec2 aParamsStart, vec2 aParamsRange, int aCurveIndex, uvec3 aUserData, mat4 aTM, out vec4 posCS, out vec2 subgroupMinCoords
+#if WRITE_MAX_COORDS_IN_PASS2
+, out vec2 subgroupMaxCoords
+#endif
+)
+#else
+void evalSplitDecision(bool aTransposeEval, vec2 aParamsStart, vec2 aParamsRange, int aCurveIndex, uvec3 aUserData, mat4 aTM, out vec4 posCS)
+#endif
+{
+	const uvec2 rangeDivisor = !aTransposeEval 
+		? gl_WorkGroupSize.xy - uvec2(1, 0)  // 7x4
+		: gl_WorkGroupSize.yx - uvec2(0, 1); // 4x7
+	const vec2  evalRanges   = aParamsRange / rangeDivisor;
+	const vec2  dimOffset    = !aTransposeEval
+		? vec2(0.0, evalRanges.y * 0.5)
+		: vec2(evalRanges.x * 0.5, 0.0);
+
+	const vec2 evalIndices   = !aTransposeEval 
+		? vec2(gl_LocalInvocationID.xy)
+		: vec2(gl_LocalInvocationID.yx);
+	const vec2 myParams = aParamsStart + evalRanges * evalIndices + dimOffset;
+
+	// Calc point:
+	vec4 rawWS  = paramToWS(myParams.x, myParams.y, aCurveIndex, aUserData);
+	vec4 posWS  = aTM * rawWS;
+	posCS       = toCS(posWS);
+	// Note: No frustum check here. toScreen() should clamp to 
+	//       the frustum borders, which is what we want here:s
+	const vec3 vpc           = toScreen(posCS);
+	const vec2 screenCoords  = vpc.xy;
+
+#if WRITE_OUT_MIN_MAX_SCREEN_COORDS
+	// Store the min/max screen coords for later
+	subgroupMinCoords = subgroupMin(screenCoords);
+#if WRITE_MAX_COORDS_IN_PASS2
+	subgroupMaxCoords = subgroupMax(screenCoords);
+#endif
+#endif
+
+	// What's the screen distance to the previous invocation?
+	const uint neighborIndex = (gl_SubgroupInvocationID % EVAL_GRID_X) == 0 ? gl_SubgroupInvocationID : gl_SubgroupInvocationID - 1;
+	const vec2 neighborScreenCoords = subgroupShuffle(screenCoords, neighborIndex);
+	const float neighborDist = length(screenCoords - neighborScreenCoords); // TODO: Optimize performance with squared distance
+
+#if DRAW_PATCH_EVAL_DEBUG_VIS
+	{ DEBUG_VIS_WRAP_BEGIN
+		vec4 dbgColor = aTransposeEval ? DEBUG_COLOR_Y : DEBUG_COLOR_X;
+		for (int i = -DEBUG_POINT_HALF_SIZE; i <= DEBUG_POINT_HALF_SIZE; ++i) {
+			for (int j = -DEBUG_POINT_HALF_SIZE; j <= DEBUG_POINT_HALF_SIZE; ++j) {
+				writeToCombinedAttachment(ivec2(vpc.xy) + ivec2(i, j), 0.0001, dbgColor);
+			}
+		}
+		DDA(ivec2(vpc.xy), ivec2(neighborScreenCoords), dbgColor);
+	DEBUG_VIS_WRAP_END }
+#endif
+
+	// Sum them all distances:
+	float summedScreenDists      = subgroupInclusiveAdd(neighborDist);
+	const uint sumRefIndex       = gl_SubgroupInvocationID / EVAL_GRID_X; // <-- The row we are in (or column in case of aTransposeEval==true)
+	const uint sumRefInvocation  = sumRefIndex * EVAL_GRID_X;             // <-- Invocation index where a new row starts (or column in case of aTransposeEval==true)
+	summedScreenDists           -= subgroupShuffle(summedScreenDists, sumRefInvocation);
+
+//	if (gl_SubgroupInvocationID == 7 && pushConstants.mPatchLodLevel == 0) {
+//		debugPrintfEXT("myParams[%f, %f], summedScreenDists[%f]", myParams.x, myParams.y, summedScreenDists);
+//	}
+
+	const bool isDeciderInvocation = gl_SubgroupInvocationID == (sumRefInvocation + EVAL_GRID_X - 1);
+	if (isDeciderInvocation) {
+		if (!aTransposeEval) {
+			splitU[sumRefIndex] = isScreenDistThresholdBasedLodStrategy() 
+				? summedScreenDists >= pushConstants.mStrategyParam 
+				: true; // <-- otherwise, always split
+//			debugPrintfEXT("in u row[%d], summedScreenDists[%f], splitU[%d]", sumRefIndex, summedScreenDists, splitU[sumRefIndex] ? 1 : 0);
+			screenDistsU[sumRefIndex] = summedScreenDists;
+		}
+		else {
+			splitV[sumRefIndex] = isScreenDistThresholdBasedLodStrategy() 
+				? summedScreenDists >= pushConstants.mStrategyParam 
+				: true; // <-- otherwise, always split
+//			debugPrintfEXT("in v col[%d], summedScreenDists[%f], splitV[%d]", sumRefIndex, summedScreenDists, splitV[sumRefIndex] ? 1 : 0);
+			screenDistsV[sumRefIndex] = summedScreenDists;
+		}
+	}
+}
+
+void pxFillOut(float uStart, float uEnd, float vStart, float vEnd, vec2 screenDists, const uint elementIdxIn) 
+{
+//	if (uStart < 0.8 || vStart < 1.8) return;
+	const uint insertIdx = atomicAdd(uPxFillCount.mDrawParams.instanceCount, 1); // <-- ATTENTION: Use the instanceCount member here!
+//	if (0 == insertIdx) debugPrintfEXT("%u, screenDistsU[%f, %f, %f, %f], screenDistsV[%f, %f, %f, %f]", insertIdx, screenDistsU[0], screenDistsU[1], screenDistsU[2], screenDistsU[3], screenDistsV[0], screenDistsV[1], screenDistsV[2], screenDistsV[3]);
+	uPxFillParams.mElements[insertIdx].mParams           = vec4(uStart, uEnd, vStart, vEnd);
+	uPxFillParams.mElements[insertIdx].mObjectIdUserData = uPatchLodPing.mElements[elementIdxIn].mObjectIdUserData;
+#if WRITE_OUT_MIN_MAX_SCREEN_COORDS
+#if CONCURRENT_U_V_EVAL
+	uPxFillParams.mElements[insertIdx].mScreenDists = vec4(screenDists, min(minScreenCoords[0], minScreenCoords[1]));
+#if WRITE_MAX_COORDS_IN_PASS2
+	uPxFillParams.mElements[insertIdx].mScreenMax.xy = max(maxScreenCoords[0], maxScreenCoords[1]);
+#endif
+#else
+	uPxFillParams.mElements[insertIdx].mScreenDists = vec4(screenDists, minScreenCoords[0]);
+#if WRITE_MAX_COORDS_IN_PASS2
+	uPxFillParams.mElements[insertIdx].mScreenMax.xy = maxScreenCoords[0];
+#endif
+#endif
+#else
+	uPxFillParams.mElements[insertIdx].mScreenDists.xy = screenDists;
+#endif
+}
+
+void patchOut(const uint levelIn, float uStart, float uEnd, float vStart, float vEnd, vec2 screenDists, const uint elementIdxIn) 
+{
+	// out (from ping->pong):
+	uint maxLevel = MAX_PATCH_SUBDIV_STEPS-1;
+
+	if (!isScreenDistThresholdBasedLodStrategy()) {
+		// In this case, the param might limit the #subdivisions
+		maxLevel = clamp(uint(pushConstants.mStrategyParam), 1, MAX_PATCH_SUBDIV_STEPS-1);
+	}
+
+	if (levelIn != maxLevel) { // Split and continue with ping->pong
+		const uint levelOut = levelIn + 1;
+		const uint insertIdx = atomicAdd(uPatchLodCount.mDispatchCounts[levelOut].x, 1);
+		uPatchLodPong.mElements[insertIdx].mParams           = vec4(uStart, uEnd, vStart, vEnd);
+		uPatchLodPong.mElements[insertIdx].mObjectIdUserData = uPatchLodPing.mElements[elementIdxIn].mObjectIdUserData;
+	} 
+	else { // We do not split OR we have reached max.level (i.e., no more patch lod calls afterwards):
+		pxFillOut(uStart, uEnd, vStart, vEnd, 
+		          screenDists,
+		          elementIdxIn);
+	}
+}
+
+// ################## compute shader main ###################
+void main()
+{
+	if (gl_SubgroupInvocationID < 4) {
+		splitU[gl_SubgroupInvocationID] = false;
+		splitV[gl_SubgroupInvocationID] = false;
+	}
+	subgroupMemoryBarrierShared();
+
+	// in:
+	const uint levelIn = pushConstants.mPatchLodLevel;
+	const uint elementIdxIn = gl_WorkGroupID.x;
+	const vec2 paramsStart = vec2(uPatchLodPing.mElements[elementIdxIn].mParams[0], uPatchLodPing.mElements[elementIdxIn].mParams[2]);
+	const vec2 paramsEnd   = vec2(uPatchLodPing.mElements[elementIdxIn].mParams[1], uPatchLodPing.mElements[elementIdxIn].mParams[3]);
+	const vec2 paramsRange = vec2(paramsEnd.x - paramsStart.x, paramsEnd.y - paramsStart.y);
+	const uint objectId    = uPatchLodPing.mElements[elementIdxIn].mObjectIdUserData[0];
+	const uvec3 userData   = uPatchLodPing.mElements[elementIdxIn].mObjectIdUserData.yzw;
+	const int curveIndex   = uObjectData.mElements[objectId].mCurveIndex;
+	const mat4 tM          = uObjectData.mElements[objectId].mTransformationMatrix;
+
+	// Do we have to split? Or are we already good to go (to px fill)?
+
+#if CONCURRENT_U_V_EVAL
+	// In this case, do only one direction, u or v, and sync via shared memory.
+	vec4 posCS;
+#if WRITE_OUT_MIN_MAX_SCREEN_COORDS
+#if WRITE_MAX_COORDS_IN_PASS2
+	vec2 minScreenC, maxScreenC;
+	evalSplitDecision(gl_LocalInvocationID.z == 0 ? false : true, paramsStart, paramsRange, curveIndex, translation, scale, posCS, minScreenC, maxScreenC);
+#else
+	vec2 minScreenC;
+	evalSplitDecision(gl_LocalInvocationID.z == 0 ? false : true, paramsStart, paramsRange, curveIndex, translation, scale, posCS, minScreenC);
+#endif
+#else
+	evalSplitDecision(gl_LocalInvocationID.z == 0 ? false : true, paramsStart, paramsRange, curveIndex, translation, scale, posCS);
+#endif
+#else
+	vec4 posCS_u, posCS_v;
+#if WRITE_OUT_MIN_MAX_SCREEN_COORDS
+#if WRITE_MAX_COORDS_IN_PASS2
+	vec2 minScreenC_u, minScreenC_v, maxScreenC_u, maxScreenC_v;
+	evalSplitDecision(false, paramsStart, paramsRange, curveIndex, userData, tM, posCS_u, minScreenC_u, maxScreenC_u);  // <-- for u
+	evalSplitDecision(true , paramsStart, paramsRange, curveIndex, userData, tM, posCS_v, minScreenC_v, maxScreenC_v);  // <-- for v
+	vec2 minScreenC = min(minScreenC_u, minScreenC_v);
+	vec2 maxScreenC = max(maxScreenC_u, maxScreenC_v);
+#else 
+	vec2 minScreenC_u, minScreenC_v;
+	evalSplitDecision(false, paramsStart, paramsRange, curveIndex, userData, tM, posCS_u, minScreenC_u);  // <-- for u
+	evalSplitDecision(true , paramsStart, paramsRange, curveIndex, userData, tM, posCS_v, minScreenC_v);  // <-- for v
+	vec2 minScreenC = min(minScreenC_u, minScreenC_v);
+#endif
+#else
+	evalSplitDecision(false, paramsStart, paramsRange, curveIndex, userData, tM, posCS_u);  // <-- for u
+	evalSplitDecision(true , paramsStart, paramsRange, curveIndex, userData, tM, posCS_v);  // <-- for v
+#endif
+#endif
+
+#if !WRITE_OUT_MIN_MAX_SCREEN_COORDS
+	if (pushConstants.mPerformFrustumCulling) 
+#endif
+	{
+		// Need to take corner points into account as well! => do it in a 5x5 grid:
+		vec2 fiverRange  = paramsRange / vec2(4.0, 4.0);
+		vec2 fiverIdx    = vec2(gl_SubgroupInvocationID - 5 * (gl_SubgroupInvocationID / 5), gl_SubgroupInvocationID / 5);
+//		debugPrintfEXT("fiverIdx[%f, %f]", fiverIdx.x, fiverIdx.y);
+		vec2 fiverParams = clamp(paramsStart + fiverRange * fiverIdx, paramsStart, paramsEnd);
+		vec4 rawWS_xtra  = paramToWS(fiverParams.x, fiverParams.y, curveIndex, userData);
+		vec4 posWS_xtra  = tM * rawWS_xtra;
+		vec4 posCS_xtra  = toCS(posWS_xtra);
+
+#if DRAW_PATCH_EVAL_DEBUG_VIS
+		{ DEBUG_VIS_WRAP_BEGIN
+			const vec3 vpc  = toScreen(posCS_xtra);
+			for (int i = -DEBUG_POINT_HALF_SIZE; i <= DEBUG_POINT_HALF_SIZE; ++i) {
+				for (int j = -DEBUG_POINT_HALF_SIZE; j <= DEBUG_POINT_HALF_SIZE; ++j) {
+					writeToCombinedAttachment(ivec2(vpc.xy) + ivec2(i, j), 0.0001, DEBUG_COLOR_XTRA);
+				}
+			}
+		DEBUG_VIS_WRAP_END }
+#endif
+		
+#if WRITE_OUT_MIN_MAX_SCREEN_COORDS
+		vec2 screenCoords_xtra = toScreen(posCS_xtra).xy;
+#if WRITE_MAX_COORDS_IN_PASS2
+		vec2 minScreenC_xtra = subgroupMin(screenCoords_xtra);
+		vec2 maxScreenC_xtra = subgroupMax(screenCoords_xtra);
+		if (subgroupElect()) {
+			minScreenCoords[gl_LocalInvocationID.z] = min(minScreenC, minScreenC_xtra);
+			maxScreenCoords[gl_LocalInvocationID.z] = max(maxScreenC, maxScreenC_xtra);
+		}
+#else
+		vec2 minScreenC_xtra = subgroupMin(screenCoords_xtra);
+		if (subgroupElect()) {
+			minScreenCoords[gl_LocalInvocationID.z] = min(minScreenC, minScreenC_xtra);
+		}
+#endif
+
+		if (pushConstants.mPerformFrustumCulling) {
+#endif
+#if CONCURRENT_U_V_EVAL
+			uint isOff = is_off_screen(posCS_xtra) & is_off_screen(posCS);
+			uint bitwiseSubgroupAnd = subgroupAnd(isOff);
+			if (subgroupElect()) {
+				workgroupAnd[gl_LocalInvocationID.z] = bitwiseSubgroupAnd;
+			}
+			// Note: The bail out happens later in the CONCURRENT_U_V_EVAL case, after the barrier.
+#else
+			uint isOff = is_off_screen(posCS_xtra) & is_off_screen(posCS_u) & is_off_screen(posCS_u);
+			uint bitwiseSubgroupAnd = subgroupAnd(isOff);
+
+			if (pushConstants.mPerformFrustumCulling) 
+			if(bitwiseSubgroupAnd != 0) {
+				return;
+			}
+#if WRITE_OUT_MIN_MAX_SCREEN_COORDS
+		}
+#endif
+#endif
+	}
+
+#if CONCURRENT_U_V_EVAL
+	memoryBarrier();
+	barrier();
+	if (pushConstants.mPerformFrustumCulling && ((workgroupAnd[0] & workgroupAnd[1]) != 0)) {
+		return;
+	}
+
+	// Only z==0 writes the split data
+	if (gl_LocalInvocationID.z != 0) {
+		return;
+	}
+#else
+	subgroupMemoryBarrierShared();
+#endif
+
+	// What do we split now?
+
+	if (!subgroupElect()) {
+		return;
+	}
+
+	bool shallSplitU[2] = { splitU[0] SPLIT_OP splitU[1], splitU[2] SPLIT_OP splitU[3] };
+	bool shallSplitV[2] = { splitV[0] SPLIT_OP splitV[1], splitV[2] SPLIT_OP splitV[3] };
+
+	const vec2 halfParamsRange = paramsRange * vec2(0.5, 0.5);
+
+	bool doVSplit = shallSplitV[0] && shallSplitV[1];
+	bool doUSplit = shallSplitU[0] && shallSplitU[1];
+	if (!doUSplit && shallSplitU[0] != shallSplitU[1]) {
+		doVSplit = true;
+	}
+	if (!doVSplit && shallSplitV[0] != shallSplitV[1]) {
+		doUSplit = true;
+	}
+
+#if DO_ONE_TO_FOUR_SPLITS_ONLY
+	if (doVSplit || doUSplit) {
+		float vStarts[2] = { paramsStart.y,                  paramsStart.y + halfParamsRange.y };
+		float vEnds[2]   = { vStarts[0] + halfParamsRange.y, vStarts[1] + halfParamsRange.y };
+		for (int i = 0; i < 2; ++i) {
+			patchOut(levelIn, paramsStart.x                    , paramsStart.x + halfParamsRange.x, vStarts[i], vEnds[i], 
+				        vec2(max(screenDistsU[0], screenDistsU[1]), max(screenDistsV[i*2], screenDistsV[i*2 + 1])),
+				        elementIdxIn);
+			patchOut(levelIn, paramsStart.x + halfParamsRange.x, paramsStart.x + paramsRange.x    , vStarts[i], vEnds[i], 
+				        vec2(max(screenDistsU[2], screenDistsU[3]), max(screenDistsV[i*2], screenDistsV[i*2 + 1])),
+				        elementIdxIn);
+		}
+	}
+#else
+	if (doVSplit) {
+		float vStarts[2] = { paramsStart.y,                  paramsStart.y + halfParamsRange.y };
+		float vEnds[2]   = { vStarts[0] + halfParamsRange.y, vStarts[1] + halfParamsRange.y };
+		for (int i = 0; i < 2; ++i) {
+			if (shallSplitU[i]) {
+				patchOut(levelIn, paramsStart.x                    , paramsStart.x + halfParamsRange.x, vStarts[i], vEnds[i], 
+				         vec2(max(screenDistsU[0], screenDistsU[1]), max(screenDistsV[i*2], screenDistsV[i*2 + 1])),
+				         elementIdxIn);
+				patchOut(levelIn, paramsStart.x + halfParamsRange.x, paramsStart.x + paramsRange.x    , vStarts[i], vEnds[i], 
+				         vec2(max(screenDistsU[2], screenDistsU[3]), max(screenDistsV[i*2], screenDistsV[i*2 + 1])),
+				         elementIdxIn);
+			}
+			else {
+				patchOut(levelIn, paramsStart.x                    , paramsStart.x + paramsRange.x    , vStarts[i], vEnds[i], 
+				         vec2(max(max(max(screenDistsU[0], screenDistsU[1]), screenDistsU[2]), screenDistsU[3]), max(screenDistsV[i*2], screenDistsV[i*2 + 1])),
+				         elementIdxIn);
+			}
+		}
+	}
+	else if (doUSplit) {
+		float uStarts[2] = { paramsStart.x,                  paramsStart.x + halfParamsRange.x };
+		float uEnds[2]   = { uStarts[0] + halfParamsRange.x, uStarts[1] + halfParamsRange.x };
+		for (int i = 0; i < 2; ++i) {
+			if (shallSplitV[i]) {
+				patchOut(levelIn, uStarts[i], uEnds[i], paramsStart.y                    , paramsStart.y + halfParamsRange.y, 
+				         vec2(max(screenDistsU[i*2], screenDistsU[i*2 + 1]), max(screenDistsV[0], screenDistsV[1])),
+				         elementIdxIn);
+				patchOut(levelIn, uStarts[i], uEnds[i], paramsStart.y + halfParamsRange.y, paramsStart.y + paramsRange.y    , 
+				         vec2(max(screenDistsU[i*2], screenDistsU[i*2 + 1]), max(screenDistsV[2], screenDistsV[3])),
+				         elementIdxIn);
+			}
+			else {
+				patchOut(levelIn, uStarts[i], uEnds[i], paramsStart.y                    , paramsStart.y + paramsRange.y    , 
+				         vec2(max(screenDistsU[i*2], screenDistsU[i*2 + 1]), max(max(max(screenDistsV[0], screenDistsV[1]), screenDistsV[2]), screenDistsV[3])),
+				         elementIdxIn);
+			}
+		}
+	}
+#endif
+	else {
+		// No splits required
+		pxFillOut(paramsStart.x, paramsStart.x + paramsRange.x, paramsStart.y, paramsStart.y + paramsRange.y, 
+		          vec2(max(max(max(screenDistsU[0], screenDistsU[1]), screenDistsU[2]), screenDistsU[3]), max(max(max(screenDistsV[0], screenDistsV[1]), screenDistsV[2]), screenDistsV[3])),
+		          elementIdxIn);
+	}
+}
