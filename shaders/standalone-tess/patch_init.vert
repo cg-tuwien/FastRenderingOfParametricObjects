@@ -28,6 +28,8 @@ layout(set = 3, binding = 0) buffer ObjectData   { object_data mElements[]; }  u
 layout(push_constant) uniform PushConstants
 {
     uint mObjectId;
+    float mInnerTessLevel;
+    float mOuterTessLevel;
 }
 pushConstants;
 

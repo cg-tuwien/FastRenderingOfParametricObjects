@@ -19,11 +19,11 @@
 #include <random>
 
 #define NUM_TIMESTAMP_QUERIES 5
-#define EXTRA_3D_MODEL "sponza_and_terrain"
+//#define EXTRA_3D_MODEL "sponza_and_terrain"
 //#define EXTRA_3D_MODEL "SunTemple"
 
 // Enable MSAA (don't foget to set SAMPLE_COUNT)!
-#define MSAA_ENABLED 1
+#define MSAA_ENABLED 0
 
 // Sample count possible values:
 // vk::SampleCountFlagBits::e1
@@ -35,11 +35,11 @@
 // vk::SampleCountFlagBits::e64
 #define SAMPLE_COUNT vk::SampleCountFlagBits::e8
 
-#define SSAA_ENABLED 1
+#define SSAA_ENABLED 0
 #define SSAA_FACTOR  glm::uvec2(2, 2)
 
-#define TEST_MODE_ON                   1
-#define TEST_GATHER_PIPELINE_STATS     1
+#define TEST_MODE_ON                   0
+#define TEST_GATHER_PIPELINE_STATS     0
 #define TEST_ALLOW_GATHER_STATS        1
 #define TEST_DURATION_PER_STEP          2.5f
 #define TEST_GATHER_TIMER_QUERIES      1
@@ -100,6 +100,8 @@
 //#define TEST_RENDERING_METHOD          rendering_method::point_rendering
 //// Values: 0 = Uint64 image | 3 = framebuffer (must use that for SSAA or MSAA)
 //#define TEST_TARGET_IMAGE              0
+
+#define TESSONLY 1
 
 class vk_parametric_curves_app : public avk::invokee
 {
@@ -454,6 +456,15 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 		}
 
 		std::vector<material_config> allMatConfigs; // <-- Gather the material config from all models to be loaded
+
+		// Make some custom materials:
+		auto& myCheckerboardMat = allMatConfigs.emplace_back();
+		myCheckerboardMat.mDiffuseReflectivity = glm::vec4(1.0f);
+		myCheckerboardMat.mAmbientReflectivity = glm::vec4(1.0f);
+		myCheckerboardMat.mAlbedo = glm::vec4(1.0f);
+		myCheckerboardMat.mDiffuseTex = "assets/checkerboard-pattern.jpg";
+		myCheckerboardMat.mDiffuseTexBorderHandlingMode = {{ border_handling_mode::repeat, border_handling_mode::repeat }};
+
 		std::vector<loaded_model_data> dataForDrawCall;
 
 		vk::PhysicalDeviceFeatures2 supportedExtFeatures;
@@ -1212,6 +1223,11 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 		});
 		mUpdater->on(shader_files_changed_event(mTessPipelineStandaloneWireframe.as_reference())).update(mTessPipelineStandaloneWireframe);
 
+
+#if TESSONLY
+		mRenderingMethod = rendering_method::tessellation_standalone;
+#else
+
 		mTessPipelinePxFill = create_tess_pipe(
 			"shaders/px-fill-tess/patch_ready.vert", 
 			"shaders/px-fill-tess/patch_set.tesc", 
@@ -1225,6 +1241,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 			p.rasterization_state_create_info().setPolygonMode(vk::PolygonMode::eLine);
 		});
 		mUpdater->on(shader_files_changed_event(mTessPipelinePxFillWireframe.as_reference())).update(mTessPipelinePxFillWireframe);
+#endif
 
 		mCopyToBackufferPipe = context().create_compute_pipeline_for(
 			"shaders/copy_to_backbuffer.comp",
@@ -1266,14 +1283,6 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
             this->mOrbitCam.set_aspect_ratio(context().main_window()->aspect_ratio());
 		}).update(mCopyToBackufferPipe, mClearCombinedAttachmentPipe);
 
-		// Create a couple of spheres in the scene:
-		constexpr int SPHERE_FACTOR = ((NUM_MODELS_PER_DIM-1) * 3) / 2;
-		for (int x = -SPHERE_FACTOR; x <= SPHERE_FACTOR; x += 3) {
-			for (int z = -SPHERE_FACTOR; z <= SPHERE_FACTOR; z += 3) {
-				mSpherePositions.push_back(glm::vec3(x, 0.f, z));
-			}
-		}
-		
 		// Add the camera to the composition (and let it handle the updates)
 		auto camPos = glm::angleAxis(0.f, up()) * glm::vec3{ 0.0f, 4.0f, 20.0f };
 		mOrbitCam.set_translation(camPos);
@@ -1288,22 +1297,6 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 		std::locale::global(std::locale("en_US.UTF-8"));
 		auto imguiManager = current_composition()->element_by_type<imgui_manager>();
         if (nullptr != imguiManager) {
-            auto taskStr64x1                  = std::make_unique<std::string>("  64x1 (" + std::to_string((64 + (mTaskInvocationsExt - 1)) / mTaskInvocationsExt) + " iterations)");
-            auto taskStr128x1                 = std::make_unique<std::string>(" 128x1 (" + std::to_string((128 + (mTaskInvocationsExt - 1)) / mTaskInvocationsExt) + " iterations)");
-            auto taskShaderPatchSizeOptions1D = avk::make_array<const char*>( "  32x1", taskStr64x1->c_str(), taskStr128x1->c_str());
-
-            auto taskStr8x8                   = std::make_unique<std::string>("  8x8  (" + std::to_string((8 * 8 + (mTaskInvocationsExt - 1)) / mTaskInvocationsExt) + " iterations)");
-            auto taskStr16x16                 = std::make_unique<std::string>(" 16x16 (" + std::to_string((16 * 16 + (mTaskInvocationsExt - 1)) / mTaskInvocationsExt) + " iterations)");
-            auto taskShaderPatchSizeOptions2D = avk::make_array<const char*>( "  8x4", "  4x8", taskStr8x8->c_str(), taskStr16x16->c_str());
-			
-            auto meshStr64x1                  = std::make_unique<std::string>("  64x1 (" + std::to_string((64 + (mMeshInvocationsExt - 1)) / mMeshInvocationsExt) + " iterations)");
-            auto meshStr128x1                 = std::make_unique<std::string>(" 128x1 (" + std::to_string((128 + (mMeshInvocationsExt - 1)) / mMeshInvocationsExt) + " iterations)");
-            auto meshShaderPatchSizeOptions1D = avk::make_array<const char*>( "  32x1", meshStr64x1->c_str(), meshStr128x1->c_str());
-
-            auto meshStr8x8                   = std::make_unique<std::string>("  8x8  (" + std::to_string((8 * 8 + (mMeshInvocationsExt - 1)) / mMeshInvocationsExt) + " iterations)");
-            auto meshStr16x16                 = std::make_unique<std::string>(" 16x16 (" + std::to_string((16 * 16 + (mMeshInvocationsExt - 1)) / mMeshInvocationsExt) + " iterations)");
-            auto meshShaderPatchSizeOptions2D = avk::make_array<const char*>( "  8x4", "  4x8", meshStr8x8->c_str(), meshStr16x16->c_str());
-			
 			imguiManager->add_callback([
 				this, imguiManager,
 				timestampPeriod = std::invoke([]() {
@@ -1316,9 +1309,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 				lastPatchLodDuration = 0.0,
 				lastPatchToTileDuration = 0.0,
 				lastRenderduration = 0.0,
-				lastBeginToRenderEndDuration = 0.0,
-				justSoThatTheyDontDie = avk::make_array<decltype(meshStr64x1)>(std::move(taskStr64x1), std::move(taskStr128x1), std::move(taskStr8x8), std::move(taskStr16x16), std::move(meshStr64x1), std::move(meshStr128x1), std::move(meshStr8x8), std::move(meshStr16x16)),
-				taskShaderPatchSizeOptions1D, taskShaderPatchSizeOptions2D, meshShaderPatchSizeOptions1D, meshShaderPatchSizeOptions2D
+				lastBeginToRenderEndDuration = 0.0
 			]() mutable {
 				if (mMeasurementInProgress) {
 					return;
@@ -1416,6 +1407,9 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 						break;
                     case rendering_method::tessellation_standalone:
 					    ImGui::TextColored(ImVec4(1.f, .6f, 0.2f, 1.f), "Tessellation-Pipe Only (no patches)");
+                        ImGui::PushItemWidth(imGuiWindowWidth * 0.5f);
+						ImGui::SliderFloat("Constant Inner Tessellation Level", &mConstInnerTessLevel, 1.0f, 64.0f);
+						ImGui::SliderFloat("Constant Outer Tessellation Level", &mConstOuterTessLevel, 1.0f, 64.0f);
 						break;
                     case rendering_method::patch_gen_tess_render:
 					    ImGui::TextColored(ImVec4(0.2f, .7f, 0.9f, 1.f), "Rendering Tessellated Patches");
@@ -1423,8 +1417,10 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
                     default:
 					    ImGui::TextColored(ImVec4(1.f, 0.f, 0.f, 1.f), "Unknown mRenderingMethod (<- Bug!)");
                 }
+#if !TESSONLY
 				ImGui::Combo("RENDERING METHOD", reinterpret_cast<int*>(&mRenderingMethod), "PATCH-GEN -> Point Rendering\0PATCH-GEN -> Fixed 64er Tessellation\0Tessellation Standalone\0Simple-Stupid Vertex Pipe\0");
 				ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.3f, 1.0f), "   ^ keys: [F1] => patch->points, [F2] => patch->tess, [F3] => standalone tess, [F4] => vertex");
+#endif
 				// Choose your path: SPHERE GRID or SINGLE MESHES or SCENE COMPOSER
 				if (mRenderingMethod != rendering_method::stupid_vertex_pipe) {
                     if (ImGui::Combo("What to render?", &mWhatToRenderParamOrTess, "Single Objects [o]\0Sphere Grid [g]\0Scene Composer [c]\0Seashells [m]\0")) {
@@ -1702,9 +1698,11 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 
 				// Do we need to recreate the vertex pipe?
 				if (rasterPipesNeedRecreation) {
+#if !TESSONLY
 					auto newVertexPipe = create_vertex_pipe();
 					std::swap(*mVertexPipeline, *newVertexPipe); // new pipe is now old pipe
 					context().main_window()->handle_lifetime(std::move(newVertexPipe));
+#endif
 
 					auto newTessStandalone = create_tess_pipe(
 						"shaders/standalone-tess/patch_init.vert", 
@@ -1721,6 +1719,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 					std::swap(*mTessPipelineStandaloneWireframe, *newTessStandaloneWire);
 					context().main_window()->handle_lifetime(std::move(newTessStandaloneWire));
 
+#if !TESSONLY
 					auto newTessPipePxFill = create_tess_pipe(
 						"shaders/px-fill-tess/patch_ready.vert", 
 						"shaders/px-fill-tess/patch_set.tesc", 
@@ -1735,6 +1734,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 					});
 					std::swap(*mTessPipelinePxFillWireframe, *newTessPipePxFillWire);
 					context().main_window()->handle_lifetime(std::move(newTessPipePxFillWire));
+#endif
 				}
 			});
 		}
@@ -1763,6 +1763,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 			mOrbitCam.disable();
         }
 
+#if !TESSONLY
 		if (input().key_pressed(key_code::f1)) {
 			mRenderingMethod = rendering_method::point_rendering;
 		}
@@ -1775,6 +1776,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
         if (input().key_pressed(key_code::f4)) {
             mRenderingMethod = rendering_method::stupid_vertex_pipe;
         }
+#endif
 
 		// F6 ... toggle wireframe mode
 		if (input().key_pressed(key_code::f6)) {
@@ -2509,7 +2511,11 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 					})),
 					command::many_n_times(mNumEnabledObjects, [&, this] (auto i) {
 					    return command::gather(
-					        command::push_constants(tessPipeStandaloneToBeUsed->layout(), standalone_tess_push_constants{ i }),
+					        command::push_constants(tessPipeStandaloneToBeUsed->layout(), standalone_tess_push_constants{ 
+								i,
+								mConstInnerTessLevel, 
+								mConstOuterTessLevel
+					        }),
 					        command::draw_vertices(mObjectData[i].mDetailEvalDims.x * mObjectData[i].mDetailEvalDims.y * 4, 1, 0, 0)
 					    );
                     })

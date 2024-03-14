@@ -30,6 +30,8 @@ layout(set = 3, binding = 0) buffer ObjectData   { object_data mElements[]; }  u
 layout(push_constant) uniform PushConstants
 {
     uint mObjectId;
+    float mInnerTessLevel;
+    float mOuterTessLevel;
 }
 pushConstants;
 
@@ -84,12 +86,12 @@ void main()
     {
 //        debugPrintfEXT("control_out[x].mParams[%f, %f]", control_out[3].mParams.x, control_out[0].mParams.y);
         
-        gl_TessLevelOuter[0] = clamp(screen_dist_between(control_out[3].mParams, control_out[0].mParams), 1.0, 64.0);
-        gl_TessLevelOuter[1] = clamp(screen_dist_between(control_out[0].mParams, control_out[1].mParams), 1.0, 64.0);
-        gl_TessLevelOuter[2] = clamp(screen_dist_between(control_out[1].mParams, control_out[2].mParams), 1.0, 64.0);
-        gl_TessLevelOuter[3] = clamp(screen_dist_between(control_out[2].mParams, control_out[3].mParams), 1.0, 64.0);
+        gl_TessLevelOuter[0] = pushConstants.mOuterTessLevel;
+        gl_TessLevelOuter[1] = pushConstants.mOuterTessLevel;
+        gl_TessLevelOuter[2] = pushConstants.mOuterTessLevel;
+        gl_TessLevelOuter[3] = pushConstants.mOuterTessLevel;
 
-        gl_TessLevelInner[0] = max(gl_TessLevelOuter[1], gl_TessLevelOuter[2]);
-        gl_TessLevelInner[1] = max(gl_TessLevelOuter[0], gl_TessLevelOuter[3]);
+        gl_TessLevelInner[0] = pushConstants.mInnerTessLevel;
+        gl_TessLevelInner[1] = pushConstants.mInnerTessLevel;
     }
 }

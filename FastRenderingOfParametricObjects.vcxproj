@@ -68,6 +68,14 @@
       <FileType>Document</FileType>
     </None>
   </ItemGroup>
+  <ItemGroup>
+    <None Include="assets\checkerboard-pattern.jpg" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="assets\quadquad.obj">
+      <FileType>Document</FileType>
+    </None>
+  </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>15.0</VCProjectVersion>
     <ProjectGuid>{098430a3-ebff-403d-87eb-c4ade757b8d4}</ProjectGuid>

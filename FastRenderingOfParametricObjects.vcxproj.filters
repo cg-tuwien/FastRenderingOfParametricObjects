@@ -115,6 +115,12 @@
     <None Include="shaders\pass3pre_select_tile_patches.comp">
       <Filter>shaders</Filter>
     </None>
+    <None Include="assets\quadquad.obj">
+      <Filter>assets</Filter>
+    </None>
+    <None Include="assets\checkerboard-pattern.jpg">
+      <Filter>assets</Filter>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="precompiled_headers\cg_stdafx.cpp">

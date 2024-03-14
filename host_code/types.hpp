@@ -92,7 +92,7 @@ public:
     constexpr parametric_object(bool isEnabled, parametric_object_type objType, float uFrom, float uTo, float vFrom, float vTo, glm::vec3 aTranslation = glm::vec3{0.f}, glm::vec3 aScale = glm::vec3{ 1.0f }, glm::vec3 aRotation = glm::vec3{ 0.0f }, int32_t aMaterialIndex = -1)
         : mEnabled{ isEnabled }
         , mParams{uFrom, uTo, vFrom, vTo}
-        , mEvalDims{8, 8, 0, 0}
+        , mEvalDims{1, 1, 0, 0}
         , mTranslation{ aTranslation }
         , mScale{ aScale }
         , mRotation{ aRotation }
@@ -265,6 +265,8 @@ struct pass3_push_constants
 struct standalone_tess_push_constants
 {
     uint32_t mObjectId;
+    float mInnerTessLevel;
+    float mOuterTessLevel;
 };
 
 // Push constants for patch->tess method
