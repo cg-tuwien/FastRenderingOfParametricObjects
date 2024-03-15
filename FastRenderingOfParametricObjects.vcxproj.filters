@@ -125,6 +125,9 @@
       <Filter>assets</Filter>
     </None>
     <None Include="assets\spot_quadrangulated.obj" />
+    <None Include="assets\teapot.off">
+      <Filter>assets</Filter>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="precompiled_headers\cg_stdafx.cpp">

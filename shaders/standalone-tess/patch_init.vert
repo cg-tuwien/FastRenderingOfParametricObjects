@@ -31,7 +31,7 @@ layout(std430, set = 4, binding = 3) buffer IndicesBuffer  { uint mIndices[]; } 
 
 layout(push_constant) uniform PushConstants
 {
-    uint mObjectId;
+    int mMaterialIndex;
     float mInnerTessLevel;
     float mOuterTessLevel;
 	float mBulginess;

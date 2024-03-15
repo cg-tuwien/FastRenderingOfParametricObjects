@@ -33,7 +33,7 @@ layout(std430, set = 4, binding = 3) buffer IndicesBuffer  { uint mIndices[]; } 
 
 layout(push_constant) uniform PushConstants
 {
-    uint mObjectId;
+    int mMaterialIndex;
     float mInnerTessLevel;
     float mOuterTessLevel;
 	float mBulginess;
@@ -54,28 +54,6 @@ layout (location = 0) out PerControlPointPayload
     vec3 mNormal;
 	vec2 mTexCoords;
 } control_out[];
-
-float screen_dist_between(vec2 uv0, vec2 uv1)
-{
-    const uint objectId    = pushConstants.mObjectId;
-    const uvec3 userData   = uvec3(0); // NOTE: User data not supported with tessellation standalone
-	const mat4 tM          = uObjectData.mElements[objectId].mTransformationMatrix;
-	const int  curveIndex  = uObjectData.mElements[objectId].mCurveIndex;
-
-	vec4 rawWS0 = paramToWS(uv0.x, uv0.y, curveIndex, userData);
-    vec4 posWS0 = tM * rawWS0;
-	vec4 posCS0 = toCS(posWS0);
-	vec3 vpc0   = toScreen(posCS0); 
-
-	vec4 rawWS1 = paramToWS(uv1.x, uv1.y, curveIndex, userData);
-    vec4 posWS1 = tM * rawWS1;
-	vec4 posCS1 = toCS(posWS1);
-	vec3 vpc1   = toScreen(posCS1); 
-
-    float l = length(vpc1.xy - vpc0.xy);
-//    l -= l * vpc1.z * vpc1.z * vpc1.z * vpc1.z * vpc1.z * vpc1.z * vpc1.z * vpc1.z * vpc1.z * vpc1.z * vpc1.z * vpc1.z * vpc1.z * vpc1.z * vpc1.z * vpc1.z;
-    return l * 0.75;
-}
 
 void main()
 {

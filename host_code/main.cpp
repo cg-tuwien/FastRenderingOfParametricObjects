@@ -153,7 +153,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 		auto& drawCall = mDrawCalls.emplace_back();
         drawCall.mModelMatrix      = glm::mat4{1.0f};
 		drawCall.mMaterialIndex	   = 0;
-		drawCall.mPixelsOnMeridian = 1;
+		drawCall.mNumQuads = 1;
 
 		const auto insertIdx = mVertexBuffersOffsetsSizesCount.x++;
 		uint32_t posOffset = 0;
@@ -380,7 +380,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 			auto& drawCall = mDrawCalls.emplace_back();
 			drawCall.mModelMatrix = drawCallData.mModelMatrix;
 			drawCall.mMaterialIndex = drawCallData.mMaterialIndex;
-			drawCall.mPixelsOnMeridian = drawCallData.mPixelsOnMeridian;
+			drawCall.mNumQuads = drawCallData.mNumQuads;
 
 			const auto insertIdx = mVertexBuffersOffsetsSizesCount.x++;
 			uint32_t posOffset = 0;
@@ -449,12 +449,6 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 			storage_buffer_meta::create_from_size(            sizeof(glm::uvec4)) // 1 counter, that's it
 		);
 
-		std::vector<std::tuple<model, int32_t>> loadedModels;
-
-		for (const auto& [m, pxMeridian] : loadedModels) {
-			AVK_LOG_INFO(std::format("Loaded sphere model with {} vertices ({} thereof along its meridian) and {} triangles.", m->number_of_vertices_for_mesh(0), pxMeridian, m->number_of_indices_for_mesh(0) / 3));
-		}
-
 		std::vector<material_config> allMatConfigs; // <-- Gather the material config from all models to be loaded
 
 		// Make some custom materials:
@@ -479,10 +473,16 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 		supportedExtFeatures.pNext = &meshShaderFeatures;
 		context().physical_device().getFeatures2(&supportedExtFeatures);
 
-		//loadedModels.push_back(std::make_tuple(model_t::load_from_file("assets/quadquad.obj", 0), 4));
-		loadedModels.push_back(std::make_tuple(model_t::load_from_file("assets/spot_control_mesh.obj", 0), 640));
+		std::vector<std::tuple<model, uint32_t, int32_t>> loadedModels;
+		loadedModels.push_back(std::make_tuple(model_t::load_from_file("assets/quadquad.obj", 0), 4, -2));
+		//loadedModels.push_back(std::make_tuple(model_t::load_from_file("assets/spot_control_mesh.obj", 0), 640, 1));
+		//loadedModels.push_back(std::make_tuple(model_t::load_from_file("assets/teapot.off", 0), 432, 0));
+		for (const auto& [m, numQuads, materialIndex] : loadedModels) {
+			AVK_LOG_INFO(std::format("Loaded model with: {} vertices | {} quads | material index => {}", m->number_of_vertices_for_mesh(0), numQuads, materialIndex));
+		}
+
 		for (size_t i = 0; i < loadedModels.size(); ++i) {
-			auto& [curModel, pxMeridian] = loadedModels[i];
+			auto& [curModel, numQuads, materialIndex] = loadedModels[i];
 
 			const auto meshIndicesInOrder = curModel->select_all_meshes();
 
@@ -499,8 +499,8 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 
 				auto& drawCallData = dataForDrawCall.emplace_back();
 
-				drawCallData.mMaterialIndex = static_cast<int32_t>(matOffset);
-				drawCallData.mPixelsOnMeridian = pxMeridian;
+				drawCallData.mMaterialIndex = materialIndex;
+				drawCallData.mNumQuads = numQuads;
 				drawCallData.mModelMatrix = curModel->transformation_matrix_for_mesh(meshIndex);
 				// Find and assign the correct material in the allMatConfigs vector
 				for (auto pair : distinctMaterials) {
@@ -2362,93 +2362,6 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 #endif
 			);
 			break;
-        case rendering_method::stupid_vertex_pipe:
-			parametricRenderCmds = command::gather(
-				command::render_pass(mVertexPipeline->renderpass_reference(), mFramebuffer.as_reference(), command::gather(
-
-					// Extra 3D model here:
-					extra3DModelRenderCmds,
-
-                    command::bind_pipeline(mVertexPipeline.as_reference()),
-					command::bind_descriptors(mVertexPipeline->layout(), mDescriptorCache->get_or_create_descriptor_sets({
-						descriptor_binding(0, 0, mFrameDataBuffers[inFlightIndex]),
-			            descriptor_binding(0, 1, as_combined_image_samplers(mImageSamplers, layout::shader_read_only_optimal)),
-			            descriptor_binding(0, 2, mMaterialBuffer),
-						descriptor_binding(1, 0, mCombinedAttachmentView->as_storage_image(layout::general)),
-#if STATS_ENABLED
-						descriptor_binding(1, 1, mHeatMapImageView->as_storage_image(layout::general)),
-#endif
-			            descriptor_binding(2, 0, mCountersSsbo->as_storage_buffer())
-					})),
-
-					command::conditional([this] { return 1 == mWhatToRenderStupidVert; },
-						// IF render all them sphere positions:
-					    [&, this] {
-							return command::gather(
-							    command::many_for_each(mSpherePositions, [&, this] (const auto& pos) mutable {
-								    // For each position, check which sphere model to use
-								    int i = 0;
-								    int n = mDrawCalls.size() - 1;
-								    for (; i < n; ++i) {
-								        // Sphere radius is 1 always
-								        // 1) Into view space:
-									    auto posVS   = glm::vec3{uboData.mViewMatrix * glm::vec4{pos, 1.0f}};
-									    auto ortho   = orthogonal(posVS);
-									    auto rightVS = posVS + ortho;
-									    auto leftVS  = posVS - ortho;
-									    auto rightSS = clipSpaceToViewport(projMat * glm::vec4{rightVS, 1.0f}, glm::vec2{resolution});
-									    auto leftSS  = clipSpaceToViewport(projMat * glm::vec4{leftVS , 1.0f}, glm::vec2{resolution});
-									    auto diff    = rightSS - leftSS;
-									    auto pxDist  = glm::length(diff);
-									    //LOG_INFO(fmt::format("pxDist[{}]", pxDist));
-
-									    if (pxDist < mDrawCalls[i].mPixelsOnMeridian * 1.5f) {
-										    break; // found the right LOD
-									    }
-								    }
-							        return command::gather(
-									    command::push_constants(mVertexPipeline->layout(), vertex_pipe_push_constants{ 
-											glm::translate(glm::mat4{1.0f}, pos) * mDrawCalls[i].mModelMatrix,
-											mDrawCalls[i].mMaterialIndex
-									    }),
-					                    command::draw_indexed(
-								            // Bind and use the index buffer:
-                                            std::forward_as_tuple(mIndexBuffer.as_reference(), size_t{mDrawCalls[i].mIndexBufferOffset}, mDrawCalls[i].mNumElements),
-								            // Bind the vertex input buffers in the right order (corresponding to the layout specifiers in the vertex shader)
-								            std::forward_as_tuple(mPositionsBuffer.as_reference(), size_t{mDrawCalls[i].mPositionsBufferOffset}), 
-										    std::forward_as_tuple(mTexCoordsBuffer.as_reference(), size_t{mDrawCalls[i].mTexCoordsBufferOffset}),
-										    std::forward_as_tuple(mNormalsBuffer.as_reference()  , size_t{mDrawCalls[i].mNormalsBufferOffset})
-							            )
-    							    );
-                                })
-							);
-						},
-						// ELSE render single object (there is no scene composer support for triangle meshes):
-					    [&, this] {
-							return command::gather(
-								command::push_constants(mVertexPipeline->layout(), vertex_pipe_push_constants{ 
-									mDrawCalls[mSingleObjectToRenderStupidVert].mModelMatrix,
-									mDrawCalls[mSingleObjectToRenderStupidVert].mMaterialIndex
-								}),
-					            command::draw_indexed(
-								    // Bind and use the index buffer:
-                                    std::forward_as_tuple(mIndexBuffer.as_reference(), size_t{mDrawCalls[mSingleObjectToRenderStupidVert].mIndexBufferOffset}, mDrawCalls[mSingleObjectToRenderStupidVert].mNumElements),
-								    // Bind the vertex input buffers in the right order (corresponding to the layout specifiers in the vertex shader)
-								    std::forward_as_tuple(mPositionsBuffer.as_reference(), size_t{mDrawCalls[mSingleObjectToRenderStupidVert].mPositionsBufferOffset}), 
-									std::forward_as_tuple(mTexCoordsBuffer.as_reference(), size_t{mDrawCalls[mSingleObjectToRenderStupidVert].mTexCoordsBufferOffset}),
-									std::forward_as_tuple(mNormalsBuffer.as_reference()  , size_t{mDrawCalls[mSingleObjectToRenderStupidVert].mNormalsBufferOffset})
-							    )
-							);
-						}
-					)
-				))
-#if STATS_ENABLED
-				, mTimestampPool->write_timestamp(firstQueryIndex + 2, stage::fragment_shader)
-				, mTimestampPool->write_timestamp(firstQueryIndex + 3, stage::fragment_shader)
-				, mTimestampPool->write_timestamp(firstQueryIndex + 4, stage::fragment_shader)
-#endif
-		    );
-			break;
         case rendering_method::patch_gen_tess_render:
 			parametricRenderCmds = command::gather(
 				command::bind_pipeline(mInitPatchesComputePipe.as_reference()),
@@ -2538,7 +2451,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 					})),
 
 					command::push_constants(tessPipeStandaloneToBeUsed->layout(), standalone_tess_push_constants{ 
-						mDrawCalls[0].mPixelsOnMeridian / 213u, // <-- don't ask ^^
+						mDrawCalls[0].mMaterialIndex,
 						mConstInnerTessLevel, 
 						mConstOuterTessLevel,
 						mBulginess
@@ -2555,7 +2468,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 					//    );
      //               })
 
-					command::draw_vertices(4, mDrawCalls[0].mPixelsOnMeridian/4, 0, 0)
+					command::draw_vertices(4, mDrawCalls[0].mNumQuads/4, 0, 0)
 				))
 #if STATS_ENABLED
 				, mTimestampPool->write_timestamp(firstQueryIndex + 2, stage::fragment_shader)

@@ -13,7 +13,7 @@ struct data_for_draw_call
 	glm::mat4 mModelMatrix;
 
 	int32_t mMaterialIndex;
-	int32_t mPixelsOnMeridian;
+	uint32_t mNumQuads;
 };
 
 /** Contains the data for each draw call */
@@ -27,7 +27,7 @@ struct loaded_model_data
 	glm::mat4 mModelMatrix;
 
 	int32_t mMaterialIndex;
-	int32_t mPixelsOnMeridian;
+	uint32_t mNumQuads;
 };
 
 struct frame_data_ubo
@@ -264,7 +264,7 @@ struct pass3_push_constants
 // Push constants for standalone tessellation shaders
 struct standalone_tess_push_constants
 {
-    uint32_t mObjectId;
+    int32_t mMaterialIndex;
     float mInnerTessLevel;
     float mOuterTessLevel;
     float mBulginess;

@@ -35,6 +35,7 @@
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>
+    <None Include="assets\teapot.off" />
     <None Include="Auto-Vk-Toolkit\assets\sponza_and_terrain.fscene" />
     <None Include="shaders\clear_r64_image.comp" />
     <None Include="shaders\copy_to_backbuffer.comp" />

@@ -35,7 +35,7 @@ layout(std430, set = 4, binding  = 3) buffer IndicesBuffer  { uint mIndices[]; }
 
 layout(push_constant) uniform PushConstants
 {
-    uint mObjectId;
+    int mMaterialIndex;
     float mInnerTessLevel;
     float mOuterTessLevel;
 	float mBulginess;
@@ -166,7 +166,7 @@ void main()
     eval_out.normalWS          = myNormal;
     eval_out.texCoords         = myTexCoords;
     eval_out.shadingUserParams = vec3(0.0);
-    eval_out.matIndex          = int(pushConstants.mObjectId) - 2;
+    eval_out.matIndex          = pushConstants.mMaterialIndex;
 	eval_out.color             = vertexColors[(gl_PrimitiveID + uint(gl_TessCoord.x * 997.0) + uint(gl_TessCoord.y * 131.0)) % MAX_COLORS];
 	gl_Position = ubo.mViewProjMatrix * vec4(myPosition, 1.0);
 }
