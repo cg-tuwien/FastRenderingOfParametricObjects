@@ -472,6 +472,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 		supportedExtFeatures.pNext = &meshShaderFeatures;
 		context().physical_device().getFeatures2(&supportedExtFeatures);
 
+		loadedModels.push_back(std::make_tuple(model_t::load_from_file("assets/spot_control_mesh.obj", 0), 1));
 		for (size_t i = 0; i < loadedModels.size(); ++i) {
 			auto& [curModel, pxMeridian] = loadedModels[i];
 
@@ -1213,7 +1214,12 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 			"shaders/standalone-tess/patch_init.vert", 
 			"shaders/standalone-tess/patch_resolution.tesc", 
 			"shaders/standalone-tess/patch_eval.tese",
-            push_constant_binding_data{shader_type::all, 0, sizeof(standalone_tess_push_constants)}
+            push_constant_binding_data{shader_type::all, 0, sizeof(standalone_tess_push_constants)},
+            // all them vertex buffers:
+            descriptor_binding(4, 0, mPositionsBuffer->as_storage_buffer()),
+            descriptor_binding(4, 1, mNormalsBuffer->as_storage_buffer()),
+            descriptor_binding(4, 2, mTexCoordsBuffer->as_storage_buffer()),
+            descriptor_binding(4, 3, mIndexBuffer->as_storage_buffer())
 		);
 		mUpdater->on(shader_files_changed_event(mTessPipelineStandalone.as_reference())).update(mTessPipelineStandalone);
 
@@ -2507,18 +2513,32 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 			            descriptor_binding(2, 0, mCountersSsbo->as_storage_buffer()),
 				        descriptor_binding(3, 0, mObjectDataBuffer->as_storage_buffer()),
 						descriptor_binding(3, 1, mIndirectPxFillParamsBuffer->as_storage_buffer()),
-				        descriptor_binding(3, 2, mIndirectPxFillCountBuffer->as_storage_buffer())
+				        descriptor_binding(3, 2, mIndirectPxFillCountBuffer->as_storage_buffer()),
+
+			            descriptor_binding(4, 0, mPositionsBuffer->as_storage_buffer()),
+			            descriptor_binding(4, 1, mNormalsBuffer->as_storage_buffer()),
+			            descriptor_binding(4, 2, mTexCoordsBuffer->as_storage_buffer()),
+			            descriptor_binding(4, 3, mIndexBuffer->as_storage_buffer())
 					})),
-					command::many_n_times(mNumEnabledObjects, [&, this] (auto i) {
-					    return command::gather(
-					        command::push_constants(tessPipeStandaloneToBeUsed->layout(), standalone_tess_push_constants{ 
-								i,
-								mConstInnerTessLevel, 
-								mConstOuterTessLevel
-					        }),
-					        command::draw_vertices(mObjectData[i].mDetailEvalDims.x * mObjectData[i].mDetailEvalDims.y * 4, 1, 0, 0)
-					    );
-                    })
+
+					command::push_constants(tessPipeStandaloneToBeUsed->layout(), standalone_tess_push_constants{ 
+						0,
+						mConstInnerTessLevel, 
+						mConstOuterTessLevel
+			        }),
+
+					//command::many_n_times(mNumEnabledObjects, [&, this] (auto i) {
+					//    return command::gather(
+					//        command::push_constants(tessPipeStandaloneToBeUsed->layout(), standalone_tess_push_constants{ 
+					//			i,
+					//			mConstInnerTessLevel, 
+					//			mConstOuterTessLevel
+					//        }),
+					//        command::draw_vertices(mObjectData[i].mDetailEvalDims.x * mObjectData[i].mDetailEvalDims.y * 4, 1, 0, 0)
+					//    );
+     //               })
+
+					command::draw_vertices(4, 1, 0, 0)
 				))
 #if STATS_ENABLED
 				, mTimestampPool->write_timestamp(firstQueryIndex + 2, stage::fragment_shader)
@@ -2789,7 +2809,7 @@ private: // v== Member variables ==v
 	float mScreenDistanceThreshold = 62.0f; // param for mLodStrategy == 1
 	int   mNumSubdivisions = 4;             // param for mLodStrategy == 0
 	bool mFrustumCullingOn = true;
-    bool mBackfaceCullingOn = true;
+    bool mBackfaceCullingOn = false;
 	std::array<float, 2> mPxFillPatchTargetResolutionScaler {{ 1.2f, 1.2f }};
 	std::array<float, 2> mPxFillParamShift {{ 0.0f, 0.0f }};
 	std::array<float, 2> mPxFillParamStretch {{ 0.0f, 0.0f }};

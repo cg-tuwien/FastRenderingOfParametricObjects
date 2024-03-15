@@ -121,6 +121,9 @@
     <None Include="assets\checkerboard-pattern.jpg">
       <Filter>assets</Filter>
     </None>
+    <None Include="assets\spot_control_mesh.obj">
+      <Filter>assets</Filter>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="precompiled_headers\cg_stdafx.cpp">
@@ -146,5 +149,10 @@
     <ClInclude Include="shader_includes\host_device_shared.h">
       <Filter>shader_includes</Filter>
     </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <Object Include="assets\spot_quadrangulated.obj">
+      <Filter>assets</Filter>
+    </Object>
   </ItemGroup>
 </Project>

@@ -76,6 +76,14 @@
       <FileType>Document</FileType>
     </None>
   </ItemGroup>
+  <ItemGroup>
+    <None Include="assets\spot_control_mesh.obj">
+      <FileType>Document</FileType>
+    </None>
+    <None Include="assets\spot_quadrangulated.obj">
+      <FileType>Document</FileType>
+    </None>
+  </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>15.0</VCProjectVersion>
     <ProjectGuid>{098430a3-ebff-403d-87eb-c4ade757b8d4}</ProjectGuid>

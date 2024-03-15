@@ -23,6 +23,10 @@ layout (vertices=4) out;
 #endif
 layout(set = 2, binding = 0) buffer SsboCounters { uint mCounters[4]; } uCounters;
 layout(set = 3, binding = 0) buffer ObjectData   { object_data mElements[]; }  uObjectData;
+layout(std430, set = 4, binding = 0) buffer PositionBuffer { float mData[]; }   posBuffer;
+layout(std430, set = 4, binding = 1) buffer NormalsBuffer  { float mData[]; }   nrmBuffer;
+layout(std430, set = 4, binding = 2) buffer TexCoords      { float mData[]; }   tcoBuffer;
+layout(std430, set = 4, binding = 3) buffer IndicesBuffer  { uint mIndices[]; } idxBuffer;
 
 #include "../../shader_includes/param/shape_functions.glsl"
 #include "../../shader_includes/parametric_curve_helpers.glsl"
@@ -38,7 +42,7 @@ pushConstants;
 // Varying output to eval shader:
 layout (location = 0) out PerControlPointPayload
 { 
-	vec2 mParams;
+	vec3 mPosition;
 } control_out[];
 
 float screen_dist_between(vec2 uv0, vec2 uv1)
@@ -72,7 +76,7 @@ void main()
     // see: https://www.khronos.org/opengl/wiki/Tessellation_Control_Shader
 //    gl_out[gl_InvocationID].gl_Position = gl_in[gl_InvocationID].gl_Position;
 
-    control_out[gl_InvocationID].mParams = gl_in[gl_InvocationID].gl_Position.xy;
+    control_out[gl_InvocationID].mPosition = gl_in[gl_InvocationID].gl_Position.xyz;
 //	if (gl_PrimitiveID == 0) debugPrintfEXT("mParams[%f, %f]", control_out[gl_InvocationID].mParams.x, control_out[gl_InvocationID].mParams.y);
 
     // TODO: Evaluate parametric function and set tessellation level based on that

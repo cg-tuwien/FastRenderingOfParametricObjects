@@ -24,6 +24,10 @@ layout (quads, fractional_odd_spacing, ccw) in;
 #endif
 layout(set = 2, binding = 0) buffer SsboCounters { uint mCounters[4]; } uCounters;
 layout(set = 3, binding = 0) buffer ObjectData   { object_data mElements[]; }  uObjectData;
+layout(std430, set = 4, binding = 0) buffer PositionBuffer { float mData[]; }   posBuffer;
+layout(std430, set = 4, binding = 1) buffer NormalsBuffer  { float mData[]; }   nrmBuffer;
+layout(std430, set = 4, binding = 2) buffer TexCoords      { float mData[]; }   tcoBuffer;
+layout(std430, set = 4, binding = 3) buffer IndicesBuffer  { uint mIndices[]; } idxBuffer;
 
 #include "../../shader_includes/param/shape_functions.glsl"
 #include "../../shader_includes/parametric_curve_helpers.glsl"
@@ -38,7 +42,7 @@ pushConstants;
 
 layout (location = 0) in PerControlPointPayload
 {
-	vec2 mParams;
+	vec3 mPosition;
 } eval_in[];
 
 layout (location = 0) out PerVertexData
@@ -75,44 +79,44 @@ void main()
     float sv = gl_TessCoord.y;
 
     // retrieve params:
-    vec2 p00 = eval_in[0].mParams;
-    vec2 p01 = eval_in[1].mParams;
-    vec2 p10 = eval_in[2].mParams;
-    vec2 p11 = eval_in[3].mParams;
+    vec3 p00 = eval_in[0].mPosition;
+    vec3 p01 = eval_in[1].mPosition;
+    vec3 p10 = eval_in[2].mPosition;
+    vec3 p11 = eval_in[3].mPosition;
 
     // bilinearly interpolate params:
-    vec2 p0 = (p01 - p00) * su + p00;
-    vec2 p1 = (p11 - p10) * su + p10;
-    vec2 myParams = (p1 - p0) * sv + p0;
+    vec3 p0 = (p01 - p00) * su + p00;
+    vec3 p1 = (p11 - p10) * su + p10;
+    vec3 myPosition = (p1 - p0) * sv + p0;
 
-    // Estimate the deltas for normals calculation:
-    float du = (p11.x - p00.x) / gl_TessLevelInner[0];
-    float dv = (p11.y - p00.y) / gl_TessLevelInner[1];
+//    // Estimate the deltas for normals calculation:
+//    float du = (p11.x - p00.x) / gl_TessLevelInner[0];
+//    float dv = (p11.y - p00.y) / gl_TessLevelInner[1];
+//
+//	const uint objectId    = pushConstants.mObjectId;
+//    const uvec3 userData   = uvec3(0); // NOTE: User data not supported with tessellation standalone
+//	const mat4 tM          = uObjectData.mElements[objectId].mTransformationMatrix;
+//	const int  curveIndex  = uObjectData.mElements[objectId].mCurveIndex;
+//	const int  matIndex    = uObjectData.mElements[objectId].mMaterialIndex; 
+//
+//	vec4 rawWS = paramToWS(myParams[0], myParams[1], curveIndex, userData);
+//    vec4 posWS = tM * rawWS;
+//	vec4 posCS = toCS(posWS);
+//	
+//	// Is this point even inside the view frustum?
+//	uint isOff = is_off_screen(posCS); 
+//
+//    vec4 rawWS_u = paramToWS(myParams[0] + du, myParams[1]     , curveIndex, userData);
+//    vec4 posWS_u = tM * rawWS_u;
+//    vec4 rawWS_v = paramToWS(myParams[0]     , myParams[1] + dv, curveIndex, userData);
+//    vec4 posWS_v = tM * rawWS_v;
 
-	const uint objectId    = pushConstants.mObjectId;
-    const uvec3 userData   = uvec3(0); // NOTE: User data not supported with tessellation standalone
-	const mat4 tM          = uObjectData.mElements[objectId].mTransformationMatrix;
-	const int  curveIndex  = uObjectData.mElements[objectId].mCurveIndex;
-	const int  matIndex    = uObjectData.mElements[objectId].mMaterialIndex; 
-
-	vec4 rawWS = paramToWS(myParams[0], myParams[1], curveIndex, userData);
-    vec4 posWS = tM * rawWS;
-	vec4 posCS = toCS(posWS);
-	
-	// Is this point even inside the view frustum?
-	uint isOff = is_off_screen(posCS); 
-
-    vec4 rawWS_u = paramToWS(myParams[0] + du, myParams[1]     , curveIndex, userData);
-    vec4 posWS_u = tM * rawWS_u;
-    vec4 rawWS_v = paramToWS(myParams[0]     , myParams[1] + dv, curveIndex, userData);
-    vec4 posWS_v = tM * rawWS_v;
-
-	eval_out.positionWS        = posWS.xyz;
-	vec3 rawNormalWS           = calculateNormalWS(posWS.xyz, posWS_u.xyz, posWS_v.xyz, curveIndex, userData);
-    eval_out.normalWS          = normalize(rawNormalWS);
-    eval_out.texCoords         = getParamTexCoords(myParams[0], myParams[1], curveIndex, userData, posWS.xyz);
-    eval_out.shadingUserParams = getParamShadingUserParams(myParams[0], myParams[1], curveIndex, userData, posWS.xyz);
-    eval_out.matIndex          = matIndex;
+	eval_out.positionWS        = myPosition;
+//	vec3 rawNormalWS           = calculateNormalWS(posWS.xyz, posWS_u.xyz, posWS_v.xyz, curveIndex, userData);
+    eval_out.normalWS          = vec3(0.0, 1.0, 0.0);
+    eval_out.texCoords         = vec2(0.0, 0.0);
+    eval_out.shadingUserParams = vec3(0.0);
+    eval_out.matIndex          = 0;
 	eval_out.color             = vertexColors[(gl_PrimitiveID + uint(gl_TessCoord.x * 997.0) + uint(gl_TessCoord.y * 131.0)) % MAX_COLORS];
-	gl_Position = posCS;
+	gl_Position = ubo.mViewProjMatrix * vec4(myPosition, 1.0);
 }

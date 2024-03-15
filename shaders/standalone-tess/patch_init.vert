@@ -21,6 +21,10 @@
 #endif
 layout(set = 2, binding = 0) buffer SsboCounters { uint mCounters[4]; } uCounters;
 layout(set = 3, binding = 0) buffer ObjectData   { object_data mElements[]; }  uObjectData;
+layout(std430, set = 4, binding = 0) buffer PositionBuffer { float mData[]; }   posBuffer;
+layout(std430, set = 4, binding = 1) buffer NormalsBuffer  { float mData[]; }   nrmBuffer;
+layout(std430, set = 4, binding = 2) buffer TexCoords      { float mData[]; }   tcoBuffer;
+layout(std430, set = 4, binding = 3) buffer IndicesBuffer  { uint mIndices[]; } idxBuffer;
 
 #include "../../shader_includes/param/shape_functions.glsl"
 #include "../../shader_includes/parametric_curve_helpers.glsl"
@@ -35,41 +39,67 @@ pushConstants;
 
 void main() 
 {
-	const uint objectId = pushConstants.mObjectId;
-	const uint vertexId = gl_VertexIndex / 4;
-	const uint vertexSubId = gl_VertexIndex - vertexId * 4;
-
-	// in:
-	const vec2 paramsRange = vec2(
-		uObjectData.mElements[objectId].mParams[1] - uObjectData.mElements[objectId].mParams[0],
-		uObjectData.mElements[objectId].mParams[3] - uObjectData.mElements[objectId].mParams[2]
-	);
-
-	uvec2 evalDims = uObjectData.mElements[objectId].mDetailEvalDims.xy;
-	const uint vertexRow = vertexId / evalDims.x;
-	const uint vertexCol = vertexId - vertexRow * evalDims.x;
-//	if (vertexId == 18) debugPrintfEXT("evalDims[%u, %u], vertexRow[%u], vertexCol[%u]", evalDims.x, evalDims.y, vertexRow, vertexCol);
-
-	const vec2 rangePerEvalBucket = paramsRange / vec2(evalDims);
-	const vec2 paramsFrom = rangePerEvalBucket * vec2(vertexCol, vertexRow);
-	const vec2 paramsTo   = paramsFrom + rangePerEvalBucket;
-//	if (vertexId == 5) debugPrintfEXT("paramsFrom[%f, %f], paramsTo[%f, %f]", paramsFrom.x, paramsFrom.y, paramsTo.x, paramsTo.y);
-
-	switch (vertexSubId)
+    uint quadId = gl_InstanceIndex;
+    uint cornerId = quadId * 4;
+	switch (gl_VertexIndex)
 	{
 	case 0:
-		gl_Position = vec4(paramsFrom.x, paramsFrom.y, 0.0, 1.0);
+		cornerId += 0;
 		break;
 	case 1:
-		gl_Position = vec4(paramsTo.x,   paramsFrom.y, 0.0, 1.0);
+		cornerId += 1;
 		break;
 	case 2:
-		gl_Position = vec4(paramsFrom.x, paramsTo.y,   0.0, 1.0);
+		cornerId += 2;
 		break;
 	case 3:
-		gl_Position = vec4(paramsTo.x,   paramsTo.y,   0.0, 1.0);
+		cornerId += 3;
 		break;
 	default: 
 		debugPrintfEXT("ERROROROR");
 	}
+
+	const uint vertexStride = 3;
+    gl_Position = vec4(posBuffer.mData[idxBuffer.mIndices[cornerId] * vertexStride + 0], 
+                       posBuffer.mData[idxBuffer.mIndices[cornerId] * vertexStride + 1],
+                       posBuffer.mData[idxBuffer.mIndices[cornerId] * vertexStride + 2],
+                       0.0);
+
+//	const uint objectId = pushConstants.mObjectId;
+//	const uint vertexId = gl_VertexIndex / 4;
+//	const uint vertexSubId = gl_VertexIndex - vertexId * 4;
+//
+//	// in:
+//	const vec2 paramsRange = vec2(
+//		uObjectData.mElements[objectId].mParams[1] - uObjectData.mElements[objectId].mParams[0],
+//		uObjectData.mElements[objectId].mParams[3] - uObjectData.mElements[objectId].mParams[2]
+//	);
+//
+//	uvec2 evalDims = uObjectData.mElements[objectId].mDetailEvalDims.xy;
+//	const uint vertexRow = vertexId / evalDims.x;
+//	const uint vertexCol = vertexId - vertexRow * evalDims.x;
+////	if (vertexId == 18) debugPrintfEXT("evalDims[%u, %u], vertexRow[%u], vertexCol[%u]", evalDims.x, evalDims.y, vertexRow, vertexCol);
+//
+//	const vec2 rangePerEvalBucket = paramsRange / vec2(evalDims);
+//	const vec2 paramsFrom = rangePerEvalBucket * vec2(vertexCol, vertexRow);
+//	const vec2 paramsTo   = paramsFrom + rangePerEvalBucket;
+////	if (vertexId == 5) debugPrintfEXT("paramsFrom[%f, %f], paramsTo[%f, %f]", paramsFrom.x, paramsFrom.y, paramsTo.x, paramsTo.y);
+//
+//	switch (vertexSubId)
+//	{
+//	case 0:
+//		gl_Position = vec4(paramsFrom.x, paramsFrom.y, 0.0, 1.0);
+//		break;
+//	case 1:
+//		gl_Position = vec4(paramsTo.x,   paramsFrom.y, 0.0, 1.0);
+//		break;
+//	case 2:
+//		gl_Position = vec4(paramsFrom.x, paramsTo.y,   0.0, 1.0);
+//		break;
+//	case 3:
+//		gl_Position = vec4(paramsTo.x,   paramsTo.y,   0.0, 1.0);
+//		break;
+//	default: 
+//		debugPrintfEXT("ERROROROR");
+//	}
 }
