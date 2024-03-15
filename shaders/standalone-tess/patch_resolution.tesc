@@ -39,10 +39,19 @@ layout(push_constant) uniform PushConstants
 }
 pushConstants;
 
+// Varying input from vertex shader:
+layout (location = 0) in PerVertexPayload
+{
+    vec3 mNormal;
+	vec2 mTexCoords;
+} vert_in[];
+
 // Varying output to eval shader:
 layout (location = 0) out PerControlPointPayload
 { 
 	vec3 mPosition;
+    vec3 mNormal;
+	vec2 mTexCoords;
 } control_out[];
 
 float screen_dist_between(vec2 uv0, vec2 uv1)
@@ -77,6 +86,8 @@ void main()
 //    gl_out[gl_InvocationID].gl_Position = gl_in[gl_InvocationID].gl_Position;
 
     control_out[gl_InvocationID].mPosition = gl_in[gl_InvocationID].gl_Position.xyz;
+    control_out[gl_InvocationID].mNormal = vert_in[gl_InvocationID].mNormal;
+    control_out[gl_InvocationID].mTexCoords = vert_in[gl_InvocationID].mTexCoords;
 //	if (gl_PrimitiveID == 0) debugPrintfEXT("mParams[%f, %f]", control_out[gl_InvocationID].mParams.x, control_out[gl_InvocationID].mParams.y);
 
     // TODO: Evaluate parametric function and set tessellation level based on that

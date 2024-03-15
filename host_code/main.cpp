@@ -465,6 +465,13 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 		myCheckerboardMat.mDiffuseTex = "assets/checkerboard-pattern.jpg";
 		myCheckerboardMat.mDiffuseTexBorderHandlingMode = {{ border_handling_mode::repeat, border_handling_mode::repeat }};
 
+		auto& spotMat = allMatConfigs.emplace_back();
+		spotMat.mDiffuseReflectivity = glm::vec4(1.0f);
+		spotMat.mAmbientReflectivity = glm::vec4(1.0f);
+		spotMat.mAlbedo = glm::vec4(1.0f);
+		spotMat.mDiffuseTex = "assets/spot_texture.png";
+		spotMat.mDiffuseTexBorderHandlingMode = {{ border_handling_mode::repeat, border_handling_mode::repeat }};
+
 		std::vector<loaded_model_data> dataForDrawCall;
 
 		vk::PhysicalDeviceFeatures2 supportedExtFeatures;
@@ -472,7 +479,8 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 		supportedExtFeatures.pNext = &meshShaderFeatures;
 		context().physical_device().getFeatures2(&supportedExtFeatures);
 
-		loadedModels.push_back(std::make_tuple(model_t::load_from_file("assets/spot_control_mesh.obj", 0), 1));
+		loadedModels.push_back(std::make_tuple(model_t::load_from_file("assets/quadquad.obj", 0), 4));
+		//loadedModels.push_back(std::make_tuple(model_t::load_from_file("assets/spot_control_mesh.obj", 0), 640));
 		for (size_t i = 0; i < loadedModels.size(); ++i) {
 			auto& [curModel, pxMeridian] = loadedModels[i];
 
@@ -1389,6 +1397,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 
 				ImGui::Begin("Info & Settings");
 			    const auto imGuiWindowWidth = ImGui::GetWindowWidth();
+				bool rasterPipesNeedRecreation = false;
 
 				ImGui::SetWindowPos(ImVec2(1.0f, 1.0f), ImGuiCond_FirstUseEver);
 				ImGui::SetWindowSize(ImVec2(661, 643) , ImGuiCond_FirstUseEver);
@@ -1416,6 +1425,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
                         ImGui::PushItemWidth(imGuiWindowWidth * 0.5f);
 						ImGui::SliderFloat("Constant Inner Tessellation Level", &mConstInnerTessLevel, 1.0f, 64.0f);
 						ImGui::SliderFloat("Constant Outer Tessellation Level", &mConstOuterTessLevel, 1.0f, 64.0f);
+						rasterPipesNeedRecreation = ImGui::SliderFloat("LineWidth", &mLineWidth, 1.0f, 5.0f) || rasterPipesNeedRecreation;
 						break;
                     case rendering_method::patch_gen_tess_render:
 					    ImGui::TextColored(ImVec4(0.2f, .7f, 0.9f, 1.f), "Rendering Tessellated Patches");
@@ -1579,8 +1589,8 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 					ImGui::PopItemWidth();
 					ImGui::Unindent();
 				ImGui::Checkbox("Frustum Culling ON", &mFrustumCullingOn);
-				bool rasterPipesNeedRecreation = ImGui::Checkbox("Backface Culling ON", &mBackfaceCullingOn);
-				rasterPipesNeedRecreation =      ImGui::Checkbox("Disable Color Attachment Output" , &mDisableColorAttachmentOut) || rasterPipesNeedRecreation;
+				rasterPipesNeedRecreation = ImGui::Checkbox("Backface Culling ON", &mBackfaceCullingOn) || rasterPipesNeedRecreation;
+				rasterPipesNeedRecreation = ImGui::Checkbox("Disable Color Attachment Output" , &mDisableColorAttachmentOut) || rasterPipesNeedRecreation;
 
     //            ImGui::PushItemWidth(imGuiWindowWidth * 0.6f);
 				//ImGui::Checkbox("Enable hole filling (in px fill shader)", &mHoleFillingEnabled);
@@ -1714,13 +1724,18 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 						"shaders/standalone-tess/patch_init.vert", 
 						"shaders/standalone-tess/patch_resolution.tesc", 
 						"shaders/standalone-tess/patch_eval.tese",
-			            push_constant_binding_data{shader_type::all, 0, sizeof(standalone_tess_push_constants)}
+			            push_constant_binding_data{shader_type::all, 0, sizeof(standalone_tess_push_constants)},
+						// all them vertex buffers:
+			            descriptor_binding(4, 0, mPositionsBuffer->as_storage_buffer()),
+			            descriptor_binding(4, 1, mNormalsBuffer->as_storage_buffer()),
+			            descriptor_binding(4, 2, mTexCoordsBuffer->as_storage_buffer()),
+			            descriptor_binding(4, 3, mIndexBuffer->as_storage_buffer())
 					);
 					std::swap(*mTessPipelineStandalone, *newTessStandalone);
 					context().main_window()->handle_lifetime(std::move(newTessStandalone));
 
-					auto newTessStandaloneWire = context().create_graphics_pipeline_from_template(mTessPipelineStandalone.as_reference(), [](graphics_pipeline_t& p) {
-						p.rasterization_state_create_info().setPolygonMode(vk::PolygonMode::eLine);
+					auto newTessStandaloneWire = context().create_graphics_pipeline_from_template(mTessPipelineStandalone.as_reference(), [this](graphics_pipeline_t& p) {
+						p.rasterization_state_create_info().setPolygonMode(vk::PolygonMode::eLine).setLineWidth(mLineWidth);
 					});
 					std::swap(*mTessPipelineStandaloneWireframe, *newTessStandaloneWire);
 					context().main_window()->handle_lifetime(std::move(newTessStandaloneWire));
@@ -2522,7 +2537,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 					})),
 
 					command::push_constants(tessPipeStandaloneToBeUsed->layout(), standalone_tess_push_constants{ 
-						0,
+						mDrawCalls[0].mPixelsOnMeridian / 213u, // <-- don't ask ^^
 						mConstInnerTessLevel, 
 						mConstOuterTessLevel
 			        }),
@@ -2538,7 +2553,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 					//    );
      //               })
 
-					command::draw_vertices(4, 1, 0, 0)
+					command::draw_vertices(4, mDrawCalls[0].mPixelsOnMeridian/4, 0, 0)
 				))
 #if STATS_ENABLED
 				, mTimestampPool->write_timestamp(firstQueryIndex + 2, stage::fragment_shader)
@@ -2755,6 +2770,7 @@ private: // v== Member variables ==v
     avk::graphics_pipeline mTessPipelinePxFillWireframe;
 	float mConstOuterTessLevel = 16.0;
 	float mConstInnerTessLevel = 16.0;
+	float mLineWidth = 1.0;
 
 #if STATS_ENABLED
     bool mGatherPipelineStats      = true;

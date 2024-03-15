@@ -37,6 +37,26 @@ layout(push_constant) uniform PushConstants
 }
 pushConstants;
 
+layout (location = 0) out PerVertexPayload
+{
+    vec3 mNormal;
+	vec2 mTexCoords;
+} vert_out;
+
+vec3 getPos(uint idx)
+{
+	return vec3(posBuffer.mData[idx + 0], 
+                posBuffer.mData[idx + 1],
+                posBuffer.mData[idx + 2]);
+}
+
+vec2 getTexCoords(uint idx)
+{
+	return vec2(tcoBuffer.mData[idx + 0], 
+                tcoBuffer.mData[idx + 1]);
+}
+
+
 void main() 
 {
     uint quadId = gl_InstanceIndex;
@@ -50,20 +70,23 @@ void main()
 		cornerId += 1;
 		break;
 	case 2:
-		cornerId += 2;
+		cornerId += 3;
 		break;
 	case 3:
-		cornerId += 3;
+		cornerId += 2;
 		break;
 	default: 
 		debugPrintfEXT("ERROROROR");
 	}
 
-	const uint vertexStride = 3;
-    gl_Position = vec4(posBuffer.mData[idxBuffer.mIndices[cornerId] * vertexStride + 0], 
-                       posBuffer.mData[idxBuffer.mIndices[cornerId] * vertexStride + 1],
-                       posBuffer.mData[idxBuffer.mIndices[cornerId] * vertexStride + 2],
-                       0.0);
+    gl_Position = vec4(getPos(idxBuffer.mIndices[cornerId] * 3), 0.0);
+	
+	vert_out.mNormal = normalize(cross(
+									getPos(idxBuffer.mIndices[quadId * 4 + 1] * 3) - getPos(idxBuffer.mIndices[quadId * 4 + 0] * 3),
+									getPos(idxBuffer.mIndices[quadId * 4 + 2] * 3) - getPos(idxBuffer.mIndices[quadId * 4 + 0] * 3)
+								));
+
+	vert_out.mTexCoords = getTexCoords(idxBuffer.mIndices[cornerId] * 2);
 
 //	const uint objectId = pushConstants.mObjectId;
 //	const uint vertexId = gl_VertexIndex / 4;

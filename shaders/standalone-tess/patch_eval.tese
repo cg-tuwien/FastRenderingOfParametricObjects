@@ -11,8 +11,9 @@
 #include "../../shader_includes/types.glsl"
 #include "../../shader_includes/common_ubo.glsl"
 
-layout (quads, fractional_odd_spacing, ccw) in;
-// TODO: fractional_odd_spacing ^ ?
+//layout (quads, equal_spacing          , ccw) in;
+layout (quads, fractional_even_spacing, ccw) in;
+//layout (quads, fractional_odd_spacing , ccw) in;
 
 // +------------------------------------------------------------------------------+
 // |   Bound Resources                                                            |
@@ -27,7 +28,7 @@ layout(set = 3, binding = 0) buffer ObjectData   { object_data mElements[]; }  u
 layout(std430, set = 4, binding = 0) buffer PositionBuffer { float mData[]; }   posBuffer;
 layout(std430, set = 4, binding = 1) buffer NormalsBuffer  { float mData[]; }   nrmBuffer;
 layout(std430, set = 4, binding = 2) buffer TexCoords      { float mData[]; }   tcoBuffer;
-layout(std430, set = 4, binding = 3) buffer IndicesBuffer  { uint mIndices[]; } idxBuffer;
+layout(std430, set = 4, binding  = 3) buffer IndicesBuffer  { uint mIndices[]; } idxBuffer;
 
 #include "../../shader_includes/param/shape_functions.glsl"
 #include "../../shader_includes/parametric_curve_helpers.glsl"
@@ -43,6 +44,8 @@ pushConstants;
 layout (location = 0) in PerControlPointPayload
 {
 	vec3 mPosition;
+    vec3 mNormal;
+	vec2 mTexCoords;
 } eval_in[];
 
 layout (location = 0) out PerVertexData
@@ -89,6 +92,30 @@ void main()
     vec3 p1 = (p11 - p10) * su + p10;
     vec3 myPosition = (p1 - p0) * sv + p0;
 
+
+    // retrieve params:
+    vec3 n00 = eval_in[0].mNormal;
+    vec3 n01 = eval_in[1].mNormal;
+    vec3 n10 = eval_in[2].mNormal;
+    vec3 n11 = eval_in[3].mNormal;
+
+    // bilinearly interpolate params:
+    vec3 n0 = (n01 - n00) * su + n00;
+    vec3 n1 = (n11 - n10) * su + n10;
+    vec3 myNormal = (n1 - n0) * sv + n0;
+
+
+    // retrieve params:
+    vec2 t00 = eval_in[0].mTexCoords;
+    vec2 t01 = eval_in[1].mTexCoords;
+    vec2 t10 = eval_in[2].mTexCoords;
+    vec2 t11 = eval_in[3].mTexCoords;
+
+    // bilinearly interpolate params:
+    vec2 t0 = (t01 - t00) * su + t00;
+    vec2 t1 = (t11 - t10) * su + t10;
+    vec2 myTexCoords = (t1 - t0) * sv + t0;
+
 //    // Estimate the deltas for normals calculation:
 //    float du = (p11.x - p00.x) / gl_TessLevelInner[0];
 //    float dv = (p11.y - p00.y) / gl_TessLevelInner[1];
@@ -113,10 +140,10 @@ void main()
 
 	eval_out.positionWS        = myPosition;
 //	vec3 rawNormalWS           = calculateNormalWS(posWS.xyz, posWS_u.xyz, posWS_v.xyz, curveIndex, userData);
-    eval_out.normalWS          = vec3(0.0, 1.0, 0.0);
-    eval_out.texCoords         = vec2(0.0, 0.0);
+    eval_out.normalWS          = myNormal;
+    eval_out.texCoords         = myTexCoords;
     eval_out.shadingUserParams = vec3(0.0);
-    eval_out.matIndex          = 0;
+    eval_out.matIndex          = int(pushConstants.mObjectId) - 2;
 	eval_out.color             = vertexColors[(gl_PrimitiveID + uint(gl_TessCoord.x * 997.0) + uint(gl_TessCoord.y * 131.0)) % MAX_COLORS];
 	gl_Position = ubo.mViewProjMatrix * vec4(myPosition, 1.0);
 }

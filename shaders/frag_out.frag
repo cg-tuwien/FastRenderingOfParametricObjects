@@ -50,6 +50,8 @@ void main()
 		1.0
 	);
 
+//	fs_out.rgb = v_in.normalWS;
+
 	if (ubo.mWriteToCombinedAttachmentInFragmentShader) {
 		// Just write the same to the image as we write to the framebuffer:
 		// TODO: Color-write to the framebuffer no more!

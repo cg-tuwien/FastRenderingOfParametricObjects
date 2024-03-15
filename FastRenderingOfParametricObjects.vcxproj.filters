@@ -124,6 +124,7 @@
     <None Include="assets\spot_control_mesh.obj">
       <Filter>assets</Filter>
     </None>
+    <None Include="assets\spot_quadrangulated.obj" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="precompiled_headers\cg_stdafx.cpp">
@@ -151,8 +152,8 @@
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <Object Include="assets\spot_quadrangulated.obj">
+    <Image Include="assets\spot_texture.png">
       <Filter>assets</Filter>
-    </Object>
+    </Image>
   </ItemGroup>
 </Project>

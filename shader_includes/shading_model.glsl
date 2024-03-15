@@ -93,7 +93,7 @@ vec3 gltf_dielectric_brdf(vec3 incoming, vec3 outgoing, vec3 normal, float rough
 vec3 shade(int matIndex, vec3 albedo, vec3 shadingUserParams, vec3 normalWS, vec2 texCoords SHADE_ADDITIONAL_PARAMS)
 {
     if (matIndex < -1 || matIndex > 10000) {
-		return linear_rgb_to_srgb(vec3(1.0, 0.0, 1.0));
+		return linear_rgb_to_srgb(vec3(0.0, 0.0, 0.0));
     }
 
 	//if (-1 == matIndex) {
@@ -126,7 +126,7 @@ vec3 shade(int matIndex, vec3 albedo, vec3 shadingUserParams, vec3 normalWS, vec
 
     if (0 == matIndex) { // ========== CHECKERBOARD BEGIN ============
 		vec3 checker = SAMPLE(textures[materialsBuffer.materials[matIndex].mDiffuseTexIndex], texCoords  SAMPLE_ADDITIONAL_PARAMS ).rgb;
-		const vec3 lightDir = normalize(vec3(0.5, 1.0, 0.5));
+		const vec3 lightDir = normalize(vec3(0.5, 1.0, -0.5));
 		float nDotL = max(0.25, dot(normalWS, lightDir));
 		return linear_rgb_to_srgb((checker * vec3(0.85) + vec3(0.15)) * nDotL);
 	} // ========== CHECKERBOARD END ============
@@ -140,7 +140,7 @@ vec3 shade(int matIndex, vec3 albedo, vec3 shadingUserParams, vec3 normalWS, vec
 		vec3 terrainColor = mix(tex1, tex3, clamp(vHeight, 0.0, 1.0));
 		terrainColor = mix(terrainColor, tex2, clamp(-vHeight * 0.5, 0.0, 1.0));
 
-		const vec3 lightDir = normalize(vec3(0.5, 1.0, 0.5));
+		const vec3 lightDir = normalize(vec3(0.5, 1.0, -0.5));
 		float nDotL = max(0.25, dot(normalWS, lightDir));
 
 		return linear_rgb_to_srgb(terrainColor * nDotL);
@@ -155,7 +155,7 @@ vec3 shade(int matIndex, vec3 albedo, vec3 shadingUserParams, vec3 normalWS, vec
 		//vec3 seashellColor = mix(tex1, tex2, clamp(vHeight, 0.0, 1.0));
         vec3 seashellColor = vec3(0.7);
 
-		const vec3 lightDir = normalize(vec3(0.5, 1.0, 0.5));
+		const vec3 lightDir = normalize(vec3(0.5, 1.0, -0.5));
 		float nDotL = max(0.25, dot(normalWS, lightDir));
 
 		return linear_rgb_to_srgb(seashellColor * nDotL);

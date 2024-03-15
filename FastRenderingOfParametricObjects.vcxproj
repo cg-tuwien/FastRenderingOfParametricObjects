@@ -80,9 +80,9 @@
     <None Include="assets\spot_control_mesh.obj">
       <FileType>Document</FileType>
     </None>
-    <None Include="assets\spot_quadrangulated.obj">
-      <FileType>Document</FileType>
-    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="assets\spot_texture.png" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>15.0</VCProjectVersion>
