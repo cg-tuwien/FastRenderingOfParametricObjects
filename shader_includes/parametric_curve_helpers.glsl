@@ -800,3 +800,39 @@ vec3 toScreen(vec4 posCS)
     posCS = clampCS(posCS);
     return cs_to_viewport(posCS, ubo.mResolutionAndCulling.xy);
 }
+
+// The following code has been stolen from:
+//   Direct3D Rendering Cookbook
+//   By : Justin Stenning
+
+// Calculate point upon Bezier curve and return
+void DeCasteljau(float u, vec3 p0, vec3 p1, vec3 p2, vec3 p3, out vec3 p, out vec3 t)
+{
+    vec3 q0 = mix(p0, p1, u);
+    vec3 q1 = mix(p1, p2, u);
+    vec3 q2 = mix(p2, p3, u);
+    vec3 r0 = mix(q0, q1, u);
+    vec3 r1 = mix(q1, q2, u);
+    t = r0 - r1; // tangent
+    p = mix(r0, r1, u);
+}
+// Bicubic interpolation of cubic Bezier surface
+void DeCasteljauBicubic(vec2 uv, vec3 p[16], out vec3 result, out vec3 normal)
+{
+    // Interpolated values (e.g. points)
+    vec3 p0, p1, p2, p3;
+    // Tangents (derivatives)
+    vec3 t0, t1, t2, t3;
+    // Calculate tangent and positions along each curve
+    DeCasteljau(uv.x, p[ 0], p[ 1], p[ 2], p[ 3], p0, t0);
+    DeCasteljau(uv.x, p[ 4], p[ 5], p[ 6], p[ 7], p1, t1);
+    DeCasteljau(uv.x, p[ 8], p[ 9], p[10], p[11], p2, t2);
+    DeCasteljau(uv.x, p[12], p[13], p[14], p[15], p3, t3);
+    // Calculate final position and tangents across surface
+    vec3 du, dv, tmp;
+    DeCasteljau(uv.y, p0, p1, p2, p3, result, dv);
+    DeCasteljau(uv.y, t0, t1, t2, t3, du, tmp);
+    // du represents tangent
+    // dv represents bitangent
+    normal = normalize(cross(du, dv));
+}

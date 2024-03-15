@@ -38,6 +38,7 @@ layout(push_constant) uniform PushConstants
     uint mObjectId;
     float mInnerTessLevel;
     float mOuterTessLevel;
+	float mBulginess;
 }
 pushConstants;
 
@@ -75,6 +76,8 @@ vec3 vertexColors[MAX_COLORS] = {
     vec3(0.851, 0.839, 0.600)  // Saturated Beige
 };
 
+#define BEZIERIFY 1
+
 void main() 
 {
     // get patch coordinate
@@ -87,23 +90,11 @@ void main()
     vec3 p10 = eval_in[2].mPosition;
     vec3 p11 = eval_in[3].mPosition;
 
-    // bilinearly interpolate params:
-    vec3 p0 = (p01 - p00) * su + p00;
-    vec3 p1 = (p11 - p10) * su + p10;
-    vec3 myPosition = (p1 - p0) * sv + p0;
-
-
     // retrieve params:
     vec3 n00 = eval_in[0].mNormal;
     vec3 n01 = eval_in[1].mNormal;
     vec3 n10 = eval_in[2].mNormal;
     vec3 n11 = eval_in[3].mNormal;
-
-    // bilinearly interpolate params:
-    vec3 n0 = (n01 - n00) * su + n00;
-    vec3 n1 = (n11 - n10) * su + n10;
-    vec3 myNormal = (n1 - n0) * sv + n0;
-
 
     // retrieve params:
     vec2 t00 = eval_in[0].mTexCoords;
@@ -111,7 +102,39 @@ void main()
     vec2 t10 = eval_in[2].mTexCoords;
     vec2 t11 = eval_in[3].mTexCoords;
 
-    // bilinearly interpolate params:
+#if BEZIERIFY
+    vec3 cp0 = p00, cp3 = p01, cp12 = p10, cp15 = p11;
+    vec3 cp1 = mix(cp0 , cp3,  0.25),  cp2 = mix(cp0 , cp3,  0.75);
+    vec3 cp4 = mix(cp0 , cp12, 0.25),  cp8 = mix(cp0 , cp12, 0.75);
+    vec3 cp7 = mix(cp3 , cp15, 0.25), cp11 = mix(cp3 , cp15, 0.75);
+    vec3 cp13= mix(cp12, cp15, 0.25), cp14 = mix(cp12, cp15, 0.75);
+    vec3 cp5 = mix(cp4, cp7,  0.25),  cp6 = mix(cp4, cp7,  0.75);
+    vec3 cp9 = mix(cp8, cp11, 0.25), cp10 = mix(cp8, cp11, 0.75);
+    float bs = pushConstants.mBulginess;
+    vec3 cps[16] = {
+        cp0 , cp1            , cp2            , cp3 ,
+        cp4 , cp5 + n00 * bs , cp6  + n00 * bs, cp7 ,
+        cp8 , cp9 + n00 * bs , cp10 + n00 * bs, cp11,
+        cp12, cp13           , cp14           , cp15
+    };
+
+    vec3 myPosition, myNormal;
+    DeCasteljauBicubic(vec2(su, sv), cps, myPosition, myNormal);
+#endif
+
+#if !BEZIERIFY 
+    // bilinearly interpolate positions:
+    vec3 p0 = (p01 - p00) * su + p00;
+    vec3 p1 = (p11 - p10) * su + p10;
+    vec3 myPosition = (p1 - p0) * sv + p0;
+
+    // bilinearly interpolate normals:
+    vec3 n0 = (n01 - n00) * su + n00;
+    vec3 n1 = (n11 - n10) * su + n10;
+    vec3 myNormal = (n1 - n0) * sv + n0;
+#endif
+
+    // bilinearly interpolate texture coordinates:
     vec2 t0 = (t01 - t00) * su + t00;
     vec2 t1 = (t11 - t10) * su + t10;
     vec2 myTexCoords = (t1 - t0) * sv + t0;

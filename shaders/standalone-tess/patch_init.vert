@@ -34,6 +34,7 @@ layout(push_constant) uniform PushConstants
     uint mObjectId;
     float mInnerTessLevel;
     float mOuterTessLevel;
+	float mBulginess;
 }
 pushConstants;
 

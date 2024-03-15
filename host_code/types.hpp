@@ -267,6 +267,7 @@ struct standalone_tess_push_constants
     uint32_t mObjectId;
     float mInnerTessLevel;
     float mOuterTessLevel;
+    float mBulginess;
 };
 
 // Push constants for patch->tess method

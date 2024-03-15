@@ -479,8 +479,8 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 		supportedExtFeatures.pNext = &meshShaderFeatures;
 		context().physical_device().getFeatures2(&supportedExtFeatures);
 
-		loadedModels.push_back(std::make_tuple(model_t::load_from_file("assets/quadquad.obj", 0), 4));
-		//loadedModels.push_back(std::make_tuple(model_t::load_from_file("assets/spot_control_mesh.obj", 0), 640));
+		//loadedModels.push_back(std::make_tuple(model_t::load_from_file("assets/quadquad.obj", 0), 4));
+		loadedModels.push_back(std::make_tuple(model_t::load_from_file("assets/spot_control_mesh.obj", 0), 640));
 		for (size_t i = 0; i < loadedModels.size(); ++i) {
 			auto& [curModel, pxMeridian] = loadedModels[i];
 
@@ -1426,6 +1426,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 						ImGui::SliderFloat("Constant Inner Tessellation Level", &mConstInnerTessLevel, 1.0f, 64.0f);
 						ImGui::SliderFloat("Constant Outer Tessellation Level", &mConstOuterTessLevel, 1.0f, 64.0f);
 						rasterPipesNeedRecreation = ImGui::SliderFloat("LineWidth", &mLineWidth, 1.0f, 5.0f) || rasterPipesNeedRecreation;
+						ImGui::SliderFloat("Bulge Strength", &mBulginess, 0.0f, 10.0f, "%.3f", ImGuiSliderFlags_Logarithmic);
 						break;
                     case rendering_method::patch_gen_tess_render:
 					    ImGui::TextColored(ImVec4(0.2f, .7f, 0.9f, 1.f), "Rendering Tessellated Patches");
@@ -2539,7 +2540,8 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 					command::push_constants(tessPipeStandaloneToBeUsed->layout(), standalone_tess_push_constants{ 
 						mDrawCalls[0].mPixelsOnMeridian / 213u, // <-- don't ask ^^
 						mConstInnerTessLevel, 
-						mConstOuterTessLevel
+						mConstOuterTessLevel,
+						mBulginess
 			        }),
 
 					//command::many_n_times(mNumEnabledObjects, [&, this] (auto i) {
@@ -2771,6 +2773,7 @@ private: // v== Member variables ==v
 	float mConstOuterTessLevel = 16.0;
 	float mConstInnerTessLevel = 16.0;
 	float mLineWidth = 1.0;
+	float mBulginess = 1.0;
 
 #if STATS_ENABLED
     bool mGatherPipelineStats      = true;
