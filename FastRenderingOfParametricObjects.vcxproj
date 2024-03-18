@@ -85,6 +85,14 @@
   <ItemGroup>
     <Image Include="assets\spot_texture.png" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include="assets\bigguy_0.obj">
+      <FileType>Document</FileType>
+    </None>
+    <None Include="assets\pig_quad_controlmesh.obj">
+      <FileType>Document</FileType>
+    </None>
+  </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>15.0</VCProjectVersion>
     <ProjectGuid>{098430a3-ebff-403d-87eb-c4ade757b8d4}</ProjectGuid>

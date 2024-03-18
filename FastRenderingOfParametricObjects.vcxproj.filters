@@ -124,8 +124,13 @@
     <None Include="assets\spot_control_mesh.obj">
       <Filter>assets</Filter>
     </None>
-    <None Include="assets\spot_quadrangulated.obj" />
     <None Include="assets\teapot.off">
+      <Filter>assets</Filter>
+    </None>
+    <None Include="assets\bigguy_0.obj">
+      <Filter>assets</Filter>
+    </None>
+    <None Include="assets\pig_quad_controlmesh.obj">
       <Filter>assets</Filter>
     </None>
   </ItemGroup>
