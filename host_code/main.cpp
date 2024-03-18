@@ -102,6 +102,7 @@
 //#define TEST_TARGET_IMAGE              0
 
 #define TESSONLY 1
+#define NUM_PATCH_CONTROL_POINTS 4
 
 class vk_parametric_curves_app : public avk::invokee
 {
@@ -477,6 +478,8 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 		loadedModels.push_back(std::make_tuple(model_t::load_from_file("assets/quadquad.obj", 0), 4, -2));
 		//loadedModels.push_back(std::make_tuple(model_t::load_from_file("assets/spot_control_mesh.obj", 0), 640, 1));
 		//loadedModels.push_back(std::make_tuple(model_t::load_from_file("assets/teapot.off", 0), 432, 0));
+		//loadedModels.push_back(std::make_tuple(model_t::load_from_file("assets/pig_quad_controlmesh.obj", 0), 1524, 0));
+		//loadedModels.push_back(std::make_tuple(model_t::load_from_file("assets/bigguy_0.obj", 0), 5800, 0));
 		for (const auto& [m, numQuads, materialIndex] : loadedModels) {
 			AVK_LOG_INFO(std::format("Loaded model with: {} vertices | {} quads | material index => {}", m->number_of_vertices_for_mesh(0), numQuads, materialIndex));
 		}
@@ -511,7 +514,38 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 				}
 
 				auto selection = make_model_references_and_mesh_indices_selection(curModel, meshIndex);
+
 				std::tie(drawCallData.mPositions, drawCallData.mIndices) = get_vertices_and_indices(selection);
+#if NUM_PATCH_CONTROL_POINTS == 16
+				auto indices4 = drawCallData.mIndices;
+				drawCallData.mIndices.clear();
+				const int sw = 0;
+				const int se = 1;
+				const int ne = 2;
+				const int nw = 3;
+				for (int quad = 0; quad < indices4.size(); quad += 4) {
+					// sw corner:
+					for (int other = 0; other < indices4.size(); other += 4) {
+						if (indices4[quad + sw] == indices4[other + ne]) {
+							drawCallData.mIndices.push_back(indices4[other + 2]);
+						}
+					}
+					// s corners (2):
+					for (int other = 0; other < indices4.size(); other += 4) {
+						if (indices4[quad + sw] == indices4[other + nw] && indices4[quad + se] == indices4[other + ne]) {
+							drawCallData.mIndices.push_back(indices4[other + nw]);
+							drawCallData.mIndices.push_back(indices4[other + ne]);
+						}
+					}
+					// se corner:
+					for (int other = 0; other < indices4.size(); other += 4) {
+						if (indices4[quad + se] == indices4[other + ne]) {
+							drawCallData.mIndices.push_back(indices4[other + ne]);
+						}
+					}
+					// TODO: now middle, then go north
+				}
+#endif
 				drawCallData.mNormals = get_normals(selection);
 				drawCallData.mTexCoords = get_2d_texture_coordinates(selection, 0);
 			}
@@ -777,7 +811,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 					: cfg::color_blending_config { {}, false, cfg::color_channel::rgba }
 				,
     			cfg::primitive_topology::patches,
-	    		cfg::tessellation_patch_control_points{ 4u },
+	    		cfg::tessellation_patch_control_points{ NUM_PATCH_CONTROL_POINTS },
 
 				descriptor_binding(0, 0, mFrameDataBuffers[0]),
 			    descriptor_binding(0, 1, as_combined_image_samplers(mImageSamplers, layout::shader_read_only_optimal)),
