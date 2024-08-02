@@ -46,3 +46,23 @@ T roundUpToMultipleOf(T number, T multiple)
     auto tmp = (number + multiple - 1) / multiple;
     return tmp * multiple;
 }
+
+uint64_t color_to_ui64(glm::vec4 color)
+{
+    uint64_t R = 0xFF & uint64_t(255.0 * color.x);
+    uint64_t G = 0xFF & uint64_t(255.0 * color.y);
+    uint64_t B = 0xFF & uint64_t(255.0 * color.z);
+    uint64_t A = 0xFF & uint64_t(255.0 * color.a);
+    return (R << 24) | (G << 16) | (B << 8) | A;
+}
+
+uint64_t depth_to_ui64(float depth)
+{
+    return static_cast<uint64_t>(*reinterpret_cast<uint32_t*>(&depth));
+}
+
+
+uint64_t combine_depth_and_color(uint64_t depthEncoded, uint64_t colorEncoded)
+{
+    return (depthEncoded << 32) | colorEncoded;
+}

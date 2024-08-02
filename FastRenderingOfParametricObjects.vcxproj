@@ -68,6 +68,9 @@
       <FileType>Document</FileType>
     </None>
   </ItemGroup>
+  <ItemGroup>
+    <Image Include="assets\po-johis-heart.png" />
+  </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>15.0</VCProjectVersion>
     <ProjectGuid>{098430a3-ebff-403d-87eb-c4ade757b8d4}</ProjectGuid>

@@ -141,4 +141,9 @@
       <Filter>shader_includes</Filter>
     </ClInclude>
   </ItemGroup>
+  <ItemGroup>
+    <Image Include="assets\po-johis-heart.png">
+      <Filter>assets</Filter>
+    </Image>
+  </ItemGroup>
 </Project>

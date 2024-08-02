@@ -1285,6 +1285,26 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 		current_composition()->add_element(mQuakeCam);
 		mQuakeCam.disable();
 
+		// Load an image from file, upload it and then create a view and a sampler for it for usage in shaders:
+		auto [image, uploadInputImageCommand] = avk::create_image_from_file(
+			"assets/po-johis-heart.png", false, false, false, 4,
+			avk::layout::shader_read_only_optimal, // For now, transfer the image into transfer_dst layout, because we'll need to copy from it:
+			avk::memory_usage::device, // The device shall be stored in (fast) device-local memory. For this reason, the function will also return commands that we need to execute later
+			avk::image_usage::general_storage_image // Note: We could bind the image as a texture instead of a (readonly) storage image, then we would not need the "storage_image" usage flag 
+		);
+		// The uploadInputImageCommand will contain a copy operation from a temporary host-coherent buffer into a device-local buffer.
+		// We schedule it for execution a bit further down.		
+		mInputImageAndSampler = avk::context().create_image_sampler(
+			avk::context().create_image_view(image), 
+			avk::context().create_sampler(avk::filter_mode::bilinear, avk::border_handling_mode::clamp_to_edge)
+		);
+		// Execute the uploadInputImageCommand command, wait until that one has completed (by using an automatically created barrier), 
+		// then initialize the target image with the contents of the input image:
+		context().record_and_submit_with_fence({
+			// Copy into the source image:
+			std::move(uploadInputImageCommand),
+		}, *mQueue)->wait_until_signalled(); // Finally, wait with a fence until everything has completed.
+
 		std::locale::global(std::locale("en_US.UTF-8"));
 		auto imguiManager = current_composition()->element_by_type<imgui_manager>();
         if (nullptr != imguiManager) {
@@ -1323,6 +1343,16 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 				if (mMeasurementInProgress) {
 					return;
 				}
+
+				ImGui::Begin("Parametric Objects", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoMove);
+                ImGui::SetWindowPos(ImVec2(0, 0), ImGuiCond_Always);
+				ImGui::SetWindowSize(ImVec2(1000, 300), ImGuiCond_Always);
+				ImTextureID inputTexId = imguiManager->get_or_create_texture_descriptor(mInputImageAndSampler.as_reference(), avk::layout::shader_read_only_optimal);
+		        auto inputTexWidth  = static_cast<float>(mInputImageAndSampler->get_image_view()->get_image().create_info().extent.width);
+		        auto inputTexHeight = static_cast<float>(mInputImageAndSampler->get_image_view()->get_image().create_info().extent.height);
+				ImGui::Image(inputTexId, ImVec2(inputTexWidth/6.0f, inputTexHeight/6.0f), ImVec2(0,0), ImVec2(1,1), ImVec4(1.0f,1.0f,1.0f,1.0f), ImVec4(1.0f,1.0f,1.0f,0.5f));
+
+				ImGui::End();
 
 				if (mRenderingMethod != rendering_method::stupid_vertex_pipe && 2 == mWhatToRenderParamOrTess) { // if scene composer
                     ImGui::Begin("Scene Composer");
@@ -2806,29 +2836,10 @@ private: // v== Member variables ==v
 	int  mSingleObjectMaterialOverride = -1;
 	bool mDisableColorAttachmentOut = false;
 
+	avk::image_sampler mInputImageAndSampler;
+
 }; // vk_parametric_curves_app
 
-
-
-uint64_t color_to_ui64(glm::vec4 color)
-{
-    uint64_t R = 0xFF & uint64_t(255.0 * color.x);
-    uint64_t G = 0xFF & uint64_t(255.0 * color.y);
-    uint64_t B = 0xFF & uint64_t(255.0 * color.z);
-    uint64_t A = 0xFF & uint64_t(255.0 * color.a);
-    return (R << 24) | (G << 16) | (B << 8) | A;
-}
-
-uint64_t depth_to_ui64(float depth)
-{
-    return static_cast<uint64_t>(*reinterpret_cast<uint32_t*>(&depth));
-}
-
-
-uint64_t combine_depth_and_color(uint64_t depthEncoded, uint64_t colorEncoded)
-{
-    return (depthEncoded << 32) | colorEncoded;
-}
 
 int main() // <== Starting point ==
 {
