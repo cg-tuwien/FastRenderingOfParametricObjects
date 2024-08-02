@@ -23,7 +23,7 @@
 //#define EXTRA_3D_MODEL "SunTemple"
 
 // Enable MSAA (don't foget to set SAMPLE_COUNT)!
-#define MSAA_ENABLED 1
+#define MSAA_ENABLED 0
 
 // Sample count possible values:
 // vk::SampleCountFlagBits::e1
@@ -35,7 +35,7 @@
 // vk::SampleCountFlagBits::e64
 #define SAMPLE_COUNT vk::SampleCountFlagBits::e8
 
-#define SSAA_ENABLED 1
+#define SSAA_ENABLED 0
 #define SSAA_FACTOR  glm::uvec2(2, 2)
 
 #define TEST_MODE_ON                   1
