@@ -101,33 +101,33 @@
 //// Values: 0 = Uint64 image | 3 = framebuffer (must use that for SSAA or MSAA)
 //#define TEST_TARGET_IMAGE              0
 
+static std::array<parametric_object, 21> sPredefinedParametricObjects {{
+	parametric_object{"test", "assets/po-johis-heart.png", true,  parametric_object_type::Plane,                  1.0f,   0.0f,            0.0f,  1.0f                , glm::vec3{-2.f,  0.f,  0.f}},
+	parametric_object{"test", "assets/po-johis-heart.png", false, parametric_object_type::Sphere,                 0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>(), glm::vec3{ 0.f,  0.f,  0.f}},
+	parametric_object{"test", "assets/po-johis-heart.png", false, parametric_object_type::FunkyPlane,             0.0f, 1.0f            ,  0.0f,  1.0f                , glm::vec3{ 2.f,  0.f,  0.f}},
+	parametric_object{"test", "assets/po-johis-heart.png", false, parametric_object_type::ExtraFunkyPlane,        0.0f, 1.0f            ,  0.0f,  1.0f                , glm::vec3{ 2.f,  0.f,  2.f}},
+	parametric_object{"test", "assets/po-johis-heart.png", false, parametric_object_type::JuliasParametricHeart,  0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>(), glm::vec3{-2.f,  0.f, -2.f}},
+	parametric_object{"test", "assets/po-johis-heart.png", false, parametric_object_type::JohisHeart,             0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>(), glm::vec3{ 0.f,  0.f, -2.f}},
+	parametric_object{"test", "assets/po-johis-heart.png", false, parametric_object_type::Spherehog,              0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>(), glm::vec3{ 2.f,  0.f, -2.f}},
+	parametric_object{"test", "assets/po-johis-heart.png", false, parametric_object_type::SpikyHeart,             0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>(), glm::vec3{ 4.f,  0.f, -2.f}},
+	parametric_object{"test", "assets/po-johis-heart.png", false, parametric_object_type::PalmTreeTrunk,          0.0f,   1.0f,            0.0f,  glm::two_pi<float>(), glm::vec3{ 0.f,  0.f, -4.f}},
+	parametric_object{"test", "assets/po-johis-heart.png", false, parametric_object_type::Water,                -100.f,  100.f,          -100.f, 100.f                , glm::vec3{ 0.f,  5.f,  0.f}},
+	parametric_object{"test", "assets/po-johis-heart.png", false, parametric_object_type::Terrain,              -100.f,  100.f,          -100.f, 100.f                , glm::vec3{ 0.f, -5.f,  0.f}},
+	parametric_object{"test", "assets/po-johis-heart.png", false, parametric_object_type::SHBasisFunction,        0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>(), glm::vec3{-1.f,  0.f,  3.f}},
+	parametric_object{"test", "assets/po-johis-heart.png", false, parametric_object_type::SHGlyph,                0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>(), glm::vec3{ 1.f,  0.f,  3.f}},
+	parametric_object{"test", "assets/po-johis-heart.png", false, parametric_object_type::YarnCurve,  235.0f, 254.0f, /* <-- yarn dimensions | #fibers --> */ 4.f, 1.f, glm::vec3{-3.35f, 0.08f, 5.32f}, glm::vec3{ 0.005f }, glm::vec3{ 0.0f }, 27},
+	parametric_object{"test", "assets/po-johis-heart.png", false, parametric_object_type::FiberCurve, 235.0f, 254.0f, /* <-- yarn dimensions | #fibers --> */ 4.f, 1.f, glm::vec3{-3.35f, 0.08f, 5.32f}, glm::vec3{ 0.005f }, glm::vec3{ 0.0f }, 27},
+	parametric_object{"test", "assets/po-johis-heart.png", false, parametric_object_type::Seashell1,              glm::two_pi<float>() * 8.0f,/* -> */0.0f,   0.0f,/* -> */glm::two_pi<float>(), glm::vec3{ 0.0f, 7.0f, 0.0f }, glm::vec3{ 1.0f }, glm::vec3{ 0.0f }, 2},
+	parametric_object{"test", "assets/po-johis-heart.png", false, parametric_object_type::Seashell2,              glm::two_pi<float>() * 8.0f,/* -> */0.0f,   0.0f,/* -> */glm::two_pi<float>(), glm::vec3{-4.5f, 7.0f, 0.0f }, glm::vec3{ 1.0f }, glm::vec3{ 0.0f }, 2},
+	parametric_object{"test", "assets/po-johis-heart.png", false, parametric_object_type::Seashell3,              glm::two_pi<float>() * 8.0f,/* -> */0.0f,   0.0f,/* -> */glm::two_pi<float>(), glm::vec3{ 4.5f, 7.0f, 0.0f }, glm::vec3{ 1.0f }, glm::vec3{ 0.0f }, 2},
+	// index 18:
+    parametric_object{"test", "assets/po-johis-heart.png", false, parametric_object_type::YarnCurve,  235.0f, 254.0f, /* <-- yarn dimensions | #fibers --> */ 0.f, 1.f, glm::vec3{-3.15f, 0.08f, 0.f}, glm::vec3{ 0.005f }, glm::vec3{ 0.0f }, 27},
+	parametric_object{"test", "assets/po-johis-heart.png", false, parametric_object_type::FiberCurve, 235.0f, 254.0f, /* <-- yarn dimensions | #fibers --> */ 6.f, /* fiber thickness: */ 0.3f, glm::vec3{-3.15f, 0.08f, 0.f}, glm::vec3{ 0.005f }, glm::vec3{ 0.0f }, 27},
+	parametric_object{"test", "assets/po-johis-heart.png", false, parametric_object_type::Seashell3,              glm::two_pi<float>() * 8.0f,/* -> */0.0f,   0.0f,/* -> */glm::two_pi<float>(), glm::vec3{ 0.0f, 2.5f, 0.0f }, glm::vec3{ 1.0f }, glm::vec3{ 0.0f }, 30}
+}};
+
 class vk_parametric_curves_app : public avk::invokee
 {
-    constexpr static std::array<parametric_object, 21> sPredefinedParametricObjects {{
-	    parametric_object{true,  parametric_object_type::Plane,                  1.0f,   0.0f,            0.0f,  1.0f                , glm::vec3{-2.f,  0.f,  0.f}},
-	    parametric_object{false, parametric_object_type::Sphere,                 0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>(), glm::vec3{ 0.f,  0.f,  0.f}},
-	    parametric_object{false, parametric_object_type::FunkyPlane,             0.0f, 1.0f            ,  0.0f,  1.0f                , glm::vec3{ 2.f,  0.f,  0.f}},
-	    parametric_object{false, parametric_object_type::ExtraFunkyPlane,        0.0f, 1.0f            ,  0.0f,  1.0f                , glm::vec3{ 2.f,  0.f,  2.f}},
-	    parametric_object{false, parametric_object_type::JuliasParametricHeart,  0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>(), glm::vec3{-2.f,  0.f, -2.f}},
-	    parametric_object{false, parametric_object_type::JohisHeart,             0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>(), glm::vec3{ 0.f,  0.f, -2.f}},
-	    parametric_object{false, parametric_object_type::Spherehog,              0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>(), glm::vec3{ 2.f,  0.f, -2.f}},
-	    parametric_object{false, parametric_object_type::SpikyHeart,             0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>(), glm::vec3{ 4.f,  0.f, -2.f}},
-	    parametric_object{false, parametric_object_type::PalmTreeTrunk,          0.0f,   1.0f,            0.0f,  glm::two_pi<float>(), glm::vec3{ 0.f,  0.f, -4.f}},
-	    parametric_object{false, parametric_object_type::Water,                -100.f,  100.f,          -100.f, 100.f                , glm::vec3{ 0.f,  5.f,  0.f}},
-	    parametric_object{false, parametric_object_type::Terrain,              -100.f,  100.f,          -100.f, 100.f                , glm::vec3{ 0.f, -5.f,  0.f}},
-	    parametric_object{false, parametric_object_type::SHBasisFunction,        0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>(), glm::vec3{-1.f,  0.f,  3.f}},
-	    parametric_object{false, parametric_object_type::SHGlyph,                0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>(), glm::vec3{ 1.f,  0.f,  3.f}},
-	    parametric_object{false, parametric_object_type::YarnCurve,  235.0f, 254.0f, /* <-- yarn dimensions | #fibers --> */ 4.f, 1.f, glm::vec3{-3.35f, 0.08f, 5.32f}, glm::vec3{ 0.005f }, glm::vec3{ 0.0f }, 27},
-	    parametric_object{false, parametric_object_type::FiberCurve, 235.0f, 254.0f, /* <-- yarn dimensions | #fibers --> */ 4.f, 1.f, glm::vec3{-3.35f, 0.08f, 5.32f}, glm::vec3{ 0.005f }, glm::vec3{ 0.0f }, 27},
-		parametric_object{false, parametric_object_type::Seashell1,              glm::two_pi<float>() * 8.0f,/* -> */0.0f,   0.0f,/* -> */glm::two_pi<float>(), glm::vec3{ 0.0f, 7.0f, 0.0f }, glm::vec3{ 1.0f }, glm::vec3{ 0.0f }, 2},
-	    parametric_object{false, parametric_object_type::Seashell2,              glm::two_pi<float>() * 8.0f,/* -> */0.0f,   0.0f,/* -> */glm::two_pi<float>(), glm::vec3{-4.5f, 7.0f, 0.0f }, glm::vec3{ 1.0f }, glm::vec3{ 0.0f }, 2},
-	    parametric_object{false, parametric_object_type::Seashell3,              glm::two_pi<float>() * 8.0f,/* -> */0.0f,   0.0f,/* -> */glm::two_pi<float>(), glm::vec3{ 4.5f, 7.0f, 0.0f }, glm::vec3{ 1.0f }, glm::vec3{ 0.0f }, 2},
-		// index 18:
-    	parametric_object{false, parametric_object_type::YarnCurve,  235.0f, 254.0f, /* <-- yarn dimensions | #fibers --> */ 0.f, 1.f, glm::vec3{-3.15f, 0.08f, 0.f}, glm::vec3{ 0.005f }, glm::vec3{ 0.0f }, 27},
-	    parametric_object{false, parametric_object_type::FiberCurve, 235.0f, 254.0f, /* <-- yarn dimensions | #fibers --> */ 6.f, /* fiber thickness: */ 0.3f, glm::vec3{-3.15f, 0.08f, 0.f}, glm::vec3{ 0.005f }, glm::vec3{ 0.0f }, 27},
-	    parametric_object{false, parametric_object_type::Seashell3,              glm::two_pi<float>() * 8.0f,/* -> */0.0f,   0.0f,/* -> */glm::two_pi<float>(), glm::vec3{ 0.0f, 2.5f, 0.0f }, glm::vec3{ 1.0f }, glm::vec3{ 0.0f }, 30}
-    }};
-
 	enum struct rendering_method : int
     {
         point_rendering = 0,
@@ -956,7 +956,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 		mObjectData.resize(MAX_OBJECTS, object_data{});
 		uint32_t i = 0; 
         for (const auto pos : mSpherePositions) {
-			auto po = parametric_object{true, parametric_object_type::Sphere, 0.0f, glm::pi<float>(), 0.0f, glm::two_pi<float>(), glm::vec4{pos, 0.f}};
+			auto po = parametric_object{"sphere", "no preview", true, parametric_object_type::Sphere, 0.0f, glm::pi<float>(), 0.0f, glm::two_pi<float>(), glm::vec4{pos, 0.f}};
             po.set_eval_dims(glm::uvec4{4, 4, 0, 0});
 
             mObjectData[i].mParams = po.uv_param_ranges();
@@ -1004,7 +1004,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 			auto rotationMult  = 1.0f - 2.0f * static_cast<float>(rotationSign);
 			auto rotationAmount= shellType == 0 ? 2.23f : 1.93f;
 			auto yRot          = distf(engine) * glm::two_pi<float>();
-			auto po = parametric_object{true,
+			auto po = parametric_object{"seashell", "no preview", true,
 				shellType == 0 ? parametric_object_type::Seashell1 : shellType == 1 ? parametric_object_type::Seashell2 : parametric_object_type::Seashell3,
 				0.0f, glm::two_pi<float>() * 8.0f,  0.0f,  glm::two_pi<float>(),
 				/* translation: */ glm::vec3{ 0.42f + cos(circlePos) * circleRadius, -0.05f, 7.8f + sin(circlePos) * circleRadius },
@@ -1285,25 +1285,29 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 		current_composition()->add_element(mQuakeCam);
 		mQuakeCam.disable();
 
-		// Load an image from file, upload it and then create a view and a sampler for it for usage in shaders:
-		auto [image, uploadInputImageCommand] = avk::create_image_from_file(
-			"assets/po-johis-heart.png", false, false, false, 4,
-			avk::layout::shader_read_only_optimal, // For now, transfer the image into transfer_dst layout, because we'll need to copy from it:
-			avk::memory_usage::device, // The device shall be stored in (fast) device-local memory. For this reason, the function will also return commands that we need to execute later
-			avk::image_usage::general_storage_image // Note: We could bind the image as a texture instead of a (readonly) storage image, then we would not need the "storage_image" usage flag 
-		);
-		// The uploadInputImageCommand will contain a copy operation from a temporary host-coherent buffer into a device-local buffer.
-		// We schedule it for execution a bit further down.		
-		mInputImageAndSampler = avk::context().create_image_sampler(
-			avk::context().create_image_view(image), 
-			avk::context().create_sampler(avk::filter_mode::bilinear, avk::border_handling_mode::clamp_to_edge)
-		);
-		// Execute the uploadInputImageCommand command, wait until that one has completed (by using an automatically created barrier), 
-		// then initialize the target image with the contents of the input image:
-		context().record_and_submit_with_fence({
-			// Copy into the source image:
-			std::move(uploadInputImageCommand),
-		}, *mQueue)->wait_until_signalled(); // Finally, wait with a fence until everything has completed.
+		// One sampler for all the preview images:
+		auto previewImageSampler = avk::context().create_sampler(avk::filter_mode::bilinear, avk::border_handling_mode::clamp_to_edge);
+		// Upload all the preview images:
+		std::vector<avk::recorded_commands_t> imageUploadCommands;
+		for (auto& po : sPredefinedParametricObjects) {
+			if (mPreviewImageSamplers.contains(po.preview_image_path())) {
+				continue;
+			}
+
+			// Load an image from file, upload it and then create a view and a sampler for it for usage in shaders:
+			auto [previewImage, uploadInputImageCommand] = avk::create_image_from_file(
+				po.preview_image_path(), false, false, false, 4,
+				avk::layout::shader_read_only_optimal, // For now, transfer the image into transfer_dst layout, because we'll need to copy from it:
+				avk::memory_usage::device, // The device shall be stored in (fast) device-local memory. For this reason, the function will also return commands that we need to execute later
+				avk::image_usage::general_storage_image // Note: We could bind the image as a texture instead of a (readonly) storage image, then we would not need the "storage_image" usage flag 
+			);
+			// The uploadInputImageCommand will contain a copy operation from a temporary host-coherent buffer into a device-local buffer.
+			// We schedule it for execution a bit further down.		
+			mPreviewImageSamplers[po.preview_image_path()] = avk::context().create_image_sampler(avk::context().create_image_view(previewImage), previewImageSampler);
+			imageUploadCommands.push_back(std::move(uploadInputImageCommand));
+		}
+		// Upload everything to the GPU:
+		context().record_and_submit_with_fence({ std::move(imageUploadCommands) }, *mQueue)->wait_until_signalled();
 
 		std::locale::global(std::locale("en_US.UTF-8"));
 		auto imguiManager = current_composition()->element_by_type<imgui_manager>();
@@ -1345,13 +1349,35 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 				}
 
 				ImGui::Begin("Parametric Objects", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoMove);
-                ImGui::SetWindowPos(ImVec2(0, 0), ImGuiCond_Always);
-				ImGui::SetWindowSize(ImVec2(1000, 300), ImGuiCond_Always);
-				ImTextureID inputTexId = imguiManager->get_or_create_texture_descriptor(mInputImageAndSampler.as_reference(), avk::layout::shader_read_only_optimal);
-		        auto inputTexWidth  = static_cast<float>(mInputImageAndSampler->get_image_view()->get_image().create_info().extent.width);
-		        auto inputTexHeight = static_cast<float>(mInputImageAndSampler->get_image_view()->get_image().create_info().extent.height);
-				ImGui::Image(inputTexId, ImVec2(inputTexWidth/6.0f, inputTexHeight/6.0f), ImVec2(0,0), ImVec2(1,1), ImVec4(1.0f,1.0f,1.0f,1.0f), ImVec4(1.0f,1.0f,1.0f,0.5f));
+				ImGui::SetWindowPos(ImVec2(0, 0), ImGuiCond_Once);
+				ImGui::SetWindowSize(ImVec2(1000, 300), ImGuiCond_Once);
+				if (ImGui::BeginTable("table1", sPredefinedParametricObjects.size())) {
+					for (auto& po : sPredefinedParametricObjects) {
+						ImGui::TableSetupColumn(po.name(), ImGuiTableColumnFlags_WidthFixed, 150.0f);
+					}
+					ImGui::TableHeadersRow();
 
+					ImGui::TableNextRow();
+					for (auto& po : sPredefinedParametricObjects) {
+						ImGui::TableNextColumn();
+						ImTextureID inputTexId = imguiManager->get_or_create_texture_descriptor(mPreviewImageSamplers[po.preview_image_path()].as_reference(), avk::layout::shader_read_only_optimal);
+						ImGui::Image(inputTexId, ImVec2(150.0f, 150.0f), ImVec2(0, 0), ImVec2(1, 1), ImVec4(1.0f, 1.0f, 1.0f, 1.0f), ImVec4(1.0f, 1.0f, 1.0f, 0.5f));
+					}
+
+					ImGui::TableNextRow();
+					int poId  = 0;
+					for (auto& po : sPredefinedParametricObjects) {
+						ImGui::TableNextColumn();
+						ImGui::PushID(poId++);
+						bool enabled = po.is_enabled();
+						if (bool changed = ImGui::Checkbox("Enabled", &enabled)) {
+							po.set_enabled(enabled);
+						}
+						ImGui::PopID();
+					}
+
+					ImGui::EndTable();
+				}
 				ImGui::End();
 
 				if (mRenderingMethod != rendering_method::stupid_vertex_pipe && 2 == mWhatToRenderParamOrTess) { // if scene composer
@@ -2836,7 +2862,7 @@ private: // v== Member variables ==v
 	int  mSingleObjectMaterialOverride = -1;
 	bool mDisableColorAttachmentOut = false;
 
-	avk::image_sampler mInputImageAndSampler;
+	std::unordered_map<std::string, avk::image_sampler> mPreviewImageSamplers;
 
 }; // vk_parametric_curves_app
 

@@ -89,8 +89,10 @@ static const char* PARAMETRIC_OBJECT_TYPE_UI_STRING
 class parametric_object
 {
 public:
-    constexpr parametric_object(bool isEnabled, parametric_object_type objType, float uFrom, float uTo, float vFrom, float vTo, glm::vec3 aTranslation = glm::vec3{0.f}, glm::vec3 aScale = glm::vec3{ 1.0f }, glm::vec3 aRotation = glm::vec3{ 0.0f }, int32_t aMaterialIndex = -1)
-        : mEnabled{ isEnabled }
+    parametric_object(const char* aName, const char* aPreviewImagePath, bool isEnabled, parametric_object_type objType, float uFrom, float uTo, float vFrom, float vTo, glm::vec3 aTranslation = glm::vec3{0.f}, glm::vec3 aScale = glm::vec3{ 1.0f }, glm::vec3 aRotation = glm::vec3{ 0.0f }, int32_t aMaterialIndex = -1)
+        : mName{ aName }
+        , mPreviewImagePath{ aPreviewImagePath }
+        , mEnabled{ isEnabled }
         , mParams{uFrom, uTo, vFrom, vTo}
         , mEvalDims{8, 8, 0, 0}
         , mTranslation{ aTranslation }
@@ -100,6 +102,8 @@ public:
         , mMaterialIndex{ aMaterialIndex }
     { }
 
+    const char* name() const { return mName; }
+    const char* preview_image_path() const { return mPreviewImagePath; }
     bool is_enabled() const { return mEnabled; }
     glm::vec2 u_param_range() const { return glm::vec2{ mParams[0], mParams[1] }; };
     glm::vec2 v_param_range() const { return glm::vec2{ mParams[2], mParams[3] }; };
@@ -125,6 +129,8 @@ public:
     void set_material_index(int32_t matIndex) { mMaterialIndex = matIndex; }
 
 private:
+    const char* mName;
+    const char* mPreviewImagePath;
     bool mEnabled;
     glm::vec4 mParams; // uFrom -> uTo, vFrom -> vTo
     glm::uvec4 mEvalDims;
