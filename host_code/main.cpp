@@ -17,6 +17,7 @@
 #include "helpers.hpp"
 #include "../shader_includes/host_device_shared.h"
 #include <random>
+//#include "ImGuizmo.h"
 
 #define NUM_TIMESTAMP_QUERIES 5
 #define EXTRA_3D_MODEL "sponza_and_terrain"
@@ -101,29 +102,20 @@
 //// Values: 0 = Uint64 image | 3 = framebuffer (must use that for SSAA or MSAA)
 //#define TEST_TARGET_IMAGE              0
 
-static std::array<parametric_object, 21> sPredefinedParametricObjects {{
-	parametric_object{"test", "assets/po-johis-heart.png", true,  parametric_object_type::Plane,                  1.0f,   0.0f,            0.0f,  1.0f                , glm::vec3{-2.f,  0.f,  0.f}},
-	parametric_object{"test", "assets/po-johis-heart.png", false, parametric_object_type::Sphere,                 0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>(), glm::vec3{ 0.f,  0.f,  0.f}},
-	parametric_object{"test", "assets/po-johis-heart.png", false, parametric_object_type::FunkyPlane,             0.0f, 1.0f            ,  0.0f,  1.0f                , glm::vec3{ 2.f,  0.f,  0.f}},
-	parametric_object{"test", "assets/po-johis-heart.png", false, parametric_object_type::ExtraFunkyPlane,        0.0f, 1.0f            ,  0.0f,  1.0f                , glm::vec3{ 2.f,  0.f,  2.f}},
-	parametric_object{"test", "assets/po-johis-heart.png", false, parametric_object_type::JuliasParametricHeart,  0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>(), glm::vec3{-2.f,  0.f, -2.f}},
-	parametric_object{"test", "assets/po-johis-heart.png", false, parametric_object_type::JohisHeart,             0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>(), glm::vec3{ 0.f,  0.f, -2.f}},
-	parametric_object{"test", "assets/po-johis-heart.png", false, parametric_object_type::Spherehog,              0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>(), glm::vec3{ 2.f,  0.f, -2.f}},
-	parametric_object{"test", "assets/po-johis-heart.png", false, parametric_object_type::SpikyHeart,             0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>(), glm::vec3{ 4.f,  0.f, -2.f}},
-	parametric_object{"test", "assets/po-johis-heart.png", false, parametric_object_type::PalmTreeTrunk,          0.0f,   1.0f,            0.0f,  glm::two_pi<float>(), glm::vec3{ 0.f,  0.f, -4.f}},
-	parametric_object{"test", "assets/po-johis-heart.png", false, parametric_object_type::Water,                -100.f,  100.f,          -100.f, 100.f                , glm::vec3{ 0.f,  5.f,  0.f}},
-	parametric_object{"test", "assets/po-johis-heart.png", false, parametric_object_type::Terrain,              -100.f,  100.f,          -100.f, 100.f                , glm::vec3{ 0.f, -5.f,  0.f}},
-	parametric_object{"test", "assets/po-johis-heart.png", false, parametric_object_type::SHBasisFunction,        0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>(), glm::vec3{-1.f,  0.f,  3.f}},
-	parametric_object{"test", "assets/po-johis-heart.png", false, parametric_object_type::SHGlyph,                0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>(), glm::vec3{ 1.f,  0.f,  3.f}},
-	parametric_object{"test", "assets/po-johis-heart.png", false, parametric_object_type::YarnCurve,  235.0f, 254.0f, /* <-- yarn dimensions | #fibers --> */ 4.f, 1.f, glm::vec3{-3.35f, 0.08f, 5.32f}, glm::vec3{ 0.005f }, glm::vec3{ 0.0f }, 27},
-	parametric_object{"test", "assets/po-johis-heart.png", false, parametric_object_type::FiberCurve, 235.0f, 254.0f, /* <-- yarn dimensions | #fibers --> */ 4.f, 1.f, glm::vec3{-3.35f, 0.08f, 5.32f}, glm::vec3{ 0.005f }, glm::vec3{ 0.0f }, 27},
-	parametric_object{"test", "assets/po-johis-heart.png", false, parametric_object_type::Seashell1,              glm::two_pi<float>() * 8.0f,/* -> */0.0f,   0.0f,/* -> */glm::two_pi<float>(), glm::vec3{ 0.0f, 7.0f, 0.0f }, glm::vec3{ 1.0f }, glm::vec3{ 0.0f }, 2},
-	parametric_object{"test", "assets/po-johis-heart.png", false, parametric_object_type::Seashell2,              glm::two_pi<float>() * 8.0f,/* -> */0.0f,   0.0f,/* -> */glm::two_pi<float>(), glm::vec3{-4.5f, 7.0f, 0.0f }, glm::vec3{ 1.0f }, glm::vec3{ 0.0f }, 2},
-	parametric_object{"test", "assets/po-johis-heart.png", false, parametric_object_type::Seashell3,              glm::two_pi<float>() * 8.0f,/* -> */0.0f,   0.0f,/* -> */glm::two_pi<float>(), glm::vec3{ 4.5f, 7.0f, 0.0f }, glm::vec3{ 1.0f }, glm::vec3{ 0.0f }, 2},
-	// index 18:
-    parametric_object{"test", "assets/po-johis-heart.png", false, parametric_object_type::YarnCurve,  235.0f, 254.0f, /* <-- yarn dimensions | #fibers --> */ 0.f, 1.f, glm::vec3{-3.15f, 0.08f, 0.f}, glm::vec3{ 0.005f }, glm::vec3{ 0.0f }, 27},
-	parametric_object{"test", "assets/po-johis-heart.png", false, parametric_object_type::FiberCurve, 235.0f, 254.0f, /* <-- yarn dimensions | #fibers --> */ 6.f, /* fiber thickness: */ 0.3f, glm::vec3{-3.15f, 0.08f, 0.f}, glm::vec3{ 0.005f }, glm::vec3{ 0.0f }, 27},
-	parametric_object{"test", "assets/po-johis-heart.png", false, parametric_object_type::Seashell3,              glm::two_pi<float>() * 8.0f,/* -> */0.0f,   0.0f,/* -> */glm::two_pi<float>(), glm::vec3{ 0.0f, 2.5f, 0.0f }, glm::vec3{ 1.0f }, glm::vec3{ 0.0f }, 30}
+static std::array<parametric_object, 13> PredefinedParametricObjects {{
+	parametric_object{"Sphere"      , "assets/po-sphere-patches.png",     true , parametric_object_type::Sphere,                 0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>(), glm::vec3{ 0.f,  0.f,  0.f}},
+	parametric_object{"Johi's Heart", "assets/po-johis-heart.png",        true, parametric_object_type::JohisHeart,             0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>(), glm::vec3{ 0.f,  0.f, -2.f}},
+	parametric_object{"Spiky Heart" , "assets/po-johis-heart.png",        false, parametric_object_type::SpikyHeart,             0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>(), glm::vec3{ 4.f,  0.f, -2.f}},
+	parametric_object{"Seashell 1"  , "assets/po-seashell1.png",          false, parametric_object_type::Seashell1,              glm::two_pi<float>() * 8.0f,/* -> */0.0f,   0.0f,/* -> */glm::two_pi<float>(), glm::vec3{ 0.0f, 7.0f, 0.0f }, glm::vec3{ 1.0f }, glm::vec3{ 0.0f }, 2},
+	parametric_object{"Seashell 2"  , "assets/po-seashell2.png",          false, parametric_object_type::Seashell2,              glm::two_pi<float>() * 8.0f,/* -> */0.0f,   0.0f,/* -> */glm::two_pi<float>(), glm::vec3{-4.5f, 7.0f, 0.0f }, glm::vec3{ 1.0f }, glm::vec3{ 0.0f }, 2},
+	parametric_object{"Seashell 3"  , "assets/po-seashell3.png",          false, parametric_object_type::Seashell3,              glm::two_pi<float>() * 8.0f,/* -> */0.0f,   0.0f,/* -> */glm::two_pi<float>(), glm::vec3{ 4.5f, 7.0f, 0.0f }, glm::vec3{ 1.0f }, glm::vec3{ 0.0f }, 2},
+	parametric_object{"Yarn Curve"  , "assets/po-yarn-curve-single.png",  false, parametric_object_type::YarnCurve,  1.0f, 1.0f, /* <-- yarn dimensions | #fibers --> */ 4.f, 1.f, glm::vec3{-3.35f, 0.08f, 5.32f}, glm::vec3{ 0.005f }, glm::vec3{ 0.0f }, 27},
+	parametric_object{"Fiber Curve" , "assets/po-fiber-curve-single.png", false, parametric_object_type::FiberCurve, 1.0f, 1.0f, /* <-- yarn dimensions | #fibers --> */ 4.f, 1.f, glm::vec3{-3.35f, 0.08f, 5.32f}, glm::vec3{ 0.005f }, glm::vec3{ 0.0f }, 27},
+	parametric_object{"Blue Curtain", "assets/po-blue-curtain.png",		  false, parametric_object_type::YarnCurve,  235.0f, 254.0f, /* <-- yarn dimensions | #fibers --> */ 4.f, 1.f, glm::vec3{-3.35f, 0.08f, 5.32f}, glm::vec3{ 0.005f }, glm::vec3{ 0.0f }, 27},
+	parametric_object{"Palm Tree"   , "assets/po-palm-tree.png",		  false, parametric_object_type::PalmTreeTrunk,          0.0f,   1.0f,            0.0f,  glm::two_pi<float>(), glm::vec3{ 0.f,  0.f, -4.f}},
+	parametric_object{"Giant Worm"  , "assets/po-giant-worm.png",		  false, parametric_object_type::PalmTreeTrunk,  235.0f, 254.0f, /* <-- yarn dimensions | #fibers --> */ 4.f, 1.f, glm::vec3{-3.35f, 0.08f, 5.32f}, glm::vec3{ 0.005f }, glm::vec3{ 0.0f }, 27},
+	parametric_object{"SH Glyph"    , "assets/po-single-sh-glyph.png",    false, parametric_object_type::SHGlyph,                0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>(), glm::vec3{ 1.f,  0.f,  3.f}},
+	parametric_object{"Brain Scan"  , "assets/po-sh-brain.png",           false, parametric_object_type::SHGlyph,                0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>(), glm::vec3{ 1.f,  0.f,  3.f}}
 }};
 
 class vk_parametric_curves_app : public avk::invokee
@@ -140,7 +132,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 	vk_parametric_curves_app(avk::queue& aQueue)
 		: mQueue{ &aQueue }
 	{
-        for (const auto& po : sPredefinedParametricObjects) {
+        for (const auto& po : PredefinedParametricObjects) {
             mParametricObjects.push_back(po);
         }
 	}
@@ -923,7 +915,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 		using namespace avk;
 
 		mObjectData.resize(MAX_OBJECTS, object_data{});
-		auto po = sPredefinedParametricObjects[glm::clamp(mSingleObjectToRenderParamOrTess, 0, static_cast<int>(sPredefinedParametricObjects.size()))];
+		auto po = PredefinedParametricObjects[glm::clamp(mSingleObjectToRenderParamOrTess, 0, static_cast<int>(PredefinedParametricObjects.size()))];
         mObjectData[0].mParams = po.uv_param_ranges();
 		mObjectData[0].mCurveIndex = po.curve_index();
 		mObjectData[0].mDetailEvalDims = po.eval_dims();
@@ -1139,7 +1131,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 			storage_buffer_meta::create_from_size(MAX_OBJECTS * sizeof(object_data))
 		);
 		mSingleObjectToRenderParamOrTess = 0;
-		while (mSingleObjectToRenderParamOrTess < sPredefinedParametricObjects.size() && !sPredefinedParametricObjects[mSingleObjectToRenderParamOrTess].is_enabled()) {
+		while (mSingleObjectToRenderParamOrTess < PredefinedParametricObjects.size() && !PredefinedParametricObjects[mSingleObjectToRenderParamOrTess].is_enabled()) {
 			++mSingleObjectToRenderParamOrTess;
 		}
 		fill_object_data_buffer_with_single_object();
@@ -1289,7 +1281,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 		auto previewImageSampler = avk::context().create_sampler(avk::filter_mode::bilinear, avk::border_handling_mode::clamp_to_edge);
 		// Upload all the preview images:
 		std::vector<avk::recorded_commands_t> imageUploadCommands;
-		for (auto& po : sPredefinedParametricObjects) {
+		for (auto& po : PredefinedParametricObjects) {
 			if (mPreviewImageSamplers.contains(po.preview_image_path())) {
 				continue;
 			}
@@ -1344,41 +1336,58 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 				justSoThatTheyDontDie = avk::make_array<decltype(meshStr64x1)>(std::move(taskStr64x1), std::move(taskStr128x1), std::move(taskStr8x8), std::move(taskStr16x16), std::move(meshStr64x1), std::move(meshStr128x1), std::move(meshStr8x8), std::move(meshStr16x16)),
 				taskShaderPatchSizeOptions1D, taskShaderPatchSizeOptions2D, meshShaderPatchSizeOptions1D, meshShaderPatchSizeOptions2D
 			]() mutable {
+				//ImGuizmo::BeginFrame();
+
 				if (mMeasurementInProgress) {
 					return;
 				}
 
+				bool updateObjects = false;
+				// Draw table of parametric objects available:
+				const float wndWdth = context().main_window()->resolution().x;
+				float previewImageWidth = glm::min(wndWdth * 0.9f / mParametricObjects.size(), 150.0f);
 				ImGui::Begin("Parametric Objects", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoMove);
 				ImGui::SetWindowPos(ImVec2(0, 0), ImGuiCond_Once);
-				ImGui::SetWindowSize(ImVec2(1000, 300), ImGuiCond_Once);
-				if (ImGui::BeginTable("table1", sPredefinedParametricObjects.size())) {
-					for (auto& po : sPredefinedParametricObjects) {
-						ImGui::TableSetupColumn(po.name(), ImGuiTableColumnFlags_WidthFixed, 150.0f);
+				ImGui::SetWindowSize(ImVec2(wndWdth, 300), ImGuiCond_Once);
+				if (ImGui::BeginTable("table1", mParametricObjects.size())) {
+					for (auto& po : mParametricObjects) {
+						ImGui::TableSetupColumn(po.name(), ImGuiTableColumnFlags_WidthFixed, previewImageWidth);
 					}
 					ImGui::TableHeadersRow();
 
 					ImGui::TableNextRow();
-					for (auto& po : sPredefinedParametricObjects) {
+					for (auto& po : mParametricObjects) {
 						ImGui::TableNextColumn();
 						ImTextureID inputTexId = imguiManager->get_or_create_texture_descriptor(mPreviewImageSamplers[po.preview_image_path()].as_reference(), avk::layout::shader_read_only_optimal);
-						ImGui::Image(inputTexId, ImVec2(150.0f, 150.0f), ImVec2(0, 0), ImVec2(1, 1), ImVec4(1.0f, 1.0f, 1.0f, 1.0f), ImVec4(1.0f, 1.0f, 1.0f, 0.5f));
+						ImGui::Image(inputTexId, ImVec2(previewImageWidth, previewImageWidth), ImVec2(0, 0), ImVec2(1, 1), ImVec4(1.0f, 1.0f, 1.0f, 1.0f), ImVec4(1.0f, 1.0f, 1.0f, 0.5f));
 					}
 
 					ImGui::TableNextRow();
 					int poId  = 0;
-					for (auto& po : sPredefinedParametricObjects) {
+					for (auto& po : mParametricObjects) {
 						ImGui::TableNextColumn();
 						ImGui::PushID(poId++);
 						bool enabled = po.is_enabled();
 						if (bool changed = ImGui::Checkbox("Enabled", &enabled)) {
 							po.set_enabled(enabled);
+							updateObjects = true;
 						}
 						ImGui::PopID();
 					}
-
 					ImGui::EndTable();
 				}
 				ImGui::End();
+				if (updateObjects) {
+					fill_object_data_buffer();
+				}
+
+				//auto viewMatrix = mQuakeCam.view_matrix();
+				//auto projMatrix = mQuakeCam.projection_matrix();
+				//auto modelMatrix = glm::mat4{ 1.0f };
+				//ImGuiIO& io = ImGui::GetIO();
+				//ImGuizmo::SetRect(0, 0, io.DisplaySize.x, io.DisplaySize.y);
+				//ImGuizmo::DrawCubes(glm::value_ptr(viewMatrix), glm::value_ptr(projMatrix), glm::value_ptr(modelMatrix), 1);
+				//ImGuizmo::Manipulate(glm::value_ptr(viewMatrix), glm::value_ptr(projMatrix), ImGuizmo::ROTATE, ImGuizmo::LOCAL, glm::value_ptr(modelMatrix));
 
 				if (mRenderingMethod != rendering_method::stupid_vertex_pipe && 2 == mWhatToRenderParamOrTess) { // if scene composer
                     ImGui::Begin("Scene Composer");
@@ -1493,7 +1502,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
                     }
                     if (0 == mWhatToRenderParamOrTess) {
 						bool soChanged = false;
-                        soChanged = ImGui::SliderInt("Single object to render", &mSingleObjectToRenderParamOrTess, 0, static_cast<int>(sPredefinedParametricObjects.size())-1) || soChanged;
+                        soChanged = ImGui::SliderInt("Single object to render", &mSingleObjectToRenderParamOrTess, 0, static_cast<int>(PredefinedParametricObjects.size())-1) || soChanged;
 						soChanged = ImGui::Checkbox(" ^ override transl.: ", &mSingleObjectOverrideTranslation) || soChanged;
 						if (mSingleObjectOverrideTranslation) {
 							ImGui::SameLine(); ImGui::SetNextItemWidth(imGuiWindowWidth * 0.5f);
@@ -2830,7 +2839,7 @@ private: // v== Member variables ==v
 	glm::uvec4  mVertexBuffersOffsetsSizesCount = glm::uvec4{0}; // only .x is used
 	avk::buffer mVertexBuffersOffsetsSizesCountBuffer;
 
-	int mWhatToRenderParamOrTess = 0;
+	int mWhatToRenderParamOrTess = 2; // 2 == Scene Composer => TODO: Refactor away!
 	int mWhatToRenderStupidVert = 0;
 	int mSingleObjectToRenderParamOrTess = 0;
 	int mSingleObjectToRenderStupidVert = 0;

@@ -123,6 +123,9 @@
     <ClCompile Include="host_code\main.cpp">
       <Filter>host_code</Filter>
     </ClCompile>
+    <ClCompile Include="host_code\ImGuizmo.cpp">
+      <Filter>host_code</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="precompiled_headers\cg_stdafx.hpp">
@@ -140,9 +143,45 @@
     <ClInclude Include="shader_includes\host_device_shared.h">
       <Filter>shader_includes</Filter>
     </ClInclude>
+    <ClInclude Include="host_code\ImGuizmo.h">
+      <Filter>host_code</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Image Include="assets\po-johis-heart.png">
+      <Filter>assets</Filter>
+    </Image>
+    <Image Include="assets\po-blue-curtain.png">
+      <Filter>assets</Filter>
+    </Image>
+    <Image Include="assets\po-fiber-curve-single.png">
+      <Filter>assets</Filter>
+    </Image>
+    <Image Include="assets\po-seashell1.png">
+      <Filter>assets</Filter>
+    </Image>
+    <Image Include="assets\po-seashell2.png">
+      <Filter>assets</Filter>
+    </Image>
+    <Image Include="assets\po-seashell3.png">
+      <Filter>assets</Filter>
+    </Image>
+    <Image Include="assets\po-sh-brain.png">
+      <Filter>assets</Filter>
+    </Image>
+    <Image Include="assets\po-single-sh-glyph.png">
+      <Filter>assets</Filter>
+    </Image>
+    <Image Include="assets\po-sphere-patches.png">
+      <Filter>assets</Filter>
+    </Image>
+    <Image Include="assets\po-yarn-curve-single.png">
+      <Filter>assets</Filter>
+    </Image>
+    <Image Include="assets\po-giant-worm.png">
+      <Filter>assets</Filter>
+    </Image>
+    <Image Include="assets\po-palm-tree.png">
       <Filter>assets</Filter>
     </Image>
   </ItemGroup>
