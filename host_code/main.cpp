@@ -120,13 +120,6 @@ static std::array<parametric_object, 13> PredefinedParametricObjects {{
 
 class vk_parametric_curves_app : public avk::invokee
 {
-	enum struct rendering_method : int
-    {
-        point_rendering = 0,
-        patch_gen_tess_render,
-        tessellation_standalone,
-        stupid_vertex_pipe
-    };
 
 public: // v== avk::invokee overrides which will be invoked by the framework ==v
 	vk_parametric_curves_app(avk::queue& aQueue)
@@ -1386,14 +1379,26 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 					}
 
 					ImGui::TableNextRow();
+					int modifyIndex = -1;
 					poId = 0;
 					for (auto& po : mParametricObjects) {
 						ImGui::TableNextColumn();
 						ImGui::PushID(poId++);
 						bool modifying = po.is_modifying();
 						if (bool changed = ImGui::Checkbox("Modify", &modifying)) {
-							po.set_modifying(modifying);
+							modifyIndex = poId - 1;
 						}
+						ImGui::PopID();
+					}
+					if (modifyIndex >= 0) {
+						poId = 0;
+						for (auto& po : mParametricObjects) {
+							po.set_modifying(poId == modifyIndex);
+							poId++;
+						}
+					}
+					for (auto& po : mParametricObjects) {
+						bool modifying = po.is_modifying();
 						if (modifying) {
 							glm::mat4 modelMatrix = po.transformation_matrix();
 							if (ImGuizmo::Manipulate(glm::value_ptr(viewMatrix), glm::value_ptr(projMatrix), ImGuizmo::UNIVERSAL, ImGuizmo::LOCAL, glm::value_ptr(modelMatrix))) {
@@ -1401,7 +1406,66 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 								updateObjects = true;
 							}
 						}
+					}
+
+					std::vector<int> howRendered(mParametricObjects.size(), 0);
+					ImGui::TableNextRow();
+					poId = 0;
+					for (auto& po : mParametricObjects) {
+						howRendered[poId] = po.how_to_render() == rendering_method::point_rendering ? 0 : 1;
+						ImGui::TableNextColumn();
+						ImGui::PushID(poId++);
+						ImGui::Text("Rendering method:");
 						ImGui::PopID();
+					}
+					ImGui::TableNextRow();
+					poId = 0;
+					for (auto& po : mParametricObjects) {
+						ImGui::TableNextColumn();
+						ImGui::PushID(poId);
+						ImGui::RadioButton("Point", &howRendered[poId], 0); ImGui::SameLine();
+						ImGui::RadioButton("Tess.", &howRendered[poId], 1);
+						poId++;
+						ImGui::PopID();
+					}
+
+					poId = 0;
+					for (auto& po : mParametricObjects) {
+						// Set the howRendered choice from above here:
+						po.set_how_to_render(howRendered[poId] == 0 ? rendering_method::point_rendering : rendering_method::patch_gen_tess_render);
+
+						ImGui::TableNextColumn();
+						ImGui::PushID(poId++);
+						bool ss = po.super_sampling_on();
+						if (ImGui::Checkbox("Super-Sampled", &ss)) {
+							po.set_super_sampling(ss);
+						}
+						ImGui::PopID();
+					}
+
+					int duplicateIndex = -1;
+					int deleteIndex = -1;
+					poId = 0;
+					for (auto& po : mParametricObjects) {
+						ImGui::TableNextColumn();
+						ImGui::PushID(poId++);
+						if (ImGui::Button("Dupl.")) {
+							duplicateIndex = poId - 1;
+						}
+						ImGui::SameLine();
+						if (ImGui::Button("Del.")) {
+							deleteIndex = poId - 1;
+						}
+						ImGui::PopID();
+					}
+					// Perform dupl. or del. action:
+					if (duplicateIndex >= 0) {
+						mParametricObjects.insert(mParametricObjects.begin() + duplicateIndex + 1, mParametricObjects[duplicateIndex]);
+						updateObjects = true;
+					}
+					if (deleteIndex >= 0) {
+						mParametricObjects.erase(mParametricObjects.begin() + deleteIndex);
+						updateObjects = true;
 					}
 
 					ImGui::EndTable();

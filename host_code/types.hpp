@@ -81,6 +81,14 @@ enum struct parametric_object_type : int32_t
     Seashell3
 };
 
+enum struct rendering_method : int
+{
+    point_rendering = 0,
+    patch_gen_tess_render,
+    tessellation_standalone,
+    stupid_vertex_pipe
+};
+
 // ATTENTION: Whenever you add a new enum item  ^^^  here, also add it to the string  vvv  here!
 static const char* PARAMETRIC_OBJECT_TYPE_UI_STRING
 	= "Plane\0Sphere\0PalmTreeTrunk\0Water\0Terrain\0SHBasisFunction (change via debug sliders (int))\0FunkyPlane\0ExtraFunkyPlane\0JuliasParametricHeart\0JohisHeart\0Spherehog\0SpikyHeart\0SH Glyph\0Michi Ball\0Yarn Curve\0Yarn Curve (animated)\0Fiber Curve\0Fiber Curve (animated)\0Seashell 1\0Seashell 2\0Seashell 3\0";
@@ -95,10 +103,12 @@ public:
         , mEnabled{ isEnabled }
         , mModifying{ false }
         , mParams{uFrom, uTo, vFrom, vTo}
-        , mEvalDims{8, 8, 0, 0}
+        , mEvalDims{1, 1, 0, 0}
         , mParamObjType { objType }
         , mTransformationMatrix{ aTransformationMatrix }
         , mMaterialIndex{ aMaterialIndex }
+        , mRenderingMethod{ rendering_method::patch_gen_tess_render }
+        , mSuperSampled{ false }
     { }
 
     const char* name() const { return mName; }
@@ -113,6 +123,8 @@ public:
     auto      param_obj_type() const { return mParamObjType; }
     int32_t   curve_index() const { return static_cast<std::underlying_type_t<parametric_object_type>>(mParamObjType); }
     int32_t   material_index() const { return mMaterialIndex; }
+    auto      how_to_render() const { return mRenderingMethod; }
+    bool      super_sampling_on() const { return mSuperSampled; }
 
     void set_enabled(bool yesOrNo) { mEnabled = yesOrNo; }
     void set_modifying(bool yesOrNo) { mModifying = yesOrNo; }
@@ -123,6 +135,8 @@ public:
     void set_curve(parametric_object_type objType) { mParamObjType = objType; }
     void set_curve_index(int32_t curveIndex) { mParamObjType = static_cast<parametric_object_type>(curveIndex); }
     void set_material_index(int32_t matIndex) { mMaterialIndex = matIndex; }
+    void set_how_to_render(rendering_method renderMeth) { mRenderingMethod = renderMeth; }
+    void set_super_sampling(bool onOrOff) { mSuperSampled = onOrOff; }
 
 private:
     const char* mName;
@@ -134,6 +148,8 @@ private:
     glm::mat4 mTransformationMatrix;
     parametric_object_type mParamObjType;
     int32_t mMaterialIndex;
+    rendering_method mRenderingMethod;
+    bool mSuperSampled;
 };
 
 // +------------------------------------------------------------------------------+
