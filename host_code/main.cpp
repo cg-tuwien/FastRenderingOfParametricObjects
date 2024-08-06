@@ -103,19 +103,19 @@
 //#define TEST_TARGET_IMAGE              0
 
 static std::array<parametric_object, 13> PredefinedParametricObjects {{
-	parametric_object{"Sphere"      , "assets/po-sphere-patches.png",     true , parametric_object_type::Sphere,                 0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>(), glm::vec3{ 0.f,  0.f,  0.f}},
-	parametric_object{"Johi's Heart", "assets/po-johis-heart.png",        true, parametric_object_type::JohisHeart,             0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>(), glm::vec3{ 0.f,  0.f, -2.f}},
-	parametric_object{"Spiky Heart" , "assets/po-johis-heart.png",        false, parametric_object_type::SpikyHeart,             0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>(), glm::vec3{ 4.f,  0.f, -2.f}},
-	parametric_object{"Seashell 1"  , "assets/po-seashell1.png",          false, parametric_object_type::Seashell1,              glm::two_pi<float>() * 8.0f,/* -> */0.0f,   0.0f,/* -> */glm::two_pi<float>(), glm::vec3{ 0.0f, 7.0f, 0.0f }, glm::vec3{ 1.0f }, glm::vec3{ 0.0f }, 2},
-	parametric_object{"Seashell 2"  , "assets/po-seashell2.png",          false, parametric_object_type::Seashell2,              glm::two_pi<float>() * 8.0f,/* -> */0.0f,   0.0f,/* -> */glm::two_pi<float>(), glm::vec3{-4.5f, 7.0f, 0.0f }, glm::vec3{ 1.0f }, glm::vec3{ 0.0f }, 2},
-	parametric_object{"Seashell 3"  , "assets/po-seashell3.png",          false, parametric_object_type::Seashell3,              glm::two_pi<float>() * 8.0f,/* -> */0.0f,   0.0f,/* -> */glm::two_pi<float>(), glm::vec3{ 4.5f, 7.0f, 0.0f }, glm::vec3{ 1.0f }, glm::vec3{ 0.0f }, 2},
-	parametric_object{"Yarn Curve"  , "assets/po-yarn-curve-single.png",  false, parametric_object_type::YarnCurve,  1.0f, 1.0f, /* <-- yarn dimensions | #fibers --> */ 4.f, 1.f, glm::vec3{-3.35f, 0.08f, 5.32f}, glm::vec3{ 0.005f }, glm::vec3{ 0.0f }, 27},
-	parametric_object{"Fiber Curve" , "assets/po-fiber-curve-single.png", false, parametric_object_type::FiberCurve, 1.0f, 1.0f, /* <-- yarn dimensions | #fibers --> */ 4.f, 1.f, glm::vec3{-3.35f, 0.08f, 5.32f}, glm::vec3{ 0.005f }, glm::vec3{ 0.0f }, 27},
-	parametric_object{"Blue Curtain", "assets/po-blue-curtain.png",		  false, parametric_object_type::YarnCurve,  235.0f, 254.0f, /* <-- yarn dimensions | #fibers --> */ 4.f, 1.f, glm::vec3{-3.35f, 0.08f, 5.32f}, glm::vec3{ 0.005f }, glm::vec3{ 0.0f }, 27},
-	parametric_object{"Palm Tree"   , "assets/po-palm-tree.png",		  false, parametric_object_type::PalmTreeTrunk,          0.0f,   1.0f,            0.0f,  glm::two_pi<float>(), glm::vec3{ 0.f,  0.f, -4.f}},
-	parametric_object{"Giant Worm"  , "assets/po-giant-worm.png",		  false, parametric_object_type::PalmTreeTrunk,  235.0f, 254.0f, /* <-- yarn dimensions | #fibers --> */ 4.f, 1.f, glm::vec3{-3.35f, 0.08f, 5.32f}, glm::vec3{ 0.005f }, glm::vec3{ 0.0f }, 27},
-	parametric_object{"SH Glyph"    , "assets/po-single-sh-glyph.png",    false, parametric_object_type::SHGlyph,                0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>(), glm::vec3{ 1.f,  0.f,  3.f}},
-	parametric_object{"Brain Scan"  , "assets/po-sh-brain.png",           false, parametric_object_type::SHGlyph,                0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>(), glm::vec3{ 1.f,  0.f,  3.f}}
+	parametric_object{"Sphere"      , "assets/po-sphere-patches.png",     true , parametric_object_type::Sphere,                 0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>(), glm::translate(glm::vec3{ 0.f,  0.f,  0.f})},
+	parametric_object{"Johi's Heart", "assets/po-johis-heart.png",        true, parametric_object_type::JohisHeart,             0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>(), glm::translate(glm::vec3{ 0.f,  0.f, -2.f})},
+	parametric_object{"Spiky Heart" , "assets/po-johis-heart.png",        false, parametric_object_type::SpikyHeart,             0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>(), glm::translate(glm::vec3{ 4.f,  0.f, -2.f})},
+	parametric_object{"Seashell 1"  , "assets/po-seashell1.png",          false, parametric_object_type::Seashell1,              glm::two_pi<float>() * 8.0f,/* -> */0.0f,   0.0f,/* -> */glm::two_pi<float>(), glm::mat4{ 1.0f }, 2},
+	parametric_object{"Seashell 2"  , "assets/po-seashell2.png",          false, parametric_object_type::Seashell2,              glm::two_pi<float>() * 8.0f,/* -> */0.0f,   0.0f,/* -> */glm::two_pi<float>(), glm::translate(glm::vec3{-4.5f, 7.0f, 0.0f }), 2},
+	parametric_object{"Seashell 3"  , "assets/po-seashell3.png",          false, parametric_object_type::Seashell3,              glm::two_pi<float>() * 8.0f,/* -> */0.0f,   0.0f,/* -> */glm::two_pi<float>(), glm::translate(glm::vec3{ 4.5f, 7.0f, 0.0f }), 2},
+	parametric_object{"Yarn Curve"  , "assets/po-yarn-curve-single.png",  false, parametric_object_type::YarnCurve,  1.0f, 1.0f, /* <-- yarn dimensions | #fibers --> */ 4.f, 1.f, glm::translate(glm::vec3{-3.35f, 0.08f, 5.32f}) * glm::scale(glm::vec3{ 0.005f }), 27},
+	parametric_object{"Fiber Curve" , "assets/po-fiber-curve-single.png", false, parametric_object_type::FiberCurve, 1.0f, 1.0f, /* <-- yarn dimensions | #fibers --> */ 4.f, 1.f, glm::translate(glm::vec3{-3.35f, 0.08f, 5.32f}) * glm::scale(glm::vec3{ 0.005f }), 27},
+	parametric_object{"Blue Curtain", "assets/po-blue-curtain.png",		  false, parametric_object_type::YarnCurve,  235.0f, 254.0f, /* <-- yarn dimensions | #fibers --> */ 4.f, 1.f, glm::translate(glm::vec3{-3.35f, 0.08f, 5.32f}) * glm::scale(glm::vec3{ 0.005f }), 27},
+	parametric_object{"Palm Tree"   , "assets/po-palm-tree.png",		  false, parametric_object_type::PalmTreeTrunk,          0.0f,   1.0f,            0.0f,  glm::two_pi<float>(), glm::translate(glm::vec3{ 0.f,  0.f, -4.f})},
+	parametric_object{"Giant Worm"  , "assets/po-giant-worm.png",		  false, parametric_object_type::PalmTreeTrunk,  235.0f, 254.0f, /* <-- yarn dimensions | #fibers --> */ 4.f, 1.f, glm::translate(glm::vec3{-3.35f, 0.08f, 5.32f}) * glm::scale(glm::vec3{ 0.005f }), 27},
+	parametric_object{"SH Glyph"    , "assets/po-single-sh-glyph.png",    false, parametric_object_type::SHGlyph,                0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>()},
+	parametric_object{"Brain Scan"  , "assets/po-sh-brain.png",           false, parametric_object_type::SHGlyph,                0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>()}
 }};
 
 class vk_parametric_curves_app : public avk::invokee
@@ -948,7 +948,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 		mObjectData.resize(MAX_OBJECTS, object_data{});
 		uint32_t i = 0; 
         for (const auto pos : mSpherePositions) {
-			auto po = parametric_object{"sphere", "no preview", true, parametric_object_type::Sphere, 0.0f, glm::pi<float>(), 0.0f, glm::two_pi<float>(), glm::vec4{pos, 0.f}};
+			auto po = parametric_object{"sphere", "no preview", true, parametric_object_type::Sphere, 0.0f, glm::pi<float>(), 0.0f, glm::two_pi<float>(), glm::translate(glm::vec3{pos})};
             po.set_eval_dims(glm::uvec4{4, 4, 0, 0});
 
             mObjectData[i].mParams = po.uv_param_ranges();
@@ -999,9 +999,9 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 			auto po = parametric_object{"seashell", "no preview", true,
 				shellType == 0 ? parametric_object_type::Seashell1 : shellType == 1 ? parametric_object_type::Seashell2 : parametric_object_type::Seashell3,
 				0.0f, glm::two_pi<float>() * 8.0f,  0.0f,  glm::two_pi<float>(),
-				/* translation: */ glm::vec3{ 0.42f + cos(circlePos) * circleRadius, -0.05f, 7.8f + sin(circlePos) * circleRadius },
-				/* scale:       */ glm::vec3{ scale },
-				/* rotation:    */ glm::vec3{ rotationMult * rotationAmount * xRotMult, yRot, rotationMult * rotationAmount * zRotMult },
+				/* translation: */ glm::translate(glm::vec3{ 0.42f + cos(circlePos) * circleRadius, -0.05f, 7.8f + sin(circlePos) * circleRadius }) *
+				/* scale:       */ glm::scale(glm::vec3{ scale }) * 
+				/* rotation:    */ glm::mat4_cast(glm::quat(glm::vec3{ rotationMult * rotationAmount * xRotMult, yRot, rotationMult * rotationAmount * zRotMult })),
 				/* material id: */ 2
 			};
             po.set_eval_dims(glm::uvec4{4, 4, 0, 0});
@@ -1336,6 +1336,11 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 				justSoThatTheyDontDie = avk::make_array<decltype(meshStr64x1)>(std::move(taskStr64x1), std::move(taskStr128x1), std::move(taskStr8x8), std::move(taskStr16x16), std::move(meshStr64x1), std::move(meshStr128x1), std::move(meshStr8x8), std::move(meshStr16x16)),
 				taskShaderPatchSizeOptions1D, taskShaderPatchSizeOptions2D, meshShaderPatchSizeOptions1D, meshShaderPatchSizeOptions2D
 			]() mutable {
+				if (mMeasurementInProgress) {
+					return;
+				}
+
+				// Draw some ImGuizmo?!
 				auto res = glm::vec2{ context().main_window()->resolution() };
 				ImGuizmo::BeginFrame();
 				ImGuizmo::SetRect(0, 0, res.x, res.y);
@@ -1343,19 +1348,9 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 				//ImGuizmo::Enable(false);
 
 				auto viewMatrix = mOrbitCam.view_matrix();
-				viewMatrix[0] *= -1.0f;
 				auto projMatrix = mOrbitCam.projection_matrix();
 				projMatrix[1][1] *= -1;
 
-				glm::mat4 modelMatrix{ 1.0f };
-				modelMatrix[0] *= -1.0f;
-				
-				ImGuizmo::DrawCubes(glm::value_ptr(viewMatrix), glm::value_ptr(projMatrix), glm::value_ptr(modelMatrix), 1);
-				ImGuizmo::Manipulate(glm::value_ptr(viewMatrix), glm::value_ptr(projMatrix), ImGuizmo::TRANSLATE, ImGuizmo::LOCAL, glm::value_ptr(modelMatrix));
-
-				if (mMeasurementInProgress) {
-					return;
-				}
 
 				bool updateObjects = false;
 				// Draw table of parametric objects available:
@@ -1389,6 +1384,26 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 						}
 						ImGui::PopID();
 					}
+
+					ImGui::TableNextRow();
+					poId = 0;
+					for (auto& po : mParametricObjects) {
+						ImGui::TableNextColumn();
+						ImGui::PushID(poId++);
+						bool modifying = po.is_modifying();
+						if (bool changed = ImGui::Checkbox("Modify", &modifying)) {
+							po.set_modifying(modifying);
+						}
+						if (modifying) {
+							glm::mat4 modelMatrix = po.transformation_matrix();
+							if (ImGuizmo::Manipulate(glm::value_ptr(viewMatrix), glm::value_ptr(projMatrix), ImGuizmo::UNIVERSAL, ImGuizmo::LOCAL, glm::value_ptr(modelMatrix))) {
+								po.set_transformation_matrix(modelMatrix);
+								updateObjects = true;
+							}
+						}
+						ImGui::PopID();
+					}
+
 					ImGui::EndTable();
 				}
 				ImGui::End();
@@ -1432,21 +1447,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
                             po.set_eval_dims(evalDims);
                             dirty = true;
                         }
-                        auto transl = po.translation();
-                        if (ImGui::DragFloat3("Translation", &transl[0], 0.01f)) {
-                            po.set_translation(transl);
-                            dirty = true;
-                        }
-                        auto rot = po.rotation();
-                        if (ImGui::DragFloat3("Rotation", &rot[0], 0.01f)) {
-                            po.set_rotation(rot);
-                            dirty = true;
-                        }
-                        auto sc = po.scale();
-                        if (ImGui::DragFloat3("Scale", &sc[0], 0.01f)) {
-                            po.set_scale(sc);
-                            dirty = true;
-                        }
+                        
 						auto matIndex = po.material_index();
                         if (ImGui::SliderInt("Material Index", &matIndex, -1, mNumMaterials - 1)) {
                             po.set_material_index(matIndex);
