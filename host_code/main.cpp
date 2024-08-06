@@ -17,7 +17,7 @@
 #include "helpers.hpp"
 #include "../shader_includes/host_device_shared.h"
 #include <random>
-//#include "ImGuizmo.h"
+#include "ImGuizmo.h"
 
 #define NUM_TIMESTAMP_QUERIES 5
 #define EXTRA_3D_MODEL "sponza_and_terrain"
@@ -1336,7 +1336,22 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 				justSoThatTheyDontDie = avk::make_array<decltype(meshStr64x1)>(std::move(taskStr64x1), std::move(taskStr128x1), std::move(taskStr8x8), std::move(taskStr16x16), std::move(meshStr64x1), std::move(meshStr128x1), std::move(meshStr8x8), std::move(meshStr16x16)),
 				taskShaderPatchSizeOptions1D, taskShaderPatchSizeOptions2D, meshShaderPatchSizeOptions1D, meshShaderPatchSizeOptions2D
 			]() mutable {
-				//ImGuizmo::BeginFrame();
+				auto res = glm::vec2{ context().main_window()->resolution() };
+				ImGuizmo::BeginFrame();
+				ImGuizmo::SetRect(0, 0, res.x, res.y);
+				//ImGuizmo::AllowAxisFlip(true);
+				//ImGuizmo::Enable(false);
+
+				auto viewMatrix = mOrbitCam.view_matrix();
+				viewMatrix[0] *= -1.0f;
+				auto projMatrix = mOrbitCam.projection_matrix();
+				projMatrix[1][1] *= -1;
+
+				glm::mat4 modelMatrix{ 1.0f };
+				modelMatrix[0] *= -1.0f;
+				
+				ImGuizmo::DrawCubes(glm::value_ptr(viewMatrix), glm::value_ptr(projMatrix), glm::value_ptr(modelMatrix), 1);
+				ImGuizmo::Manipulate(glm::value_ptr(viewMatrix), glm::value_ptr(projMatrix), ImGuizmo::TRANSLATE, ImGuizmo::LOCAL, glm::value_ptr(modelMatrix));
 
 				if (mMeasurementInProgress) {
 					return;
@@ -1380,14 +1395,6 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 				if (updateObjects) {
 					fill_object_data_buffer();
 				}
-
-				//auto viewMatrix = mQuakeCam.view_matrix();
-				//auto projMatrix = mQuakeCam.projection_matrix();
-				//auto modelMatrix = glm::mat4{ 1.0f };
-				//ImGuiIO& io = ImGui::GetIO();
-				//ImGuizmo::SetRect(0, 0, io.DisplaySize.x, io.DisplaySize.y);
-				//ImGuizmo::DrawCubes(glm::value_ptr(viewMatrix), glm::value_ptr(projMatrix), glm::value_ptr(modelMatrix), 1);
-				//ImGuizmo::Manipulate(glm::value_ptr(viewMatrix), glm::value_ptr(projMatrix), ImGuizmo::ROTATE, ImGuizmo::LOCAL, glm::value_ptr(modelMatrix));
 
 				if (mRenderingMethod != rendering_method::stupid_vertex_pipe && 2 == mWhatToRenderParamOrTess) { // if scene composer
                     ImGui::Begin("Scene Composer");
