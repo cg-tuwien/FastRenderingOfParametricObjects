@@ -91,14 +91,14 @@
 //#define POINT_RENDERIN_PATCH_RES_S_Y   1.5f
 
 // ================= UNCOMMENT FOR PATCH->TESS RENDERING METHOD ======================
-// Values: rendering_method::point_rendering | rendering_method::patch_gen_tess_render
-#define TEST_RENDERING_METHOD          rendering_method::patch_gen_tess_render
+// Values: rendering_method::point_rendered | rendering_method::tessellated_rasterized
+#define TEST_RENDERING_METHOD          rendering_method::tessellated_rasterized
 // Values: 0 = Uint64 image | 3 = framebuffer (must use that for SSAA or MSAA)
 #define TEST_TARGET_IMAGE              3
 
 //// ================= UNCOMMENT FOR POINT->PATCH RENDERING METHOD =====================
-//// Values: rendering_method::point_rendering | rendering_method::patch_gen_tess_render
-//#define TEST_RENDERING_METHOD          rendering_method::point_rendering
+//// Values: rendering_method::point_rendered | rendering_method::tessellated_rasterized
+//#define TEST_RENDERING_METHOD          rendering_method::point_rendered
 //// Values: 0 = Uint64 image | 3 = framebuffer (must use that for SSAA or MSAA)
 //#define TEST_TARGET_IMAGE              0
 
@@ -1316,13 +1316,14 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 				bool updateObjects = false;
 				// Draw table of parametric objects available:
 				const float wndWdth = context().main_window()->resolution().x;
-				float previewImageWidth = glm::min(wndWdth * 0.9f / mParametricObjects.size(), 150.0f);
-				ImGui::Begin("Parametric Objects", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoMove);
+				float tableColumnWidth  = wndWdth * 0.9f / mParametricObjects.size();
+				float previewImageWidth = glm::min(wndWdth * 0.9f / mParametricObjects.size(), 100.0f);
+				ImGui::Begin("Parametric Objects", nullptr, ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoMove);
 				ImGui::SetWindowPos(ImVec2(0, 0), ImGuiCond_Once);
 				ImGui::SetWindowSize(ImVec2(wndWdth, 300), ImGuiCond_Once);
-				if (ImGui::BeginTable("table1", mParametricObjects.size())) {
+				if (ImGui::BeginTable("Parametric Objects Table", mParametricObjects.size())) {
 					for (auto& po : mParametricObjects) {
-						ImGui::TableSetupColumn(po.name(), ImGuiTableColumnFlags_WidthFixed, previewImageWidth);
+						ImGui::TableSetupColumn(po.name(), ImGuiTableColumnFlags_WidthFixed, tableColumnWidth);
 					}
 					ImGui::TableHeadersRow();
 
@@ -1333,35 +1334,31 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 						ImGui::Image(inputTexId, ImVec2(previewImageWidth, previewImageWidth), ImVec2(0, 0), ImVec2(1, 1), ImVec4(1.0f, 1.0f, 1.0f, 1.0f), ImVec4(1.0f, 1.0f, 1.0f, 0.5f));
 					}
 
+					int modifyIndex = -1;
 					ImGui::TableNextRow();
 					int poId  = 0;
 					for (auto& po : mParametricObjects) {
 						ImGui::TableNextColumn();
 						ImGui::PushID(poId++);
 						bool enabled = po.is_enabled();
-						if (bool changed = ImGui::Checkbox("Enabled", &enabled)) {
+						if (bool changed = ImGui::Checkbox("Draw", &enabled)) {
 							po.set_enabled(enabled);
 							updateObjects = true;
 						}
-						ImGui::PopID();
-					}
-
-					ImGui::TableNextRow();
-					int modifyIndex = -1;
-					poId = 0;
-					for (auto& po : mParametricObjects) {
-						ImGui::TableNextColumn();
-						ImGui::PushID(poId++);
+						ImGui::SameLine();
 						bool modifying = po.is_modifying();
-						if (bool changed = ImGui::Checkbox("Modify", &modifying)) {
+						if (bool changed = ImGui::Checkbox("Mod.", &modifying)) {
 							modifyIndex = poId - 1;
+							po.set_modifying(modifying);
 						}
 						ImGui::PopID();
 					}
 					if (modifyIndex >= 0) {
 						poId = 0;
 						for (auto& po : mParametricObjects) {
-							po.set_modifying(poId == modifyIndex);
+							if (modifyIndex != poId) {
+								po.set_modifying(false);
+							}
 							poId++;
 						}
 					}
@@ -1380,7 +1377,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 					ImGui::TableNextRow();
 					poId = 0;
 					for (auto& po : mParametricObjects) {
-						howRendered[poId] = po.how_to_render() == rendering_method::point_rendering ? 0 : 1;
+						howRendered[poId] = po.how_to_render() == rendering_method::point_rendered ? 0 : 1;
 						ImGui::TableNextColumn();
 						ImGui::PushID(poId++);
 						ImGui::Text("Rendering method:");
@@ -1391,17 +1388,16 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 					for (auto& po : mParametricObjects) {
 						ImGui::TableNextColumn();
 						ImGui::PushID(poId);
-						ImGui::RadioButton("Point", &howRendered[poId], 0); ImGui::SameLine();
-						ImGui::RadioButton("Tess.", &howRendered[poId], 1);
+						auto howRendered = po.how_to_render();
+						if (ImGui::Combo("##renderingmethod", reinterpret_cast<int*>(&howRendered), "Point-rendered\0Tessellated -> rasterized\0(Wireframe) Tessellated -> rasterized\0Hybrid\0")) {
+							po.set_how_to_render(howRendered);
+						}
 						poId++;
 						ImGui::PopID();
 					}
 
 					poId = 0;
 					for (auto& po : mParametricObjects) {
-						// Set the howRendered choice from above here:
-						po.set_how_to_render(howRendered[poId] == 0 ? rendering_method::point_rendering : rendering_method::patch_gen_tess_render);
-
 						ImGui::TableNextColumn();
 						ImGui::PushID(poId++);
 						bool ss = po.super_sampling_on();
@@ -1443,7 +1439,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 					fill_object_data_buffer();
 				}
 
-				if (mRenderingMethod != rendering_method::stupid_vertex_pipe && 2 == mWhatToRenderParamOrTess) { // if scene composer
+				if (mRenderingMethod != rendering_method::vertices_rasterized && 2 == mWhatToRenderParamOrTess) { // if scene composer
                     ImGui::Begin("Scene Composer");
                     ImGui::SetWindowPos(ImVec2(662, 1.0f), ImGuiCond_FirstUseEver);
                     ImGui::SetWindowSize(ImVec2(400, 643), ImGuiCond_FirstUseEver);
@@ -1507,7 +1503,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 				ImGui::TextColored(ImVec4(.5f, .3f, .4f, 1.f), "Timestamp Period: %.3f ns", timestampPeriod);
 				// Choose your path: POINTS or TRIANGLES?
                 switch (mRenderingMethod) {
-                    case rendering_method::point_rendering:
+                    case rendering_method::point_rendered:
 					    ImGui::TextColored(ImVec4(.2f, 1.f, .2f, 1.f), "Point-Rendering Patches"
 #if PX_FILL_LOCAL_FB
 							" %dx ss (%dx%d)", TILE_FACTOR_X*TILE_FACTOR_Y, TILE_FACTOR_X, TILE_FACTOR_Y
@@ -1516,10 +1512,10 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 #endif 
 						);
 						break;
-                    case rendering_method::stupid_vertex_pipe:
+                    case rendering_method::vertices_rasterized:
 					    ImGui::TextColored(ImVec4(1.f, .2f, .2f, 1.f), "Using Simple-Stupid Vertex Pipe");
 						break;
-                    case rendering_method::patch_gen_tess_render:
+                    case rendering_method::tessellated_rasterized:
 					    ImGui::TextColored(ImVec4(0.2f, .7f, 0.9f, 1.f), "Rendering Tessellated Patches");
 						break;
                     default:
@@ -1528,7 +1524,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 				ImGui::Combo("RENDERING METHOD", reinterpret_cast<int*>(&mRenderingMethod), "PATCH-GEN -> Point Rendering\0PATCH-GEN -> Fixed 64er Tessellation\0Tessellation Standalone\0Simple-Stupid Vertex Pipe\0");
 				ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.3f, 1.0f), "   ^ keys: [F1] => patch->points, [F2] => patch->tess, [F3] => standalone tess, [F4] => vertex");
 				// Choose your path: SPHERE GRID or SINGLE MESHES or SCENE COMPOSER
-				if (mRenderingMethod != rendering_method::stupid_vertex_pipe) {
+				if (mRenderingMethod != rendering_method::vertices_rasterized) {
                     if (ImGui::Combo("What to render?", &mWhatToRenderParamOrTess, "Single Objects [o]\0Sphere Grid [g]\0Scene Composer [c]\0Seashells [m]\0")) {
                         switch (mWhatToRenderParamOrTess) {
                             case 0: LOG_INFO("Filling single object into object data buffer...");                          fill_object_data_buffer_with_single_object(); break;
@@ -1556,15 +1552,15 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 						}
                     }
 					
-					if (mRenderingMethod == rendering_method::point_rendering) {
+					if (mRenderingMethod == rendering_method::point_rendered) {
 						ImGui::Checkbox("Adaptive pixel fill enabled", &mAdaptivePxFill);
 					}
 
-					if (mRenderingMethod == rendering_method::point_rendering || mRenderingMethod == rendering_method::patch_gen_tess_render) {
+					if (mRenderingMethod == rendering_method::point_rendered || mRenderingMethod == rendering_method::tessellated_rasterized || mRenderingMethod == rendering_method::tessellated_rasterized_wireframe) {
 						ImGui::Checkbox("Use individual patch resolution during px fill", &mUseMaxPatchResolutionDuringPxFill);
                     }
 
-					if (mRenderingMethod == rendering_method::patch_gen_tess_render) {
+					if (mRenderingMethod == rendering_method::tessellated_rasterized || mRenderingMethod == rendering_method::tessellated_rasterized_wireframe) {
                         ImGui::PushItemWidth(imGuiWindowWidth * 0.5f);
 						ImGui::SliderFloat("Constant Inner Tessellation Level", &mConstInnerTessLevel, 1.0f, 64.0f);
 						ImGui::SliderFloat("Constant Outer Tessellation Level", &mConstOuterTessLevel, 1.0f, 64.0f);
@@ -1713,7 +1709,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
                     }
                 }
 
-				if (mRenderingMethod == rendering_method::point_rendering || mRenderingMethod == rendering_method::patch_gen_tess_render) {
+				if (mRenderingMethod == rendering_method::point_rendered || mRenderingMethod == rendering_method::tessellated_rasterized || mRenderingMethod == rendering_method::tessellated_rasterized_wireframe) {
 					ImGui::Checkbox("Use individual patch resolution during px fill", &mUseMaxPatchResolutionDuringPxFill);
                     if (ImGui::Button("Triangulate current parametric scene")) {
                         record_triangles_from_parametric();
@@ -1745,10 +1741,10 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 					}
 					ImGui::Separator();
 					ImGui::Text(std::format("{:12L} pixel fill patches spawned", mNumPxFillPatchesCreated).c_str());
-					if (mRenderingMethod == rendering_method::point_rendering) {
+					if (mRenderingMethod == rendering_method::point_rendered) {
 					    ImGui::Text(std::format("{:12L} <-- ^that means x64x64 pixel fills", mNumPxFillPatchesCreated * 64 * 64).c_str());
 					}
-					if (mRenderingMethod == rendering_method::patch_gen_tess_render) {
+					if (mRenderingMethod == rendering_method::tessellated_rasterized || mRenderingMethod == rendering_method::tessellated_rasterized_wireframe) {
 					    ImGui::Text(std::format("{:12L} <-- ^that means {:.1f}x{:.1f} tess patches (inner x outer)", mNumPxFillPatchesCreated * static_cast<uint32_t>(mConstInnerTessLevel + 0.999f) * static_cast<uint32_t>(mConstOuterTessLevel + 0.999f), mConstInnerTessLevel, mConstOuterTessLevel).c_str());
 					}
 				    ImGui::End();
@@ -1803,13 +1799,13 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
         }
 
 		if (input().key_pressed(key_code::f1)) {
-			mRenderingMethod = rendering_method::point_rendering;
+			mRenderingMethod = rendering_method::point_rendered;
 		}
 		if (input().key_pressed(key_code::f2)) {
-			mRenderingMethod = rendering_method::patch_gen_tess_render;
+			mRenderingMethod = rendering_method::tessellated_rasterized;
 		}
         if (input().key_pressed(key_code::f4)) {
-            mRenderingMethod = rendering_method::stupid_vertex_pipe;
+            mRenderingMethod = rendering_method::vertices_rasterized;
         }
 
 		// F6 ... toggle wireframe mode
@@ -1937,13 +1933,14 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 			    mMeasurementInProgress = false;
 				std::string whichMethod = "";
                 switch (mRenderingMethod) {
-                case rendering_method::point_rendering: 
+                case rendering_method::point_rendered: 
 					whichMethod = "patch lod -> compute point rendering";
                     break;
-                case rendering_method::stupid_vertex_pipe:
+                case rendering_method::vertices_rasterized:
                     whichMethod = "ordinary vertex shader-based";
 					break;
-                case rendering_method::patch_gen_tess_render:
+                case rendering_method::tessellated_rasterized:
+                case rendering_method::tessellated_rasterized_wireframe:
 					whichMethod = std::format("patch lod -> fixed tess rendering ({} inner, {} outer)", mConstInnerTessLevel, mConstOuterTessLevel);
 					break;
                 }
@@ -1955,7 +1952,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 				LOG_INFO(            " - mGatherPipelineStats not included in build (!STATS_ENABLED)");
 #endif
                 switch (mRenderingMethod) {
-                case rendering_method::point_rendering: 
+                case rendering_method::point_rendered: 
 					LOG_INFO(std::format(" - Use individual patch resolution during px fill: {}", mUseMaxPatchResolutionDuringPxFill));
 					LOG_INFO(std::format(" - Adaptive pixel fill enabled:                    {}", mAdaptivePxFill));
 					LOG_INFO(std::format(" - PX_FILL_LOCAL_FB enabled: {}", (0 != PX_FILL_LOCAL_FB)));
@@ -1966,7 +1963,8 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 
 #endif
                     break;
-                case rendering_method::patch_gen_tess_render:
+                case rendering_method::tessellated_rasterized:
+                case rendering_method::tessellated_rasterized_wireframe:
 					LOG_INFO(std::format(" - Constant Inner Tessellation Level: {}", mConstInnerTessLevel));
 					LOG_INFO(std::format(" - Constant Outer Tessellation Level: {}", mConstOuterTessLevel));
 					LOG_INFO(std::format(" - Use individual patch resolution during px fill: {}", mUseMaxPatchResolutionDuringPxFill));
@@ -2268,7 +2266,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 
 		std::vector<recorded_commands_t> parametricRenderCmds;
         switch (mRenderingMethod) {
-        case rendering_method::point_rendering:
+        case rendering_method::point_rendered:
 			parametricRenderCmds = command::gather(
                 command::bind_pipeline(mInitPatchesComputePipe.as_reference()),
 				command::bind_descriptors(mInitPatchesComputePipe->layout(), mDescriptorCache->get_or_create_descriptor_sets({
@@ -2370,7 +2368,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 #endif
 			);
 			break;
-        case rendering_method::stupid_vertex_pipe:
+        case rendering_method::vertices_rasterized:
 			parametricRenderCmds = command::gather(
 				command::render_pass(mVertexPipeline->renderpass_reference(), mFramebuffer.as_reference(), command::gather(
 
@@ -2457,7 +2455,8 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 #endif
 		    );
 			break;
-        case rendering_method::patch_gen_tess_render:
+        case rendering_method::tessellated_rasterized:
+        case rendering_method::tessellated_rasterized_wireframe:
 			parametricRenderCmds = command::gather(
 				command::bind_pipeline(mInitPatchesComputePipe.as_reference()),
 				command::bind_descriptors(mInitPatchesComputePipe->layout(), mDescriptorCache->get_or_create_descriptor_sets({
@@ -2570,7 +2569,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 #endif
 
 				command::conditional([this]() {
-						if (rendering_method::point_rendering == mRenderingMethod && mWhatToCopyToBackbuffer > 2) {
+						if (rendering_method::point_rendered == mRenderingMethod && mWhatToCopyToBackbuffer > 2) {
 							if (!mWarnedLastFrame) {
 								LOG_WARNING("Invalid combination: point_rendering and copying framebuffer's color attachment.");
 							}
@@ -2580,7 +2579,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 							mWarnedLastFrame = false;
 						}
 
-						return mWhatToCopyToBackbuffer <= 2 || rendering_method::point_rendering == mRenderingMethod;
+						return mWhatToCopyToBackbuffer <= 2 || rendering_method::point_rendered == mRenderingMethod;
 					},
 				    [&, this] {
 						return command::gather(
@@ -2717,7 +2716,7 @@ private: // v== Member variables ==v
 	avk::buffer mIndirectPxFillParamsBuffer;
 	avk::buffer mIndirectPxFillCountBuffer;
 
-    rendering_method mRenderingMethod = rendering_method::point_rendering;
+    rendering_method mRenderingMethod = rendering_method::tessellated_rasterized;
 
     avk::graphics_pipeline mVertexPipeline;
     avk::graphics_pipeline mTessPipelinePxFill;

@@ -83,9 +83,11 @@ enum struct parametric_object_type : int32_t
 
 enum struct rendering_method : int
 {
-    point_rendering = 0,
-    patch_gen_tess_render,
-    stupid_vertex_pipe
+    point_rendered = 0,
+    tessellated_rasterized,
+    tessellated_rasterized_wireframe,
+    hybrid,
+    vertices_rasterized
 };
 
 // ATTENTION: Whenever you add a new enum item  ^^^  here, also add it to the string  vvv  here!
@@ -106,7 +108,7 @@ public:
         , mParamObjType { objType }
         , mTransformationMatrix{ aTransformationMatrix }
         , mMaterialIndex{ aMaterialIndex }
-        , mRenderingMethod{ rendering_method::patch_gen_tess_render }
+        , mRenderingMethod{ rendering_method::tessellated_rasterized }
         , mSuperSampled{ false }
     { }
 
