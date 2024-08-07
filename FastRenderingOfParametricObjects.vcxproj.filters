@@ -115,6 +115,9 @@
     <None Include="shaders\pass3pre_select_tile_patches.comp">
       <Filter>shaders</Filter>
     </None>
+    <None Include="shaders\copy_to_combined_attachment.comp">
+      <Filter>shaders</Filter>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="precompiled_headers\cg_stdafx.cpp">

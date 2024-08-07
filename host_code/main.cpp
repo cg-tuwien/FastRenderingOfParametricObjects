@@ -696,7 +696,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 			    mBackfaceCullingOn ? cfg::culling_mode::cull_back_faces : cfg::culling_mode::disabled,
 				cfg::viewport_depth_scissors_config::from_framebuffer(mFramebuffer.as_reference()),
 
-				mFramebuffer->renderpass(),
+				mRenderpass,
 				// This is the second subpass and it's gonna be shaded per fragment (i.e., only multi-sampled, not super-sampled):
 				cfg::subpass_index(1), 
 				cfg::shade_per_fragment(), 
@@ -734,7 +734,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 			    mBackfaceCullingOn ? cfg::culling_mode::cull_back_faces : cfg::culling_mode::disabled,
 				cfg::viewport_depth_scissors_config::from_framebuffer(mFramebuffer.as_reference()),
 
-                mFramebuffer->renderpass(),
+                mRenderpass,
 				// This is the first subpass and it's gonna be shaded per sample (i.e., super-sampled):
 				cfg::subpass_index(0), 
 				cfg::shade_per_sample(),
@@ -798,9 +798,9 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
         context().main_window()->add_present_dependency_for_frame(std::move(sem), currentFrameId + 1); 
 
         // Create views for all them images:
-        auto colorAttachmentView   = context().create_image_view(std::move(colorAttachment));
+        mColorAttachmentView       = context().create_image_view(std::move(colorAttachment));
 		auto colorAttachmentViewMS = context().create_image_view(std::move(colorAttachmentMS));
-        auto depthAttachmentView   = context().create_image_view(std::move(depthAttachment));
+        mDepthAttachmentView       = context().create_image_view(std::move(depthAttachment));
         auto depthAttachmentViewMS = context().create_image_view(std::move(depthAttachmentMS));
         mCombinedAttachmentView    = context().create_image_view(std::move(combinedAttachment));
 #if STATS_ENABLED
@@ -817,6 +817,10 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 					stage::none    >>   stage::all_graphics,
 					access::none   >>   access::color_attachment_write | access::depth_stencil_attachment_read | access::depth_stencil_attachment_write
 				},
+				subpass_dependency{subpass::index(0) >> subpass::index(1),
+					stage::all_graphics    >>   stage::all_graphics,
+					access::color_attachment_write | access::depth_stencil_attachment_write   >>   access::color_attachment_write | access::depth_stencil_attachment_read | access::depth_stencil_attachment_write
+				},
 				subpass_dependency{subpass::index(1) >> subpass::external,
 					stage::fragment_shader       | stage::color_attachment_output  >>   stage::compute_shader                                      | stage::transfer,
 					access::shader_storage_write | access::color_attachment_write  >>   access::shader_storage_read | access::shader_storage_write | access::memory_read
@@ -824,8 +828,8 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 			});
 
         mFramebuffer = context().create_framebuffer(mRenderpass, make_vector(
-			colorAttachmentView, 
-			depthAttachmentView,
+			mColorAttachmentView, 
+			mDepthAttachmentView,
 			colorAttachmentViewMS,
 			depthAttachmentViewMS
 		));
@@ -1185,6 +1189,14 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 #endif
 		);
         mUpdater->on(shader_files_changed_event(mClearCombinedAttachmentPipe.as_reference())).update(mClearCombinedAttachmentPipe);
+
+		mCopyToCombinedAttachmentPipe = context().create_compute_pipeline_for(
+			"shaders/copy_to_combined_attachment.comp",
+            descriptor_binding(0, 0, mCombinedAttachmentView->as_storage_image(layout::general)),
+			descriptor_binding(1, 0, mColorAttachmentView->as_sampled_image(layout::transfer_src)),
+			descriptor_binding(1, 1, mDepthAttachmentView->as_sampled_image(layout::transfer_src))
+		);
+        mUpdater->on(shader_files_changed_event(mCopyToCombinedAttachmentPipe.as_reference())).update(mCopyToCombinedAttachmentPipe);
 
 		mUpdater->on(swapchain_resized_event(context().main_window())).invoke([this]() {
 			// Recreate all the resources (framebuffer, aux. image):
@@ -1734,35 +1746,53 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 		return std::forward_as_tuple(std::move(pass2xCommands), firstPing, finalPong);
 	}
 
-	std::vector<avk::recorded_commands_t> get_yarn_cuves_init_commands(const avk::buffer* firstPing, const avk::buffer* finalPong)
+	std::vector<avk::recorded_commands_t> get_init_commands(const avk::buffer* firstPing, const avk::buffer* finalPong) // TODO: I think we can clean this up further, right? => delete firstPing and finalPong?!
 	{
 		using namespace avk;
 		auto mainWnd = context().main_window();
 		auto inFlightIndex = mainWnd->current_in_flight_index();
 
-		std::vector<recorded_commands_t> knitYarnCmds = command::many_for_each(mKnitYarnObjectDataIndices, [&, this] (auto kyIndex) {
-	        return command::gather(
-				command::bind_pipeline(mInitKnitYarnComputePipe.as_reference()),
-				command::bind_descriptors(mInitKnitYarnComputePipe->layout(), mDescriptorCache->get_or_create_descriptor_sets({
-				    descriptor_binding(0, 0, mFrameDataBuffers[inFlightIndex]), 
-			        descriptor_binding(1, 0, mCountersSsbo->as_storage_buffer()),
-				    descriptor_binding(2, 0, mObjectDataBuffer->as_storage_buffer()),
-				    descriptor_binding(2, 1, mIndirectPxFillParamsBuffer->as_storage_buffer()),
-				    descriptor_binding(2, 2, mIndirectPxFillCountBuffer->as_storage_buffer()),
-	                descriptor_binding(3, 0, (*firstPing)->as_storage_buffer()),
-	                descriptor_binding(3, 1, (*finalPong)->as_storage_buffer()),
-	                descriptor_binding(3, 2, mPatchLodCountBuffer->as_storage_buffer())
-				})),
-			    command::push_constants(mInitKnitYarnComputePipe->layout(), uint32_t{ kyIndex }),
-				// We "abuse" the "to"-parameters for the dispatch dimensions:
-                command::dispatch(
-					(glm::clamp(static_cast<uint32_t>(mObjectData[kyIndex].mParams[0]), 1u, 1000u) + 15u) / 16u /* <-- u to */, 
-					(glm::clamp(static_cast<uint32_t>(mObjectData[kyIndex].mParams[1]), 1u, 1000u) + 15u) / 16u /* <-- v to */, 
-					1u)
-    	    );
-        });
-
-		return knitYarnCmds;
+		return command::gather(
+			// Initialize:
+			command::bind_pipeline(mInitPatchesComputePipe.as_reference()),
+			command::bind_descriptors(mInitPatchesComputePipe->layout(), mDescriptorCache->get_or_create_descriptor_sets({
+				descriptor_binding(0, 0, mFrameDataBuffers[inFlightIndex]), 
+			    descriptor_binding(1, 0, mCountersSsbo->as_storage_buffer()),
+				descriptor_binding(2, 0, mObjectDataBuffer->as_storage_buffer()),
+				descriptor_binding(2, 1, mIndirectPxFillParamsBuffer->as_storage_buffer()),
+				descriptor_binding(2, 2, mIndirectPxFillCountBuffer->as_storage_buffer()),
+	            descriptor_binding(3, 0, (*firstPing)->as_storage_buffer()),
+	            descriptor_binding(3, 1, (*finalPong)->as_storage_buffer()),
+	            descriptor_binding(3, 2, mPatchLodCountBuffer->as_storage_buffer())
+			})),
+				
+			// 1st pass compute shader: density estimation PER OBJECT
+			command::dispatch(mNumEnabledObjects, 1u, 1u),
+			
+			// Initialize knit yarn (they need special treatment):
+			command::many_for_each(mKnitYarnObjectDataIndices, [&, this] (auto kyIndex) {
+				return command::gather(
+					command::bind_pipeline(mInitKnitYarnComputePipe.as_reference()),
+					command::bind_descriptors(mInitKnitYarnComputePipe->layout(), mDescriptorCache->get_or_create_descriptor_sets({
+						descriptor_binding(0, 0, mFrameDataBuffers[inFlightIndex]), 
+						descriptor_binding(1, 0, mCountersSsbo->as_storage_buffer()),
+						descriptor_binding(2, 0, mObjectDataBuffer->as_storage_buffer()),
+						descriptor_binding(2, 1, mIndirectPxFillParamsBuffer->as_storage_buffer()),
+						descriptor_binding(2, 2, mIndirectPxFillCountBuffer->as_storage_buffer()),
+						descriptor_binding(3, 0, (*firstPing)->as_storage_buffer()),
+						descriptor_binding(3, 1, (*finalPong)->as_storage_buffer()),
+						descriptor_binding(3, 2, mPatchLodCountBuffer->as_storage_buffer())
+					})),
+					command::push_constants(mInitKnitYarnComputePipe->layout(), uint32_t{ kyIndex }),
+					// We "abuse" the "to"-parameters for the dispatch dimensions:
+					command::dispatch(
+						(glm::clamp(static_cast<uint32_t>(mObjectData[kyIndex].mParams[0]), 1u, 1000u) + 15u) / 16u /* <-- u to */, 
+						(glm::clamp(static_cast<uint32_t>(mObjectData[kyIndex].mParams[1]), 1u, 1000u) + 15u) / 16u /* <-- v to */, 
+						1u
+					)
+    			);
+			})
+		);
 	}
 
 	void render() override
@@ -1863,18 +1893,197 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 		}
 #endif
 
-		// Render tessellated patches into framebuffer (whether or not that is super sampled).
+		// Perform the LOD stage:
+		auto [lodStageCommands, firstPing, finalPong] = get_lod_stage_commands();
+
+		auto initCommands = get_init_commands(firstPing, finalPong);
+
+		// Now render everything:
+		graphics_pipeline& tessPipePxFillToBeUsed = mWireframeModeOn ? mTessPipelinePxFillWireframe : mTessPipelinePxFill;
+		auto gatheredCommands = command::gather(
+#if STATS_ENABLED
+			    commandsBeginStats,
+				mTimestampPool->reset(firstQueryIndex, NUM_TIMESTAMP_QUERIES), // reset the four values relevant for the current frame in flight
+				mTimestampPool->write_timestamp(firstQueryIndex + 0, stage::all_commands), // measure before everything starts
+#endif
+
+				command::bind_pipeline(mClearCombinedAttachmentPipe.as_reference()),
+				command::bind_descriptors(mClearCombinedAttachmentPipe->layout(), mDescriptorCache->get_or_create_descriptor_sets({
+			        descriptor_binding(0, 0, mCountersSsbo->as_storage_buffer()),
+			        descriptor_binding(1, 0, mObjectDataBuffer->as_storage_buffer()),
+			        descriptor_binding(1, 1, mIndirectPxFillParamsBuffer->as_storage_buffer()),
+			        descriptor_binding(1, 2, mIndirectPxFillCountBuffer->as_storage_buffer()),
+                    descriptor_binding(2, 0, mCombinedAttachmentView->as_storage_image(layout::general)),
+#if STATS_ENABLED
+                    descriptor_binding(2, 1, mHeatMapImageView->as_storage_image(layout::general)),
+#endif
+                    descriptor_binding(3, 0, mPatchLodBufferPing->as_storage_buffer()),
+                    descriptor_binding(3, 1, mPatchLodBufferPong->as_storage_buffer()),
+                    descriptor_binding(3, 2, mPatchLodCountBuffer->as_storage_buffer())
+#if PX_FILL_LOCAL_FB && SEPARATE_PATCH_TILE_ASSIGNMENT_PASS
+					, descriptor_binding(4, 0, mTilePatchesBuffer->as_storage_buffer())
+#endif
+				})),
+				command::dispatch((resolution.x + 15u) / 16u, (resolution.y + 15u) / 16u, 1u),
+
+		        sync::global_memory_barrier(stage::all_commands >> stage::all_commands, access::memory_write >> access::memory_write | access::memory_read),
+#if STATS_ENABLED
+				mTimestampPool->write_timestamp(firstQueryIndex + 1, stage::compute_shader), // measure after clearing
+#endif
+				
+			// 1) Initialize:
+			initCommands,
+
+			sync::global_memory_barrier(stage::compute_shader + access::memory_write >> stage::compute_shader + access::memory_read),
+				
+			// 2) LOD Stage:
+            lodStageCommands,
+		
+            sync::global_memory_barrier(stage::compute_shader + access::memory_write >> stage::all_graphics + access::memory_read),
+#if STATS_ENABLED
+			mTimestampPool->write_timestamp(firstQueryIndex + 2, stage::compute_shader),
+			mTimestampPool->write_timestamp(firstQueryIndex + 3, stage::compute_shader),
+#endif
+
+			// 3) Render patches:
+			command::render_pass(mRenderpass.as_reference(), mFramebuffer.as_reference(), command::gather(
+
+				// 3.1) Render tessellated patches into framebuffer (whether or not that is super sampled).
+                command::bind_pipeline(tessPipePxFillToBeUsed.as_reference()),
+				command::bind_descriptors(tessPipePxFillToBeUsed->layout(), mDescriptorCache->get_or_create_descriptor_sets({
+					descriptor_binding(0, 0, mFrameDataBuffers[inFlightIndex]),
+			        descriptor_binding(0, 1, as_combined_image_samplers(mImageSamplers, layout::shader_read_only_optimal)),
+			        descriptor_binding(0, 2, mMaterialBuffer),
+					descriptor_binding(1, 0, mCombinedAttachmentView->as_storage_image(layout::general)),
+#if STATS_ENABLED
+					descriptor_binding(1, 1, mHeatMapImageView->as_storage_image(layout::general)),
+#endif
+			        descriptor_binding(2, 0, mCountersSsbo->as_storage_buffer()),
+				    descriptor_binding(3, 0, mObjectDataBuffer->as_storage_buffer()),
+					descriptor_binding(3, 1, mIndirectPxFillParamsBuffer->as_storage_buffer()),
+				    descriptor_binding(3, 2, mIndirectPxFillCountBuffer->as_storage_buffer())
+				})),
+					
+				command::push_constants(tessPipePxFillToBeUsed->layout(), patch_into_tess_push_constants{ mConstOuterTessLevel, mConstInnerTessLevel }),
+
+				command::draw_vertices_indirect(mIndirectPxFillCountBuffer.as_reference(), 0, sizeof(VkDrawIndirectCommand), 1u), // <-- Exactly ONE draw (but potentially a lot of instances)
+				// 3.2) Render extra 3D models into the same framebuffer (super-sampled or not)
+				command::next_subpass(),
+
+				command::bind_pipeline(mVertexPipeline.as_reference()),
+		        command::bind_descriptors(mVertexPipeline->layout(), mDescriptorCache->get_or_create_descriptor_sets({
+			        descriptor_binding(0, 0, mFrameDataBuffers[inFlightIndex]),
+                    descriptor_binding(0, 1, as_combined_image_samplers(mImageSamplers, layout::shader_read_only_optimal)),
+                    descriptor_binding(0, 2, mMaterialBuffer),
+			        descriptor_binding(1, 0, mCombinedAttachmentView->as_storage_image(layout::general)),
+#if STATS_ENABLED
+			        descriptor_binding(1, 1, mHeatMapImageView->as_storage_image(layout::general)),
+#endif
+                    descriptor_binding(2, 0, mCountersSsbo->as_storage_buffer())
+		        })),
+				command::many_n_times(static_cast<int>(mDrawCalls.size()-mExtra3DModelBeginIndex), [this](int i) {
+					i += mExtra3DModelBeginIndex;
+				    return command::gather(
+				        command::push_constants(mVertexPipeline->layout(), vertex_pipe_push_constants{ 
+						    mDrawCalls[i].mModelMatrix,
+						    mDrawCalls[i].mMaterialIndex
+					    }),
+		                command::draw_indexed(
+					        // Bind and use the index buffer:
+                            std::forward_as_tuple(mIndexBuffer.as_reference(), size_t{mDrawCalls[i].mIndexBufferOffset}, mDrawCalls[i].mNumElements),
+					        // Bind the vertex input buffers in the right order (corresponding to the layout specifiers in the vertex shader)
+					        std::forward_as_tuple(mPositionsBuffer.as_reference(), size_t{mDrawCalls[i].mPositionsBufferOffset}), 
+						    std::forward_as_tuple(mTexCoordsBuffer.as_reference(), size_t{mDrawCalls[i].mTexCoordsBufferOffset}),
+						    std::forward_as_tuple(mNormalsBuffer.as_reference()  , size_t{mDrawCalls[i].mNormalsBufferOffset})
+				        )
+				    );
+		        } )
+
+			)),
+#if STATS_ENABLED
+			mTimestampPool->write_timestamp(firstQueryIndex + 4, stage::fragment_shader),
+#endif
+			// 3.3) Color attachment has been resolved into non-super sampled image
+			// 3.4) TODO: Copy resolved (color + depth) --into--> combined attachment 
+
+			sync::global_memory_barrier(stage::all_commands + access::memory_write >> stage::compute_shader + access::memory_read), // TODO: Barrier too heavy
+
+			command::bind_pipeline(mCopyToCombinedAttachmentPipe.as_reference()),
+				command::bind_descriptors(mCopyToCombinedAttachmentPipe->layout(), mDescriptorCache->get_or_create_descriptor_sets({
+					descriptor_binding(0, 0, mCombinedAttachmentView->as_storage_image(layout::general)),
+					descriptor_binding(1, 0, mColorAttachmentView->as_sampled_image(layout::transfer_src)),
+					descriptor_binding(1, 1, mDepthAttachmentView->as_sampled_image(layout::transfer_src))
+				})),
+			command::dispatch((resolution.x + 15u) / 16u, (resolution.y + 15u) / 16u, 1u),
+
+			sync::global_memory_barrier(stage::compute_shader + access::memory_write >> stage::compute_shader + access::memory_read),
+
+			// 3.5) Perform point rendering into combined attachment 
+
+#if STATS_ENABLED
+			    commandsEndStats,
+#else
+			    // Fascinating: Without that following barrier, we get rendering artifacts in the ABSENCE of the timestamp write!
+			    // TODO:            ^ investigate further!
+			    sync::global_memory_barrier(stage::fragment_shader | stage::compute_shader >> stage::compute_shader, access::shader_write >> access::shader_read),
+#endif
+		
+			// 3.6) Copy combined attachment -> back buffer
+			
 
 
-		// Render extra 3D models into the same framebuffer (super-sampled or not)
 
-		// Resolve
+			// That worked:
+			//sync::image_memory_barrier(context().main_window()->current_backbuffer()->image_at(0),  // Window's back buffer's color attachment
+			//		                    stage::none          >>   stage::blit,
+			//		                    access::none         >>   access::transfer_write)
+			//	.with_layout_transition(layout::undefined   >>   layout::transfer_dst),             // Don't care about the previous layout
 
-		// Resolved (colr + depth) -> combined attachment 
+			//blit_image(mFramebuffer->image_at(0), layout::transfer_src, context().main_window()->current_backbuffer()->image_at(0), layout::transfer_dst, 
+			//			vk::ImageAspectFlagBits::eColor, vk::Filter::eLinear),
 
-		// Perform point rendering intp combined attachment 
+			//sync::image_memory_barrier(context().main_window()->current_backbuffer()->image_at(0),  // Window's back buffer's color attachment
+			//		                    stage::blit                    >>   stage::color_attachment_output, // <-- for ImGui, which draws afterwards
+			//		                    access::transfer_write         >>   access::color_attachment_read | access::color_attachment_write)
+			//	.with_layout_transition(       layout::transfer_dst   >>   layout::color_attachment_optimal)
 
-		// Combined attachment -> back buffer
+
+			// Copy from Uint64 image into back buffer:
+			sync::image_memory_barrier(context().main_window()->current_backbuffer()->image_at(0),  // Window's back buffer's color attachment
+					                    stage::none          >>   stage::compute_shader,
+					                    access::none         >>   access::shader_storage_write)
+				.with_layout_transition(layout::undefined   >>   layout::general),                  // Don't care about the previous layout
+						
+			command::bind_pipeline(mCopyToBackufferPipe.as_reference()),
+			command::push_constants(mCopyToBackufferPipe->layout(), copy_to_backbuffer_push_constants{ 
+				mWhatToCopyToBackbuffer > 1 ? 0 : mWhatToCopyToBackbuffer // 0 => 0, 1 => 1, 2 => 0
+			}),
+			command::bind_descriptors(mCopyToBackufferPipe->layout(), mDescriptorCache->get_or_create_descriptor_sets({
+				descriptor_binding(0, 0, mCombinedAttachmentView->as_storage_image(layout::general)),
+#if STATS_ENABLED
+				descriptor_binding(0, 1, mHeatMapImageView->as_storage_image(layout::general)),
+#endif
+				descriptor_binding(1, 0, context().main_window()->current_backbuffer()->image_view_at(0)->as_storage_image(layout::general))
+			})),
+			command::dispatch((resolution.x + 15u) / 16u, (resolution.y + 15u) / 16u, 1u),
+
+			sync::image_memory_barrier(context().main_window()->current_backbuffer()->image_at(0),  // Window's back buffer's color attachment
+					                    stage::compute_shader          >>   stage::color_attachment_output, // <-- for ImGui, which draws afterwards
+					                    access::shader_storage_write   >>   access::color_attachment_read | access::color_attachment_write)
+				.with_layout_transition(            layout::general   >>   layout::color_attachment_optimal)
+
+
+		);
+
+		// Now, with all the commands recorded => submit all the work to the GPU:
+		context().record(gatheredCommands)
+			.into_command_buffer(cmdBfr)
+			.then_submit_to(*mQueue)
+			// Do not start to render before the image has become available:
+			.waiting_for(imageAvailableSemaphore >> stage::color_attachment_output)
+			.submit();
+		
+		mainWnd->handle_lifetime(std::move(cmdBfr));
 
 		std::chrono::steady_clock::time_point renderEnd = std::chrono::steady_clock::now();
 		auto renderMs = static_cast<double>(std::chrono::duration_cast<std::chrono::milliseconds>(renderEnd - renderBegin).count());
@@ -1944,9 +2153,12 @@ private: // v== Member variables ==v
 	
 	avk::renderpass  mRenderpass;
 	avk::framebuffer mFramebuffer;
+	avk::image_view  mColorAttachmentView;
+	avk::image_view  mDepthAttachmentView;
 	avk::image_view  mCombinedAttachmentView;
     avk::compute_pipeline mCopyToBackufferPipe;
     avk::compute_pipeline mClearCombinedAttachmentPipe;
+    avk::compute_pipeline mCopyToCombinedAttachmentPipe;
 	avk::buffer mObjectDataBuffer;
 	avk::buffer mPatchLodBufferPing;
 	avk::buffer mPatchLodBufferPong;

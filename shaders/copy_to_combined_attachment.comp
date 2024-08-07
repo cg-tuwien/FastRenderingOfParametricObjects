@@ -1,0 +1,37 @@
+#version 460
+#extension GL_EXT_samplerless_texture_functions : require
+#extension GL_EXT_nonuniform_qualifier                   : require
+#extension GL_EXT_shader_image_int64                     : require
+#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
+#extension GL_GOOGLE_include_directive                   : enable
+
+layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+
+#include "../shader_includes/host_device_shared.h"
+#include "../shader_includes/util/ui64_conv.glsl"
+
+// ###### SRC/DST IMAGES #################################
+layout(set = 0, binding = 0, r64ui)  uniform restrict   u64image2D uCombinedAttachment; // TODO: writeonly possible?!
+layout(set = 1, binding = 0) uniform texture2D uColorSrc;
+layout(set = 1, binding = 1) uniform texture2D uDepthSrc;
+// -------------------------------------------------------
+
+#include "../shader_includes/combined_attachment_shared.glsl"
+
+
+
+// ################## compute shader main ###################
+void main()
+{
+	ivec2 iuv = ivec2(gl_GlobalInvocationID.xy);
+
+	// Load color:
+	vec4  color = texelFetch(uColorSrc, iuv, 0).rgba;
+	float depth = texelFetch(uDepthSrc, iuv, 0).r;
+
+	// Convert into ui64 format for combined attachment:
+//	uint64_t combinedValue = combine_depth_and_color(depth_to_ui64(depth), color_to_ui64(color));
+//	imageStore(uCombinedAttachment, iuv, combinedValue);
+
+	writeToCombinedAttachment(iuv, depth, color);
+}

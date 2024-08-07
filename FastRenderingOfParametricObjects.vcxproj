@@ -40,6 +40,7 @@
     <None Include="Auto-Vk-Toolkit\assets\sponza_and_terrain.fscene" />
     <None Include="shaders\clear_r64_image.comp" />
     <None Include="shaders\copy_to_backbuffer.comp" />
+    <None Include="shaders\copy_to_combined_attachment.comp" />
     <None Include="shaders\pass1_init_knityarn.comp" />
     <None Include="shaders\pass1_init_patches.comp" />
     <None Include="shaders\pass2x_patch_lod.comp" />
