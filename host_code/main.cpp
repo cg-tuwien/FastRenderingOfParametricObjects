@@ -1183,20 +1183,6 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 		mVertexPipeline = create_vertex_pipe();
 		mUpdater->on(shader_files_changed_event(mVertexPipeline.as_reference())).update(mVertexPipeline);
 
-		mTessPipelineStandalone = create_tess_pipe(
-			"shaders/standalone-tess/patch_init.vert", 
-			"shaders/standalone-tess/patch_resolution.tesc", 
-			"shaders/standalone-tess/patch_eval.tese",
-            push_constant_binding_data{shader_type::all, 0, sizeof(standalone_tess_push_constants)}
-		);
-		mUpdater->on(shader_files_changed_event(mTessPipelineStandalone.as_reference())).update(mTessPipelineStandalone);
-
-		// Create an (almost identical) pipeline to render the scene in wireframe mode
-		mTessPipelineStandaloneWireframe = context().create_graphics_pipeline_from_template(mTessPipelineStandalone.as_reference(), [](graphics_pipeline_t& p) {
-			p.rasterization_state_create_info().setPolygonMode(vk::PolygonMode::eLine);
-		});
-		mUpdater->on(shader_files_changed_event(mTessPipelineStandaloneWireframe.as_reference())).update(mTessPipelineStandaloneWireframe);
-
 		mTessPipelinePxFill = create_tess_pipe(
 			"shaders/px-fill-tess/patch_ready.vert", 
 			"shaders/px-fill-tess/patch_set.tesc", 
@@ -1551,9 +1537,6 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
                     case rendering_method::stupid_vertex_pipe:
 					    ImGui::TextColored(ImVec4(1.f, .2f, .2f, 1.f), "Using Simple-Stupid Vertex Pipe");
 						break;
-                    case rendering_method::tessellation_standalone:
-					    ImGui::TextColored(ImVec4(1.f, .6f, 0.2f, 1.f), "Tessellation-Pipe Only (no patches)");
-						break;
                     case rendering_method::patch_gen_tess_render:
 					    ImGui::TextColored(ImVec4(0.2f, .7f, 0.9f, 1.f), "Rendering Tessellated Patches");
 						break;
@@ -1843,21 +1826,6 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 					std::swap(*mVertexPipeline, *newVertexPipe); // new pipe is now old pipe
 					context().main_window()->handle_lifetime(std::move(newVertexPipe));
 
-					auto newTessStandalone = create_tess_pipe(
-						"shaders/standalone-tess/patch_init.vert", 
-						"shaders/standalone-tess/patch_resolution.tesc", 
-						"shaders/standalone-tess/patch_eval.tese",
-			            push_constant_binding_data{shader_type::all, 0, sizeof(standalone_tess_push_constants)}
-					);
-					std::swap(*mTessPipelineStandalone, *newTessStandalone);
-					context().main_window()->handle_lifetime(std::move(newTessStandalone));
-
-					auto newTessStandaloneWire = context().create_graphics_pipeline_from_template(mTessPipelineStandalone.as_reference(), [](graphics_pipeline_t& p) {
-						p.rasterization_state_create_info().setPolygonMode(vk::PolygonMode::eLine);
-					});
-					std::swap(*mTessPipelineStandaloneWireframe, *newTessStandaloneWire);
-					context().main_window()->handle_lifetime(std::move(newTessStandaloneWire));
-
 					auto newTessPipePxFill = create_tess_pipe(
 						"shaders/px-fill-tess/patch_ready.vert", 
 						"shaders/px-fill-tess/patch_set.tesc", 
@@ -1905,9 +1873,6 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 		}
 		if (input().key_pressed(key_code::f2)) {
 			mRenderingMethod = rendering_method::patch_gen_tess_render;
-		}
-		if (input().key_pressed(key_code::f3)) {
-			mRenderingMethod = rendering_method::tessellation_standalone;
 		}
         if (input().key_pressed(key_code::f4)) {
             mRenderingMethod = rendering_method::stupid_vertex_pipe;
@@ -2043,9 +2008,6 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
                     break;
                 case rendering_method::stupid_vertex_pipe:
                     whichMethod = "ordinary vertex shader-based";
-					break;
-                case rendering_method::tessellation_standalone:
-					whichMethod = "tessellation standalone";
 					break;
                 case rendering_method::patch_gen_tess_render:
 					whichMethod = std::format("patch lod -> fixed tess rendering ({} inner, {} outer)", mConstInnerTessLevel, mConstOuterTessLevel);
@@ -2369,7 +2331,6 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 		}
 
 		graphics_pipeline& tessPipePxFillToBeUsed = mWireframeModeOn ? mTessPipelinePxFillWireframe : mTessPipelinePxFill;
-		graphics_pipeline& tessPipeStandaloneToBeUsed = mWireframeModeOn ? mTessPipelineStandaloneWireframe : mTessPipelineStandalone;
 
 		std::vector<recorded_commands_t> parametricRenderCmds;
         switch (mRenderingMethod) {
@@ -2623,41 +2584,6 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 #endif
 		    );
 			break;
-        case rendering_method::tessellation_standalone:
-			parametricRenderCmds = command::gather(
-				command::render_pass(tessPipeStandaloneToBeUsed->renderpass_reference(), mFramebuffer.as_reference(), command::gather(
-
-					// Extra 3D model here:
-					extra3DModelRenderCmds,
-
-                    command::bind_pipeline(tessPipeStandaloneToBeUsed.as_reference()),
-					command::bind_descriptors(tessPipeStandaloneToBeUsed->layout(), mDescriptorCache->get_or_create_descriptor_sets({
-						descriptor_binding(0, 0, mFrameDataBuffers[inFlightIndex]),
-			            descriptor_binding(0, 1, as_combined_image_samplers(mImageSamplers, layout::shader_read_only_optimal)),
-			            descriptor_binding(0, 2, mMaterialBuffer),
-						descriptor_binding(1, 0, mCombinedAttachmentView->as_storage_image(layout::general)),
-#if STATS_ENABLED
-						descriptor_binding(1, 1, mHeatMapImageView->as_storage_image(layout::general)),
-#endif
-			            descriptor_binding(2, 0, mCountersSsbo->as_storage_buffer()),
-				        descriptor_binding(3, 0, mObjectDataBuffer->as_storage_buffer()),
-						descriptor_binding(3, 1, mIndirectPxFillParamsBuffer->as_storage_buffer()),
-				        descriptor_binding(3, 2, mIndirectPxFillCountBuffer->as_storage_buffer())
-					})),
-					command::many_n_times(mNumEnabledObjects, [&, this] (auto i) {
-					    return command::gather(
-					        command::push_constants(tessPipeStandaloneToBeUsed->layout(), standalone_tess_push_constants{ i }),
-					        command::draw_vertices(mObjectData[i].mDetailEvalDims.x * mObjectData[i].mDetailEvalDims.y * 4, 1, 0, 0)
-					    );
-                    })
-				))
-#if STATS_ENABLED
-				, mTimestampPool->write_timestamp(firstQueryIndex + 2, stage::fragment_shader)
-				, mTimestampPool->write_timestamp(firstQueryIndex + 3, stage::fragment_shader)
-				, mTimestampPool->write_timestamp(firstQueryIndex + 4, stage::fragment_shader)
-#endif
-		    );
-			break;
         default:
 			assert(false);
 			break;
@@ -2860,8 +2786,6 @@ private: // v== Member variables ==v
     rendering_method mRenderingMethod = rendering_method::point_rendering;
 
     avk::graphics_pipeline mVertexPipeline;
-    avk::graphics_pipeline mTessPipelineStandalone;
-    avk::graphics_pipeline mTessPipelineStandaloneWireframe;
     avk::graphics_pipeline mTessPipelinePxFill;
     avk::graphics_pipeline mTessPipelinePxFillWireframe;
 	float mConstOuterTessLevel = 16.0;

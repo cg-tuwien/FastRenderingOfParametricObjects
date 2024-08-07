@@ -85,7 +85,6 @@ enum struct rendering_method : int
 {
     point_rendering = 0,
     patch_gen_tess_render,
-    tessellation_standalone,
     stupid_vertex_pipe
 };
 
