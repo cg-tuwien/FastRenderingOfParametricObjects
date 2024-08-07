@@ -53,6 +53,6 @@ void main()
 	if (ubo.mWriteToCombinedAttachmentInFragmentShader) {
 		// Just write the same to the image as we write to the framebuffer:
 		// TODO: Color-write to the framebuffer no more!
-		writeToCombinedAttachment(ivec2(gl_FragCoord.xy), gl_FragCoord.z, fs_out.rgb);
+		writeToCombinedAttachment(ivec2(gl_FragCoord.xy) + ivec2(100, 0), gl_FragCoord.z, fs_out.rgb);
 	}
 }
