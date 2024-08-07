@@ -2045,6 +2045,102 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 		}
 	}
 
+	std::tuple<std::vector<avk::recorded_commands_t>, avk::buffer*, avk::buffer*> get_lod_stage_commands()
+	{
+		using namespace avk;
+		auto mainWnd = context().main_window();
+		auto inFlightIndex = mainWnd->current_in_flight_index();
+
+		std::vector<recorded_commands_t> pass2xCommands;
+        pass2xCommands = command::gather(
+            command::bind_pipeline(mPatchLodComputePipe.as_reference()),
+            command::bind_descriptors(mPatchLodComputePipe->layout(), mDescriptorCache->get_or_create_descriptor_sets({
+	            descriptor_binding(0, 0, mFrameDataBuffers[inFlightIndex]), 
+	            descriptor_binding(1, 0, mCountersSsbo->as_storage_buffer()),
+	            descriptor_binding(2, 0, mObjectDataBuffer->as_storage_buffer()),
+	            descriptor_binding(2, 1, mIndirectPxFillParamsBuffer->as_storage_buffer()),
+	            descriptor_binding(2, 2, mIndirectPxFillCountBuffer->as_storage_buffer())
+            }))
+		);
+		buffer* firstPing = nullptr;
+		buffer* finalPong = nullptr;
+        for (uint32_t lodLevel = 0; lodLevel < MAX_PATCH_SUBDIV_STEPS; ++lodLevel) {
+			// ping-pong:
+			bool evenOdd = (lodLevel & 0x1) == 0x0;
+			buffer* ping = evenOdd ? &mPatchLodBufferPing : &mPatchLodBufferPong;
+			buffer* pong = evenOdd ? &mPatchLodBufferPong : &mPatchLodBufferPing;
+
+			if (nullptr == firstPing) {
+				firstPing = ping;
+            }
+
+			auto moreCommands = command::gather(
+                command::bind_descriptors(mPatchLodComputePipe->layout(), mDescriptorCache->get_or_create_descriptor_sets({
+	                descriptor_binding(3, 0, (*ping)->as_storage_buffer()),
+	                descriptor_binding(3, 1, (*pong)->as_storage_buffer()),
+	                descriptor_binding(3, 2, mPatchLodCountBuffer->as_storage_buffer())
+#if DRAW_PATCH_EVAL_DEBUG_VIS
+					, descriptor_binding(4, 0, mCombinedAttachmentView->as_storage_image(layout::general))
+#if STATS_ENABLED
+					, descriptor_binding(4, 1, mHeatMapImageView->as_storage_image(layout::general))
+#endif
+#endif
+                })),
+
+				command::push_constants(mPatchLodComputePipe->layout(), pass2x_push_constants{ 
+					mGatherPipelineStats ? VK_TRUE : VK_FALSE,
+				    lodLevel,
+					mLodStrategy,
+					0 == mLodStrategy ? static_cast<float>(mNumSubdivisions) : mScreenDistanceThreshold,
+					mFrustumCullingOn ? VK_TRUE : VK_FALSE
+				}),
+
+                command::dispatch_indirect(mPatchLodCountBuffer, sizeof(glm::uvec4) * lodLevel),
+
+                sync::global_memory_barrier(stage::compute_shader + access::memory_write >> stage::compute_shader + access::memory_read)
+			);
+			add_commands(pass2xCommands, moreCommands);
+
+			finalPong = pong;
+        }
+		assert(nullptr != firstPing);
+		assert(nullptr != finalPong);
+		assert((MAX_PATCH_SUBDIV_STEPS %2 == 0 && firstPing == finalPong) || (MAX_PATCH_SUBDIV_STEPS %2 == 1 && firstPing != finalPong));
+
+		return std::forward_as_tuple(std::move(pass2xCommands), firstPing, finalPong);
+	}
+
+	std::vector<avk::recorded_commands_t> get_yarn_cuves_init_commands(const avk::buffer* firstPing, const avk::buffer* finalPong)
+	{
+		using namespace avk;
+		auto mainWnd = context().main_window();
+		auto inFlightIndex = mainWnd->current_in_flight_index();
+
+		std::vector<recorded_commands_t> knitYarnCmds = command::many_for_each(mKnitYarnObjectDataIndices, [&, this] (auto kyIndex) {
+	        return command::gather(
+				command::bind_pipeline(mInitKnitYarnComputePipe.as_reference()),
+				command::bind_descriptors(mInitKnitYarnComputePipe->layout(), mDescriptorCache->get_or_create_descriptor_sets({
+				    descriptor_binding(0, 0, mFrameDataBuffers[inFlightIndex]), 
+			        descriptor_binding(1, 0, mCountersSsbo->as_storage_buffer()),
+				    descriptor_binding(2, 0, mObjectDataBuffer->as_storage_buffer()),
+				    descriptor_binding(2, 1, mIndirectPxFillParamsBuffer->as_storage_buffer()),
+				    descriptor_binding(2, 2, mIndirectPxFillCountBuffer->as_storage_buffer()),
+	                descriptor_binding(3, 0, (*firstPing)->as_storage_buffer()),
+	                descriptor_binding(3, 1, (*finalPong)->as_storage_buffer()),
+	                descriptor_binding(3, 2, mPatchLodCountBuffer->as_storage_buffer())
+				})),
+			    command::push_constants(mInitKnitYarnComputePipe->layout(), uint32_t{ kyIndex }),
+				// We "abuse" the "to"-parameters for the dispatch dimensions:
+                command::dispatch(
+					(glm::clamp(static_cast<uint32_t>(mObjectData[kyIndex].mParams[0]), 1u, 1000u) + 15u) / 16u /* <-- u to */, 
+					(glm::clamp(static_cast<uint32_t>(mObjectData[kyIndex].mParams[1]), 1u, 1000u) + 15u) / 16u /* <-- v to */, 
+					1u)
+    	    );
+        });
+
+		return knitYarnCmds;
+	}
+
 	void render() override
 	{
 		using namespace avk;
@@ -2147,83 +2243,8 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 		}
 #endif
 
-		std::vector<recorded_commands_t> pass2xCommands;
-        pass2xCommands = command::gather(
-            command::bind_pipeline(mPatchLodComputePipe.as_reference()),
-            command::bind_descriptors(mPatchLodComputePipe->layout(), mDescriptorCache->get_or_create_descriptor_sets({
-	            descriptor_binding(0, 0, mFrameDataBuffers[inFlightIndex]), 
-	            descriptor_binding(1, 0, mCountersSsbo->as_storage_buffer()),
-	            descriptor_binding(2, 0, mObjectDataBuffer->as_storage_buffer()),
-	            descriptor_binding(2, 1, mIndirectPxFillParamsBuffer->as_storage_buffer()),
-	            descriptor_binding(2, 2, mIndirectPxFillCountBuffer->as_storage_buffer())
-            }))
-		);
-		buffer* firstPing = nullptr;
-		buffer* finalPong = nullptr;
-        for (uint32_t lodLevel = 0; lodLevel < MAX_PATCH_SUBDIV_STEPS; ++lodLevel) {
-			// ping-pong:
-			bool evenOdd = (lodLevel & 0x1) == 0x0;
-			buffer* ping = evenOdd ? &mPatchLodBufferPing : &mPatchLodBufferPong;
-			buffer* pong = evenOdd ? &mPatchLodBufferPong : &mPatchLodBufferPing;
-
-			if (nullptr == firstPing) {
-				firstPing = ping;
-            }
-
-			auto moreCommands = command::gather(
-                command::bind_descriptors(mPatchLodComputePipe->layout(), mDescriptorCache->get_or_create_descriptor_sets({
-	                descriptor_binding(3, 0, (*ping)->as_storage_buffer()),
-	                descriptor_binding(3, 1, (*pong)->as_storage_buffer()),
-	                descriptor_binding(3, 2, mPatchLodCountBuffer->as_storage_buffer())
-#if DRAW_PATCH_EVAL_DEBUG_VIS
-					, descriptor_binding(4, 0, mCombinedAttachmentView->as_storage_image(layout::general))
-#if STATS_ENABLED
-					, descriptor_binding(4, 1, mHeatMapImageView->as_storage_image(layout::general))
-#endif
-#endif
-                })),
-
-				command::push_constants(mPatchLodComputePipe->layout(), pass2x_push_constants{ 
-					mGatherPipelineStats ? VK_TRUE : VK_FALSE,
-				    lodLevel,
-					mLodStrategy,
-					0 == mLodStrategy ? static_cast<float>(mNumSubdivisions) : mScreenDistanceThreshold,
-					mFrustumCullingOn ? VK_TRUE : VK_FALSE
-				}),
-
-                command::dispatch_indirect(mPatchLodCountBuffer, sizeof(glm::uvec4) * lodLevel),
-
-                sync::global_memory_barrier(stage::compute_shader + access::memory_write >> stage::compute_shader + access::memory_read)
-			);
-			add_commands(pass2xCommands, moreCommands);
-
-			finalPong = pong;
-        }
-		assert(nullptr != firstPing);
-		assert(nullptr != finalPong);
-		assert((MAX_PATCH_SUBDIV_STEPS %2 == 0 && firstPing == finalPong) || (MAX_PATCH_SUBDIV_STEPS %2 == 1 && firstPing != finalPong));
-
-		std::vector<recorded_commands_t> knitYarnCmds = command::many_for_each(mKnitYarnObjectDataIndices, [&, this] (auto kyIndex) {
-	        return command::gather(
-				command::bind_pipeline(mInitKnitYarnComputePipe.as_reference()),
-				command::bind_descriptors(mInitKnitYarnComputePipe->layout(), mDescriptorCache->get_or_create_descriptor_sets({
-				    descriptor_binding(0, 0, mFrameDataBuffers[inFlightIndex]), 
-			        descriptor_binding(1, 0, mCountersSsbo->as_storage_buffer()),
-				    descriptor_binding(2, 0, mObjectDataBuffer->as_storage_buffer()),
-				    descriptor_binding(2, 1, mIndirectPxFillParamsBuffer->as_storage_buffer()),
-				    descriptor_binding(2, 2, mIndirectPxFillCountBuffer->as_storage_buffer()),
-	                descriptor_binding(3, 0, (*firstPing)->as_storage_buffer()),
-	                descriptor_binding(3, 1, (*finalPong)->as_storage_buffer()),
-	                descriptor_binding(3, 2, mPatchLodCountBuffer->as_storage_buffer())
-				})),
-			    command::push_constants(mInitKnitYarnComputePipe->layout(), uint32_t{ kyIndex }),
-				// We "abuse" the "to"-parameters for the dispatch dimensions:
-                command::dispatch(
-					(glm::clamp(static_cast<uint32_t>(mObjectData[kyIndex].mParams[0]), 1u, 1000u) + 15u) / 16u /* <-- u to */, 
-					(glm::clamp(static_cast<uint32_t>(mObjectData[kyIndex].mParams[1]), 1u, 1000u) + 15u) / 16u /* <-- v to */, 
-					1u)
-    	    );
-        });
+		// ============> LOD STAGE START:
+		
 
 
 
@@ -2265,6 +2286,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 		graphics_pipeline& tessPipePxFillToBeUsed = mWireframeModeOn ? mTessPipelinePxFillWireframe : mTessPipelinePxFill;
 
 		std::vector<recorded_commands_t> parametricRenderCmds;
+		auto [lodStageCommands, firstPing, finalPong] = get_lod_stage_commands();
         switch (mRenderingMethod) {
         case rendering_method::point_rendered:
 			parametricRenderCmds = command::gather(
@@ -2284,12 +2306,12 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 				command::dispatch(mNumEnabledObjects, 1u, 1u),
 
 				// All the knit yarn inits:
-				knitYarnCmds,
+				get_yarn_cuves_init_commands(firstPing, finalPong),
 
 				sync::global_memory_barrier(stage::compute_shader + access::memory_write >> stage::compute_shader + access::memory_read),
 
 				// 2nd passes: patch lods
-                pass2xCommands,
+                lodStageCommands,
 
 #if STATS_ENABLED
 				mTimestampPool->write_timestamp(firstQueryIndex + 2, stage::compute_shader),
@@ -2474,12 +2496,12 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 				command::dispatch(mNumEnabledObjects, 1u, 1u),
 				
 				// All the knit yarn inits:
-				knitYarnCmds,
+				get_yarn_cuves_init_commands(firstPing, finalPong),
 
 				sync::global_memory_barrier(stage::compute_shader + access::memory_write >> stage::compute_shader + access::memory_read),
 				
 				// 2nd passes: patch lods
-                pass2xCommands,
+                lodStageCommands,
 		
                 sync::global_memory_barrier(stage::compute_shader + access::memory_write >> stage::all_graphics + access::memory_read),
 #if STATS_ENABLED
