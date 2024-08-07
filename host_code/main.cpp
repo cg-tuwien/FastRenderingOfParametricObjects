@@ -1283,22 +1283,6 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 		std::locale::global(std::locale("en_US.UTF-8"));
 		auto imguiManager = current_composition()->element_by_type<imgui_manager>();
         if (nullptr != imguiManager) {
-            auto taskStr64x1                  = std::make_unique<std::string>("  64x1 (" + std::to_string((64 + (mTaskInvocationsExt - 1)) / mTaskInvocationsExt) + " iterations)");
-            auto taskStr128x1                 = std::make_unique<std::string>(" 128x1 (" + std::to_string((128 + (mTaskInvocationsExt - 1)) / mTaskInvocationsExt) + " iterations)");
-            auto taskShaderPatchSizeOptions1D = avk::make_array<const char*>( "  32x1", taskStr64x1->c_str(), taskStr128x1->c_str());
-
-            auto taskStr8x8                   = std::make_unique<std::string>("  8x8  (" + std::to_string((8 * 8 + (mTaskInvocationsExt - 1)) / mTaskInvocationsExt) + " iterations)");
-            auto taskStr16x16                 = std::make_unique<std::string>(" 16x16 (" + std::to_string((16 * 16 + (mTaskInvocationsExt - 1)) / mTaskInvocationsExt) + " iterations)");
-            auto taskShaderPatchSizeOptions2D = avk::make_array<const char*>( "  8x4", "  4x8", taskStr8x8->c_str(), taskStr16x16->c_str());
-			
-            auto meshStr64x1                  = std::make_unique<std::string>("  64x1 (" + std::to_string((64 + (mMeshInvocationsExt - 1)) / mMeshInvocationsExt) + " iterations)");
-            auto meshStr128x1                 = std::make_unique<std::string>(" 128x1 (" + std::to_string((128 + (mMeshInvocationsExt - 1)) / mMeshInvocationsExt) + " iterations)");
-            auto meshShaderPatchSizeOptions1D = avk::make_array<const char*>( "  32x1", meshStr64x1->c_str(), meshStr128x1->c_str());
-
-            auto meshStr8x8                   = std::make_unique<std::string>("  8x8  (" + std::to_string((8 * 8 + (mMeshInvocationsExt - 1)) / mMeshInvocationsExt) + " iterations)");
-            auto meshStr16x16                 = std::make_unique<std::string>(" 16x16 (" + std::to_string((16 * 16 + (mMeshInvocationsExt - 1)) / mMeshInvocationsExt) + " iterations)");
-            auto meshShaderPatchSizeOptions2D = avk::make_array<const char*>( "  8x4", "  4x8", meshStr8x8->c_str(), meshStr16x16->c_str());
-			
 			imguiManager->add_callback([
 				this, imguiManager,
 				timestampPeriod = std::invoke([]() {
@@ -1311,9 +1295,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 				lastPatchLodDuration = 0.0,
 				lastPatchToTileDuration = 0.0,
 				lastRenderduration = 0.0,
-				lastBeginToRenderEndDuration = 0.0,
-				justSoThatTheyDontDie = avk::make_array<decltype(meshStr64x1)>(std::move(taskStr64x1), std::move(taskStr128x1), std::move(taskStr8x8), std::move(taskStr16x16), std::move(meshStr64x1), std::move(meshStr128x1), std::move(meshStr8x8), std::move(meshStr16x16)),
-				taskShaderPatchSizeOptions1D, taskShaderPatchSizeOptions2D, meshShaderPatchSizeOptions1D, meshShaderPatchSizeOptions2D
+				lastBeginToRenderEndDuration = 0.0
 			]() mutable {
 				if (mMeasurementInProgress) {
 					return;
@@ -1699,54 +1681,6 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 				ImGui::Checkbox("Frustum Culling ON", &mFrustumCullingOn);
 				bool rasterPipesNeedRecreation = ImGui::Checkbox("Backface Culling ON", &mBackfaceCullingOn);
 				rasterPipesNeedRecreation =      ImGui::Checkbox("Disable Color Attachment Output" , &mDisableColorAttachmentOut) || rasterPipesNeedRecreation;
-
-    //            ImGui::PushItemWidth(imGuiWindowWidth * 0.6f);
-				//ImGui::Checkbox("Enable hole filling (in px fill shader)", &mHoleFillingEnabled);
-				////ImGui::Checkbox("Enable spawning of triangles (in px fill shader)", &mCreateTrianglesEnabled);
-				//if (ImGui::Checkbox("Enable fill limit (in px fill shader):", &mLimitFilledPixelsInShaders)) {
-				//    for (int i = 2; i < 4; ++i) {
-    //                    mDebugSlidersi[i] = 30; // house number
-    //                }
-				//}
-				//if (mLimitFilledPixelsInShaders) {
-    //                for (int i = 2; i < 4; ++i) {
-    //                    ImGui::DragInt(std::format("limit u (int) #{}", i).c_str(), &mDebugSlidersi[i]);
-    //                }
-    //            }
-				//ImGui::PopItemWidth();
-
-    //            ImGui::PushItemWidth(imGuiWindowWidth * 0.3f);
-				//bool tileSizeChanged = false; // Tile size also changes when we switch between 1D<->2D
-    //            tileSizeChanged = ImGui::Combo("Dimensions of parametric function", &mParamDim, " 1D\0 2D\0");
-    //            ImGui::Text("Task Groups:");
-				//ImGui::SameLine(); ImGui::DragInt("##TaskGroupsX", &mNumTaskGroups[0], 1, 1, 256);
-    //            ImGui::SameLine(); ImGui::Text("x");
-    //            if (mParamDim == 0) {
-    //                ImGui::SameLine(); ImGui::Text("1");
-    //            }
-    //            else {
-    //                ImGui::SameLine(); ImGui::DragInt("##TaskGroupsY", &mNumTaskGroups[1], 1, 1, 256);
-    //            }
-
-    //            if (mParamDim == 0) {
-    //                const auto changed = ImGui::Combo("Task shader tile size", &mTaskTileSize1D, taskShaderPatchSizeOptions1D.data(), taskShaderPatchSizeOptions1D.size());
-				//	tileSizeChanged = tileSizeChanged || changed;
-    //            }
-    //            else {
-    //                const auto changed = ImGui::Combo("Task shader tile size", &mTaskTileSize2D, taskShaderPatchSizeOptions2D.data(), taskShaderPatchSizeOptions2D.size());
-    //                tileSizeChanged    = tileSizeChanged || changed;
-    //            }
-    //            if (mParamDim == 0) {
-    //                const auto changed = ImGui::Combo("Mesh shader tile size", &mMeshTileSize1D, meshShaderPatchSizeOptions1D.data(), meshShaderPatchSizeOptions1D.size());
-    //                tileSizeChanged    = tileSizeChanged || changed;
-    //            }
-    //            else {
-    //                const auto changed = ImGui::Combo("Mesh shader tile size", &mMeshTileSize2D, meshShaderPatchSizeOptions2D.data(), meshShaderPatchSizeOptions2D.size());
-    //                tileSizeChanged    = tileSizeChanged || changed;
-    //            }
-
-			 //   ImGui::Text(" => will spawn %dx%dx%d = %d task shader groups", num_task_groups_x(), num_task_groups_y(), num_task_groups_z(), num_task_groups_total());
-				//ImGui::PopItemWidth();
 
 				ImGui::Text("[F6] ... toggle wireframe mode (currently %s)", mWireframeModeOn ? "ON" : "OFF");
 
