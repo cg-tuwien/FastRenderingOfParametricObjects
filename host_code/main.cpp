@@ -2883,7 +2883,7 @@ int main() // <== Starting point ==
 	int result = EXIT_FAILURE;
 	try {
 		// Create a window and open it
-		auto mainWnd = avk::context().create_window("Parametric Fun with Vulkan");
+		auto mainWnd = avk::context().create_window("Fast Rendering of Parametric Objects on Modern GPUs");
 
 		mainWnd->set_resolution({ 1920, 1080 });
 		mainWnd->request_srgb_framebuffer(false);
@@ -2908,7 +2908,7 @@ int main() // <== Starting point ==
 
 		// Compile all the configuration parameters and the invokees into a "composition":
 		auto composition = configure_and_compose(
-			avk::application_name("Parametric Fun with Vulkan"),
+			avk::application_name("Fast Rendering of Parametric Objects on Modern GPUs"),
 #if defined(_DEBUG)
 			// Enable debug printf:
 			[](avk::validation_layers& validationLayers) {
