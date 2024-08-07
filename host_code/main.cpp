@@ -23,9 +23,6 @@
 #define EXTRA_3D_MODEL "sponza_and_terrain"
 //#define EXTRA_3D_MODEL "SunTemple"
 
-// Enable MSAA (don't foget to set SAMPLE_COUNT)!
-#define MSAA_ENABLED 0
-
 // Sample count possible values:
 // vk::SampleCountFlagBits::e1
 // vk::SampleCountFlagBits::e2
@@ -34,10 +31,7 @@
 // vk::SampleCountFlagBits::e16
 // vk::SampleCountFlagBits::e32
 // vk::SampleCountFlagBits::e64
-#define SAMPLE_COUNT vk::SampleCountFlagBits::e8
-
-#define SSAA_ENABLED 0
-#define SSAA_FACTOR  glm::uvec2(2, 2)
+#define SAMPLE_COUNT vk::SampleCountFlagBits::e4
 
 #define TEST_MODE_ON                   1
 #define TEST_GATHER_PIPELINE_STATS     1
@@ -701,7 +695,11 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
                 cfg::front_face::define_front_faces_to_be_counter_clockwise(),
 			    mBackfaceCullingOn ? cfg::culling_mode::cull_back_faces : cfg::culling_mode::disabled,
 				cfg::viewport_depth_scissors_config::from_framebuffer(mFramebuffer.as_reference()),
-                mFramebuffer->renderpass(),
+
+				mFramebuffer->renderpass(),
+				// This is the second subpass and it's gonna be shaded per fragment (i.e., only multi-sampled, not super-sampled):
+				cfg::subpass_index(1), 
+				cfg::shade_per_fragment(), 
 			
 				mDisableColorAttachmentOut 
 					? cfg::color_blending_config { {}, true , cfg::color_channel::none }
@@ -735,7 +733,11 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
                 cfg::front_face::define_front_faces_to_be_counter_clockwise(),
 			    mBackfaceCullingOn ? cfg::culling_mode::cull_back_faces : cfg::culling_mode::disabled,
 				cfg::viewport_depth_scissors_config::from_framebuffer(mFramebuffer.as_reference()),
+
                 mFramebuffer->renderpass(),
+				// This is the first subpass and it's gonna be shaded per sample (i.e., super-sampled):
+				cfg::subpass_index(0), 
+				cfg::shade_per_sample(),
 
 				mDisableColorAttachmentOut 
 					? cfg::color_blending_config { {}, true , cfg::color_channel::none }
@@ -766,26 +768,16 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 	void create_framebuffer_and_auxiliary_images(std::span<const vk::Format> aAttachmentFormats)
     {
         using namespace avk;
-
-#if MSAA_ENABLED
-		auto colorFormatMS = std::make_tuple(aAttachmentFormats[0], SAMPLE_COUNT);
-		auto depthFormat   = std::make_tuple(aAttachmentFormats[1], SAMPLE_COUNT);
-#else
-		auto colorFormat = aAttachmentFormats[0];
-		auto depthFormat = aAttachmentFormats[1];
-#endif
-
         auto resolution    = context().main_window()->resolution();
-#if SSAA_ENABLED
-		resolution *= SSAA_FACTOR;
-#endif
+		auto colorFormatMS = std::make_tuple(aAttachmentFormats[0], SAMPLE_COUNT);
+		auto depthFormatMS = std::make_tuple(aAttachmentFormats[1], SAMPLE_COUNT);
         auto  colorAttachment    = context().create_image(resolution.x, resolution.y, aAttachmentFormats[0], 1, memory_usage::device,
                                                           image_usage::color_attachment | image_usage::input_attachment | image_usage::sampled | image_usage::tiling_optimal | image_usage::transfer_source);
-#if MSAA_ENABLED
 		auto  colorAttachmentMS  = context().create_image(resolution.x, resolution.y, colorFormatMS, 1, memory_usage::device,
                                                           image_usage::color_attachment | image_usage::input_attachment | image_usage::sampled | image_usage::tiling_optimal | image_usage::transfer_source);
-#endif
-        auto  depthAttachment    = context().create_image(resolution.x, resolution.y, depthFormat, 1, memory_usage::device,
+        auto  depthAttachment    = context().create_image(resolution.x, resolution.y, aAttachmentFormats[1], 1, memory_usage::device,
+                                                          image_usage::depth_stencil_attachment | image_usage::input_attachment | image_usage::sampled | image_usage::tiling_optimal | image_usage::transfer_source);
+        auto  depthAttachmentMS   = context().create_image(resolution.x, resolution.y, depthFormatMS, 1, memory_usage::device,
                                                           image_usage::depth_stencil_attachment | image_usage::input_attachment | image_usage::sampled | image_usage::tiling_optimal | image_usage::transfer_source);
         auto  combinedAttachment = context().create_image(resolution.x, resolution.y, vk::Format::eR64Uint, 1, memory_usage::device, image_usage::shader_storage);
 
@@ -807,30 +799,25 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 
         // Create views for all them images:
         auto colorAttachmentView   = context().create_image_view(std::move(colorAttachment));
-#if MSAA_ENABLED
 		auto colorAttachmentViewMS = context().create_image_view(std::move(colorAttachmentMS));
-#endif
         auto depthAttachmentView   = context().create_image_view(std::move(depthAttachment));
+        auto depthAttachmentViewMS = context().create_image_view(std::move(depthAttachmentMS));
         mCombinedAttachmentView    = context().create_image_view(std::move(combinedAttachment));
 #if STATS_ENABLED
 		mHeatMapImageView          = context().create_image_view(std::move(heatMapImage));
 #endif
 
         mRenderpass = context().create_renderpass({// Define attachments and sub pass usages:
-#if MSAA_ENABLED
-                attachment::declare(aAttachmentFormats[0], on_load::clear.from_previous_layout(layout::undefined), usage::unused                             , on_store::store.in_layout(layout::transfer_src)),
-                attachment::declare(colorFormatMS        , on_load::clear.from_previous_layout(layout::undefined), usage::color(0)     + usage::resolve_to(0), on_store::dont_care),
-                attachment::declare(depthFormat          , on_load::clear.from_previous_layout(layout::undefined), usage::depth_stencil                      , on_store::dont_care)
-#else 
-                attachment::declare(aAttachmentFormats[0], on_load::clear.from_previous_layout(layout::undefined), usage::color(0)     , on_store::store.in_layout(layout::transfer_src)).set_clear_color({0.0f, 0.0f, 0.0f, 0.0f}),
-                attachment::declare(depthFormat          , on_load::clear.from_previous_layout(layout::undefined), usage::depth_stencil, on_store::dont_care)
-#endif
+                attachment::declare(aAttachmentFormats[0], on_load::clear.from_previous_layout(layout::undefined), usage::unused        >> usage::unused                              , on_store::store.in_layout(layout::transfer_src)),
+                attachment::declare(aAttachmentFormats[1], on_load::clear.from_previous_layout(layout::undefined), usage::unused        >> usage::unused                              , on_store::store.in_layout(layout::transfer_src)),
+                attachment::declare(colorFormatMS        , on_load::clear.from_previous_layout(layout::undefined), usage::color(0)      >> usage::color(0)      + usage::resolve_to(0), on_store::dont_care),
+                attachment::declare(depthFormatMS        , on_load::clear.from_previous_layout(layout::undefined), usage::depth_stencil >> usage::depth_stencil + usage::resolve_to(1), on_store::dont_care)
             }, {
 				subpass_dependency{subpass::external >> subpass::index(0),
 					stage::none    >>   stage::all_graphics,
 					access::none   >>   access::color_attachment_write | access::depth_stencil_attachment_read | access::depth_stencil_attachment_write
 				},
-				subpass_dependency{subpass::index(0) >> subpass::external,
+				subpass_dependency{subpass::index(1) >> subpass::external,
 					stage::fragment_shader       | stage::color_attachment_output  >>   stage::compute_shader                                      | stage::transfer,
 					access::shader_storage_write | access::color_attachment_write  >>   access::shader_storage_read | access::shader_storage_write | access::memory_read
 				}
@@ -838,61 +825,10 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 
         mFramebuffer = context().create_framebuffer(mRenderpass, make_vector(
 			colorAttachmentView, 
-#if MSAA_ENABLED
+			depthAttachmentView,
 			colorAttachmentViewMS,
-#endif
-			depthAttachmentView
+			depthAttachmentViewMS
 		));
-    }
-
-    uint32_t num_task_groups_x() const { return static_cast<uint32_t>(mNumTaskGroups[0]); }
-    uint32_t num_task_groups_y() const { return mParamDim == 0 ? 1u : static_cast<uint32_t>(mNumTaskGroups[1]); }
-    uint32_t num_task_groups_z() const { return 1u; }
-    uint32_t num_task_groups_total() const { return num_task_groups_x() * num_task_groups_y() * num_task_groups_z(); }
-	bool is_2d() const { return mParamDim != 0; }
-    glm::uvec2 task_shader_tiles() const
-    {
-        // 1D: " 32x1\0 64x1 (2 iterations)\0 128x1 (4 iterations)\0"
-        // 2D: " 8x4\0 4x8\0 8x8 (2 iterations)\0 16x16 (8 iterations)\0"
-        if (!is_2d()) {
-            switch (mTaskTileSize1D) {
-                case 0: return { 32u, 1u};
-                case 1: return { 64u, 1u};
-                case 2: return {128u, 1u};
-                default: assert(false); return {1u, 1u};
-            }
-        }
-        else {
-            switch (mTaskTileSize2D) {
-                case 0: return { 8u,  4u};
-                case 1: return { 4u,  8u};
-                case 2: return { 8u,  8u};
-                case 3: return {16u, 16u};
-                default: assert(false); return {1u, 1u};
-            }
-        }
-    }
-    glm::uvec2 mesh_shader_tiles() const
-    {
-        // 1D: " 32x1\0 64x1 (2 iterations)\0 128x1 (4 iterations)\0"
-        // 2D: " 8x4\0 4x8\0 8x8 (2 iterations)\0 16x16 (8 iterations)\0"
-        if (mParamDim == 0) {
-            switch (mMeshTileSize1D) {
-                case 0: return { 32u, 1u};
-                case 1: return { 64u, 1u};
-                case 2: return {128u, 1u};
-                default: assert(false); return {1u, 1u};
-            }
-        }
-        else {
-            switch (mMeshTileSize2D) {
-                case 0: return { 8u,  4u};
-                case 1: return { 4u,  8u};
-                case 2: return { 8u,  8u};
-                case 3: return {16u, 16u};
-                default: assert(false); return {1u, 1u};
-            }
-        }
     }
 
 	bool is_knit_yarn(parametric_object_type pot)
@@ -901,122 +837,6 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 			|| pot == parametric_object_type::YarnCurveAnimated
 			|| pot == parametric_object_type::FiberCurve
 			|| pot == parametric_object_type::FiberCurveAnimated;
-	}
-
-	void fill_object_data_buffer_with_single_object()
-	{
-		using namespace avk;
-
-		mObjectData.resize(MAX_OBJECTS, object_data{});
-		auto po = PredefinedParametricObjects[glm::clamp(mSingleObjectToRenderParamOrTess, 0, static_cast<int>(PredefinedParametricObjects.size()))];
-        mObjectData[0].mParams = po.uv_param_ranges();
-		mObjectData[0].mCurveIndex = po.curve_index();
-		mObjectData[0].mDetailEvalDims = po.eval_dims();
-        mObjectData[0].mTransformationMatrix = mSingleObjectOverrideTranslation ? glm::translate(mSingleObjectTranslationOverride) : po.transformation_matrix();
-		mObjectData[0].mMaterialIndex = mSingleObjectOverrideMaterial ? mSingleObjectMaterialOverride : po.material_index();
-
-		if (!is_knit_yarn(po.param_obj_type())) {
-			mNumEnabledObjects = 1;
-			mKnitYarnObjectDataIndices.clear();
-		}
-		else {
-			mNumEnabledObjects = 0;
-			mKnitYarnObjectDataIndices.push_back(0);
-		}
-
-		// Submit:
-		const auto currentFrameId = context().main_window()->current_frame();
-        auto sem = context().record_and_submit_with_semaphore({
-            mObjectDataBuffer->fill(mObjectData.data(), 0)
-		}, *mQueue, stage::transfer);
-			
-		// Ensure that the copy is done before the next frame begins to render:
-        context().main_window()->add_present_dependency_for_frame(std::move(sem), currentFrameId + 1); 
-	}
-
-	void fill_object_data_buffer_with_sphere_grid()
-	{
-		using namespace avk;
-
-		mObjectData.resize(MAX_OBJECTS, object_data{});
-		uint32_t i = 0; 
-        for (const auto pos : mSpherePositions) {
-			auto po = parametric_object{"sphere", "no preview", true, parametric_object_type::Sphere, 0.0f, glm::pi<float>(), 0.0f, glm::two_pi<float>(), glm::translate(glm::vec3{pos})};
-            po.set_eval_dims(glm::uvec4{4, 4, 0, 0});
-
-            mObjectData[i].mParams = po.uv_param_ranges();
-			mObjectData[i].mCurveIndex = po.curve_index();
-			mObjectData[i].mDetailEvalDims = po.eval_dims();
-            mObjectData[i].mTransformationMatrix = po.transformation_matrix();
-			mObjectData[i].mMaterialIndex = po.material_index();
-			++i;
-        }
-
-		mNumEnabledObjects = i;
-		mKnitYarnObjectDataIndices.clear();
-
-		// Submit:
-		const auto currentFrameId = context().main_window()->current_frame();
-        auto sem = context().record_and_submit_with_semaphore({
-            mObjectDataBuffer->fill(mObjectData.data(), 0)
-		}, *mQueue, stage::transfer);
-			
-		// Ensure that the copy is done before the next frame begins to render:
-        context().main_window()->add_present_dependency_for_frame(std::move(sem), currentFrameId + 1); 
-	}
-
-	void fill_object_data_buffer_with_seashell_grid()
-	{
-		using namespace avk;
-		
-		mObjectData.resize(MAX_OBJECTS, object_data{});
-
-		// Produce always the same floats with a constant seed:
-		std::mt19937 engine(666);
-		std::uniform_real_distribution<float> distf(0.0f, 1.0f);
-		std::uniform_int_distribution<int> distType(0, 2);
-		std::uniform_int_distribution<int> distRot(0, 1);
-
-        for (uint32_t i = 0; i < MAX_OBJECTS; ++i) {
-			auto shellType = distType(engine);
-			auto circlePos = distf(engine) * glm::two_pi<float>();
-			auto circleRadius = distf(engine) * 10.0f;
-			auto scale = distf(engine) * 0.05f + 0.05f;
-			auto whichRotation = distRot(engine);
-			auto xRotMult      = static_cast<float>(whichRotation);
-			auto zRotMult      = static_cast<float>(1 - whichRotation);
-			auto rotationSign  = distRot(engine);
-			auto rotationMult  = 1.0f - 2.0f * static_cast<float>(rotationSign);
-			auto rotationAmount= shellType == 0 ? 2.23f : 1.93f;
-			auto yRot          = distf(engine) * glm::two_pi<float>();
-			auto po = parametric_object{"seashell", "no preview", true,
-				shellType == 0 ? parametric_object_type::Seashell1 : shellType == 1 ? parametric_object_type::Seashell2 : parametric_object_type::Seashell3,
-				0.0f, glm::two_pi<float>() * 8.0f,  0.0f,  glm::two_pi<float>(),
-				/* translation: */ glm::translate(glm::vec3{ 0.42f + cos(circlePos) * circleRadius, -0.05f, 7.8f + sin(circlePos) * circleRadius }) *
-				/* scale:       */ glm::scale(glm::vec3{ scale }) * 
-				/* rotation:    */ glm::mat4_cast(glm::quat(glm::vec3{ rotationMult * rotationAmount * xRotMult, yRot, rotationMult * rotationAmount * zRotMult })),
-				/* material id: */ 2
-			};
-            po.set_eval_dims(glm::uvec4{4, 4, 0, 0});
-
-            mObjectData[i].mParams = po.uv_param_ranges();
-			mObjectData[i].mCurveIndex = po.curve_index();
-			mObjectData[i].mDetailEvalDims = po.eval_dims();
-            mObjectData[i].mTransformationMatrix = po.transformation_matrix();
-			mObjectData[i].mMaterialIndex = po.material_index();
-        }
-
-		mNumEnabledObjects = MAX_OBJECTS;
-		mKnitYarnObjectDataIndices.clear();
-
-		// Submit:
-		const auto currentFrameId = context().main_window()->current_frame();
-        auto sem = context().record_and_submit_with_semaphore({
-            mObjectDataBuffer->fill(mObjectData.data(), 0)
-		}, *mQueue, stage::transfer);
-			
-		// Ensure that the copy is done before the next frame begins to render:
-        context().main_window()->add_present_dependency_for_frame(std::move(sem), currentFrameId + 1); 
 	}
 
 	void fill_object_data_buffer()
@@ -1029,10 +849,8 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 
 		uint32_t i = 0; 
 	    for (const auto& po : mParametricObjects) {
-            if (0 != mWhatToRenderParamOrTess) { // if not single object
-                if (!po.is_enabled()) {
-                    continue;
-                }
+            if (!po.is_enabled()) {
+                continue;
             }
 
 			object_data tmp;
@@ -1067,6 +885,149 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 			
 		// Ensure that the copy is done before the next frame begins to render:
         context().main_window()->add_present_dependency_for_frame(std::move(sem), currentFrameId + 1); 
+	}
+
+	void draw_parametric_objects_ui(avk::imgui_manager* aImguiManager)
+	{
+		using namespace avk;
+
+		// Draw some ImGuizmo?!
+		auto res = glm::vec2{ context().main_window()->resolution() };
+		ImGuizmo::BeginFrame();
+		ImGuizmo::SetRect(0, 0, res.x, res.y);
+		//ImGuizmo::AllowAxisFlip(true);
+		//ImGuizmo::Enable(false);
+
+		auto viewMatrix = mOrbitCam.view_matrix();
+		auto projMatrix = mOrbitCam.projection_matrix();
+		projMatrix[1][1] *= -1;
+
+
+		bool updateObjects = false;
+		// Draw table of parametric objects available:
+		const float wndWdth = context().main_window()->resolution().x;
+		float tableColumnWidth  = wndWdth * 0.9f / mParametricObjects.size();
+		float previewImageWidth = glm::min(wndWdth * 0.9f / mParametricObjects.size(), 100.0f);
+		ImGui::Begin("Parametric Objects", nullptr, ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoMove);
+		ImGui::SetWindowPos(ImVec2(0, 0), ImGuiCond_Once);
+		ImGui::SetWindowSize(ImVec2(wndWdth, 300), ImGuiCond_Once);
+		if (ImGui::BeginTable("Parametric Objects Table", mParametricObjects.size())) {
+			for (auto& po : mParametricObjects) {
+				ImGui::TableSetupColumn(po.name(), ImGuiTableColumnFlags_WidthFixed, tableColumnWidth);
+			}
+			ImGui::TableHeadersRow();
+
+			ImGui::TableNextRow();
+			for (auto& po : mParametricObjects) {
+				ImGui::TableNextColumn();
+				ImTextureID inputTexId = aImguiManager->get_or_create_texture_descriptor(mPreviewImageSamplers[po.preview_image_path()].as_reference(), avk::layout::shader_read_only_optimal);
+				ImGui::Image(inputTexId, ImVec2(previewImageWidth, previewImageWidth), ImVec2(0, 0), ImVec2(1, 1), ImVec4(1.0f, 1.0f, 1.0f, 1.0f), ImVec4(1.0f, 1.0f, 1.0f, 0.5f));
+			}
+
+			int modifyIndex = -1;
+			ImGui::TableNextRow();
+			int poId  = 0;
+			for (auto& po : mParametricObjects) {
+				ImGui::TableNextColumn();
+				ImGui::PushID(poId++);
+				bool enabled = po.is_enabled();
+				if (bool changed = ImGui::Checkbox("Draw", &enabled)) {
+					po.set_enabled(enabled);
+					updateObjects = true;
+				}
+				ImGui::SameLine();
+				bool modifying = po.is_modifying();
+				if (bool changed = ImGui::Checkbox("Mod.", &modifying)) {
+					modifyIndex = poId - 1;
+					po.set_modifying(modifying);
+				}
+				ImGui::PopID();
+			}
+			if (modifyIndex >= 0) {
+				poId = 0;
+				for (auto& po : mParametricObjects) {
+					if (modifyIndex != poId) {
+						po.set_modifying(false);
+					}
+					poId++;
+				}
+			}
+			for (auto& po : mParametricObjects) {
+				bool modifying = po.is_modifying();
+				if (modifying) {
+					glm::mat4 modelMatrix = po.transformation_matrix();
+					if (ImGuizmo::Manipulate(glm::value_ptr(viewMatrix), glm::value_ptr(projMatrix), ImGuizmo::UNIVERSAL, ImGuizmo::LOCAL, glm::value_ptr(modelMatrix))) {
+						po.set_transformation_matrix(modelMatrix);
+						updateObjects = true;
+					}
+				}
+			}
+
+			std::vector<int> howRendered(mParametricObjects.size(), 0);
+			ImGui::TableNextRow();
+			poId = 0;
+			for (auto& po : mParametricObjects) {
+				howRendered[poId] = po.how_to_render() == rendering_method::point_rendered ? 0 : 1;
+				ImGui::TableNextColumn();
+				ImGui::PushID(poId++);
+				ImGui::Text("Rendering method:");
+				ImGui::PopID();
+			}
+			ImGui::TableNextRow();
+			poId = 0;
+			for (auto& po : mParametricObjects) {
+				ImGui::TableNextColumn();
+				ImGui::PushID(poId);
+				auto howRendered = po.how_to_render();
+				if (ImGui::Combo("##renderingmethod", reinterpret_cast<int*>(&howRendered), "Point-rendered\0Tessellated -> rasterized\0(Wireframe) Tessellated -> rasterized\0Hybrid\0")) {
+					po.set_how_to_render(howRendered);
+				}
+				poId++;
+				ImGui::PopID();
+			}
+
+			poId = 0;
+			for (auto& po : mParametricObjects) {
+				ImGui::TableNextColumn();
+				ImGui::PushID(poId++);
+				bool ss = po.super_sampling_on();
+				if (ImGui::Checkbox("Super-Sampled", &ss)) {
+					po.set_super_sampling(ss);
+				}
+				ImGui::PopID();
+			}
+
+			int duplicateIndex = -1;
+			int deleteIndex = -1;
+			poId = 0;
+			for (auto& po : mParametricObjects) {
+				ImGui::TableNextColumn();
+				ImGui::PushID(poId++);
+				if (ImGui::Button("Dupl.")) {
+					duplicateIndex = poId - 1;
+				}
+				ImGui::SameLine();
+				if (ImGui::Button("Del.")) {
+					deleteIndex = poId - 1;
+				}
+				ImGui::PopID();
+			}
+			// Perform dupl. or del. action:
+			if (duplicateIndex >= 0) {
+				mParametricObjects.insert(mParametricObjects.begin() + duplicateIndex + 1, mParametricObjects[duplicateIndex]);
+				updateObjects = true;
+			}
+			if (deleteIndex >= 0) {
+				mParametricObjects.erase(mParametricObjects.begin() + deleteIndex);
+				updateObjects = true;
+			}
+
+			ImGui::EndTable();
+		}
+		ImGui::End();
+		if (updateObjects) {
+			fill_object_data_buffer();
+		}
 	}
 
     void initialize() override
@@ -1123,12 +1084,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 			memory_usage::device, {},
 			storage_buffer_meta::create_from_size(MAX_OBJECTS * sizeof(object_data))
 		);
-		mSingleObjectToRenderParamOrTess = 0;
-		while (mSingleObjectToRenderParamOrTess < PredefinedParametricObjects.size() && !PredefinedParametricObjects[mSingleObjectToRenderParamOrTess].is_enabled()) {
-			++mSingleObjectToRenderParamOrTess;
-		}
-		fill_object_data_buffer_with_single_object();
-		//fill_object_data_buffer_with_seashell_grid();
+		fill_object_data_buffer();
 
 		// Create buffers for the patch LOD steps ("ping/pong"):
 		mPatchLodBufferPing = context().create_buffer(
@@ -1301,195 +1257,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 					return;
 				}
 
-				// Draw some ImGuizmo?!
-				auto res = glm::vec2{ context().main_window()->resolution() };
-				ImGuizmo::BeginFrame();
-				ImGuizmo::SetRect(0, 0, res.x, res.y);
-				//ImGuizmo::AllowAxisFlip(true);
-				//ImGuizmo::Enable(false);
-
-				auto viewMatrix = mOrbitCam.view_matrix();
-				auto projMatrix = mOrbitCam.projection_matrix();
-				projMatrix[1][1] *= -1;
-
-
-				bool updateObjects = false;
-				// Draw table of parametric objects available:
-				const float wndWdth = context().main_window()->resolution().x;
-				float tableColumnWidth  = wndWdth * 0.9f / mParametricObjects.size();
-				float previewImageWidth = glm::min(wndWdth * 0.9f / mParametricObjects.size(), 100.0f);
-				ImGui::Begin("Parametric Objects", nullptr, ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoMove);
-				ImGui::SetWindowPos(ImVec2(0, 0), ImGuiCond_Once);
-				ImGui::SetWindowSize(ImVec2(wndWdth, 300), ImGuiCond_Once);
-				if (ImGui::BeginTable("Parametric Objects Table", mParametricObjects.size())) {
-					for (auto& po : mParametricObjects) {
-						ImGui::TableSetupColumn(po.name(), ImGuiTableColumnFlags_WidthFixed, tableColumnWidth);
-					}
-					ImGui::TableHeadersRow();
-
-					ImGui::TableNextRow();
-					for (auto& po : mParametricObjects) {
-						ImGui::TableNextColumn();
-						ImTextureID inputTexId = imguiManager->get_or_create_texture_descriptor(mPreviewImageSamplers[po.preview_image_path()].as_reference(), avk::layout::shader_read_only_optimal);
-						ImGui::Image(inputTexId, ImVec2(previewImageWidth, previewImageWidth), ImVec2(0, 0), ImVec2(1, 1), ImVec4(1.0f, 1.0f, 1.0f, 1.0f), ImVec4(1.0f, 1.0f, 1.0f, 0.5f));
-					}
-
-					int modifyIndex = -1;
-					ImGui::TableNextRow();
-					int poId  = 0;
-					for (auto& po : mParametricObjects) {
-						ImGui::TableNextColumn();
-						ImGui::PushID(poId++);
-						bool enabled = po.is_enabled();
-						if (bool changed = ImGui::Checkbox("Draw", &enabled)) {
-							po.set_enabled(enabled);
-							updateObjects = true;
-						}
-						ImGui::SameLine();
-						bool modifying = po.is_modifying();
-						if (bool changed = ImGui::Checkbox("Mod.", &modifying)) {
-							modifyIndex = poId - 1;
-							po.set_modifying(modifying);
-						}
-						ImGui::PopID();
-					}
-					if (modifyIndex >= 0) {
-						poId = 0;
-						for (auto& po : mParametricObjects) {
-							if (modifyIndex != poId) {
-								po.set_modifying(false);
-							}
-							poId++;
-						}
-					}
-					for (auto& po : mParametricObjects) {
-						bool modifying = po.is_modifying();
-						if (modifying) {
-							glm::mat4 modelMatrix = po.transformation_matrix();
-							if (ImGuizmo::Manipulate(glm::value_ptr(viewMatrix), glm::value_ptr(projMatrix), ImGuizmo::UNIVERSAL, ImGuizmo::LOCAL, glm::value_ptr(modelMatrix))) {
-								po.set_transformation_matrix(modelMatrix);
-								updateObjects = true;
-							}
-						}
-					}
-
-					std::vector<int> howRendered(mParametricObjects.size(), 0);
-					ImGui::TableNextRow();
-					poId = 0;
-					for (auto& po : mParametricObjects) {
-						howRendered[poId] = po.how_to_render() == rendering_method::point_rendered ? 0 : 1;
-						ImGui::TableNextColumn();
-						ImGui::PushID(poId++);
-						ImGui::Text("Rendering method:");
-						ImGui::PopID();
-					}
-					ImGui::TableNextRow();
-					poId = 0;
-					for (auto& po : mParametricObjects) {
-						ImGui::TableNextColumn();
-						ImGui::PushID(poId);
-						auto howRendered = po.how_to_render();
-						if (ImGui::Combo("##renderingmethod", reinterpret_cast<int*>(&howRendered), "Point-rendered\0Tessellated -> rasterized\0(Wireframe) Tessellated -> rasterized\0Hybrid\0")) {
-							po.set_how_to_render(howRendered);
-						}
-						poId++;
-						ImGui::PopID();
-					}
-
-					poId = 0;
-					for (auto& po : mParametricObjects) {
-						ImGui::TableNextColumn();
-						ImGui::PushID(poId++);
-						bool ss = po.super_sampling_on();
-						if (ImGui::Checkbox("Super-Sampled", &ss)) {
-							po.set_super_sampling(ss);
-						}
-						ImGui::PopID();
-					}
-
-					int duplicateIndex = -1;
-					int deleteIndex = -1;
-					poId = 0;
-					for (auto& po : mParametricObjects) {
-						ImGui::TableNextColumn();
-						ImGui::PushID(poId++);
-						if (ImGui::Button("Dupl.")) {
-							duplicateIndex = poId - 1;
-						}
-						ImGui::SameLine();
-						if (ImGui::Button("Del.")) {
-							deleteIndex = poId - 1;
-						}
-						ImGui::PopID();
-					}
-					// Perform dupl. or del. action:
-					if (duplicateIndex >= 0) {
-						mParametricObjects.insert(mParametricObjects.begin() + duplicateIndex + 1, mParametricObjects[duplicateIndex]);
-						updateObjects = true;
-					}
-					if (deleteIndex >= 0) {
-						mParametricObjects.erase(mParametricObjects.begin() + deleteIndex);
-						updateObjects = true;
-					}
-
-					ImGui::EndTable();
-				}
-				ImGui::End();
-				if (updateObjects) {
-					fill_object_data_buffer();
-				}
-
-				if (mRenderingMethod != rendering_method::vertices_rasterized && 2 == mWhatToRenderParamOrTess) { // if scene composer
-                    ImGui::Begin("Scene Composer");
-                    ImGui::SetWindowPos(ImVec2(662, 1.0f), ImGuiCond_FirstUseEver);
-                    ImGui::SetWindowSize(ImVec2(400, 643), ImGuiCond_FirstUseEver);
-                    int  poId  = 0;
-                    bool dirty = false;
-                    for (auto& po : mParametricObjects) {
-                        ImGui::PushID(poId++);
-                        bool isEnabled = po.is_enabled();
-                        if (ImGui::Checkbox("#IsEnabled", &isEnabled)) {
-                            po.set_enabled(isEnabled);
-                            dirty = true;
-                        }
-                        ImGui::SameLine();
-                        ImGui::Text(std::format("Parametric Object #{}", poId).c_str());
-                        ImGui::Indent();
-                        auto curveIndex = po.curve_index();
-                        if (ImGui::Combo("Curve Type", &curveIndex, PARAMETRIC_OBJECT_TYPE_UI_STRING)) {
-                            po.set_curve_index(curveIndex);
-                            dirty = true;
-                        }
-                        auto uParams = po.u_param_range();
-                        if (ImGui::DragFloat2("Param u from..to", &uParams[0], 0.1f)) {
-                            po.set_u_param_range(uParams);
-                            dirty = true;
-                        }
-                        auto vParams = po.v_param_range();
-                        if (ImGui::DragFloat2("Param v from..to", &vParams[0], 0.1f)) {
-                            po.set_v_param_range(vParams);
-                            dirty = true;
-                        }
-                        auto evalDims = glm::ivec4{po.eval_dims()};
-                        if (ImGui::SliderInt2("Eval. dimensions", &evalDims[0], 1, 16)) {
-                            po.set_eval_dims(evalDims);
-                            dirty = true;
-                        }
-                        
-						auto matIndex = po.material_index();
-                        if (ImGui::SliderInt("Material Index", &matIndex, -1, mNumMaterials - 1)) {
-                            po.set_material_index(matIndex);
-                            dirty = true;
-                        }
-                        ImGui::Unindent();
-                        ImGui::PopID();
-                    }
-                    ImGui::End();
-                    if (dirty) {
-                        fill_object_data_buffer();
-                        dirty = false;
-                    }
-                }
+				draw_parametric_objects_ui(imguiManager);
 
 				ImGui::Begin("Info & Settings");
 			    const auto imGuiWindowWidth = ImGui::GetWindowWidth();
@@ -1501,78 +1269,6 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 				ImGui::Text("%.1lf ms/render() CPU time", mRenderDurationMs);
 				ImGui::Separator();
 				ImGui::TextColored(ImVec4(.5f, .3f, .4f, 1.f), "Timestamp Period: %.3f ns", timestampPeriod);
-				// Choose your path: POINTS or TRIANGLES?
-                switch (mRenderingMethod) {
-                    case rendering_method::point_rendered:
-					    ImGui::TextColored(ImVec4(.2f, 1.f, .2f, 1.f), "Point-Rendering Patches"
-#if PX_FILL_LOCAL_FB
-							" %dx ss (%dx%d)", TILE_FACTOR_X*TILE_FACTOR_Y, TILE_FACTOR_X, TILE_FACTOR_Y
-#else
-							" ~1ppp"
-#endif 
-						);
-						break;
-                    case rendering_method::vertices_rasterized:
-					    ImGui::TextColored(ImVec4(1.f, .2f, .2f, 1.f), "Using Simple-Stupid Vertex Pipe");
-						break;
-                    case rendering_method::tessellated_rasterized:
-					    ImGui::TextColored(ImVec4(0.2f, .7f, 0.9f, 1.f), "Rendering Tessellated Patches");
-						break;
-                    default:
-					    ImGui::TextColored(ImVec4(1.f, 0.f, 0.f, 1.f), "Unknown mRenderingMethod (<- Bug!)");
-                }
-				ImGui::Combo("RENDERING METHOD", reinterpret_cast<int*>(&mRenderingMethod), "PATCH-GEN -> Point Rendering\0PATCH-GEN -> Fixed 64er Tessellation\0Tessellation Standalone\0Simple-Stupid Vertex Pipe\0");
-				ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.3f, 1.0f), "   ^ keys: [F1] => patch->points, [F2] => patch->tess, [F3] => standalone tess, [F4] => vertex");
-				// Choose your path: SPHERE GRID or SINGLE MESHES or SCENE COMPOSER
-				if (mRenderingMethod != rendering_method::vertices_rasterized) {
-                    if (ImGui::Combo("What to render?", &mWhatToRenderParamOrTess, "Single Objects [o]\0Sphere Grid [g]\0Scene Composer [c]\0Seashells [m]\0")) {
-                        switch (mWhatToRenderParamOrTess) {
-                            case 0: LOG_INFO("Filling single object into object data buffer...");                          fill_object_data_buffer_with_single_object(); break;
-                            case 1: LOG_INFO("Filling sphere grid into object data buffer...");                            fill_object_data_buffer_with_sphere_grid();   break;
-                            case 2: LOG_INFO("Filling scene data into object data buffer...");                             fill_object_data_buffer();                    break;
-							case 3: LOG_INFO(std::format("Filling {} seashells into object data buffer...", MAX_OBJECTS)); fill_object_data_buffer_with_seashell_grid(); break;
-					    }
-                    }
-                    if (0 == mWhatToRenderParamOrTess) {
-						bool soChanged = false;
-                        soChanged = ImGui::SliderInt("Single object to render", &mSingleObjectToRenderParamOrTess, 0, static_cast<int>(PredefinedParametricObjects.size())-1) || soChanged;
-						soChanged = ImGui::Checkbox(" ^ override transl.: ", &mSingleObjectOverrideTranslation) || soChanged;
-						if (mSingleObjectOverrideTranslation) {
-							ImGui::SameLine(); ImGui::SetNextItemWidth(imGuiWindowWidth * 0.5f);
-							soChanged = ImGui::DragFloat3("###overridetranslation", &mSingleObjectTranslationOverride[0]) || soChanged;
-						}
-						soChanged = ImGui::Checkbox(" ^ override mat.   : ", &mSingleObjectOverrideMaterial) || soChanged;
-						if (mSingleObjectOverrideMaterial) {
-							ImGui::SameLine(); ImGui::SetNextItemWidth(imGuiWindowWidth * 0.5f);
-							soChanged = ImGui::SliderInt("###overridematerialindex", &mSingleObjectMaterialOverride, -1, mNumMaterials - 1) || soChanged;
-						}
-						if (soChanged) {
-							LOG_INFO(std::format("Filling single object #{} into object data buffer...", mSingleObjectToRenderParamOrTess));
-							fill_object_data_buffer_with_single_object();
-						}
-                    }
-					
-					if (mRenderingMethod == rendering_method::point_rendered) {
-						ImGui::Checkbox("Adaptive pixel fill enabled", &mAdaptivePxFill);
-					}
-
-					if (mRenderingMethod == rendering_method::point_rendered || mRenderingMethod == rendering_method::tessellated_rasterized || mRenderingMethod == rendering_method::tessellated_rasterized_wireframe) {
-						ImGui::Checkbox("Use individual patch resolution during px fill", &mUseMaxPatchResolutionDuringPxFill);
-                    }
-
-					if (mRenderingMethod == rendering_method::tessellated_rasterized || mRenderingMethod == rendering_method::tessellated_rasterized_wireframe) {
-                        ImGui::PushItemWidth(imGuiWindowWidth * 0.5f);
-						ImGui::SliderFloat("Constant Inner Tessellation Level", &mConstInnerTessLevel, 1.0f, 64.0f);
-						ImGui::SliderFloat("Constant Outer Tessellation Level", &mConstOuterTessLevel, 1.0f, 64.0f);
-						ImGui::PopItemWidth();
-                    }
-				}
-				else { // => simple stupid vertex pipe
-					ImGui::Combo("What to render?", &mWhatToRenderStupidVert, "Single Objects\0Sphere Grid\0Scene Composer\0");
-                    if (0 == mWhatToRenderStupidVert) {
-                        ImGui::SliderInt("Single object to render", &mSingleObjectToRenderStupidVert, 0, static_cast<int>(mVertexBuffersOffsetsSizesCount.x) - 1);
-                    }
-                }
 
 #if STATS_ENABLED
 				// Timestamps are gathered regardless of pipeline stats:
@@ -1709,11 +1405,9 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
                     }
                 }
 
-				if (mRenderingMethod == rendering_method::point_rendered || mRenderingMethod == rendering_method::tessellated_rasterized || mRenderingMethod == rendering_method::tessellated_rasterized_wireframe) {
-					ImGui::Checkbox("Use individual patch resolution during px fill", &mUseMaxPatchResolutionDuringPxFill);
-                    if (ImGui::Button("Triangulate current parametric scene")) {
-                        record_triangles_from_parametric();
-                    }
+				ImGui::Checkbox("Use individual patch resolution during px fill", &mUseMaxPatchResolutionDuringPxFill);
+                if (ImGui::Button("Triangulate current parametric scene")) {
+                    record_triangles_from_parametric();
                 }
 
 				ImGui::End();
@@ -1741,13 +1435,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 					}
 					ImGui::Separator();
 					ImGui::Text(std::format("{:12L} pixel fill patches spawned", mNumPxFillPatchesCreated).c_str());
-					if (mRenderingMethod == rendering_method::point_rendered) {
-					    ImGui::Text(std::format("{:12L} <-- ^that means x64x64 pixel fills", mNumPxFillPatchesCreated * 64 * 64).c_str());
-					}
-					if (mRenderingMethod == rendering_method::tessellated_rasterized || mRenderingMethod == rendering_method::tessellated_rasterized_wireframe) {
-					    ImGui::Text(std::format("{:12L} <-- ^that means {:.1f}x{:.1f} tess patches (inner x outer)", mNumPxFillPatchesCreated * static_cast<uint32_t>(mConstInnerTessLevel + 0.999f) * static_cast<uint32_t>(mConstOuterTessLevel + 0.999f), mConstInnerTessLevel, mConstOuterTessLevel).c_str());
-					}
-				    ImGui::End();
+					ImGui::End();
 				}
 
 				// Do we need to recreate the vertex pipe?
@@ -1798,16 +1486,6 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 			mOrbitCam.disable();
         }
 
-		if (input().key_pressed(key_code::f1)) {
-			mRenderingMethod = rendering_method::point_rendered;
-		}
-		if (input().key_pressed(key_code::f2)) {
-			mRenderingMethod = rendering_method::tessellated_rasterized;
-		}
-        if (input().key_pressed(key_code::f4)) {
-            mRenderingMethod = rendering_method::vertices_rasterized;
-        }
-
 		// F6 ... toggle wireframe mode
 		if (input().key_pressed(key_code::f6)) {
 			mWireframeModeOn = !mWireframeModeOn;
@@ -1826,45 +1504,6 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 			mWhatToCopyToBackbuffer = 3;
         }
 
-		if (input().key_pressed(key_code::o)) {
-			mWhatToRenderParamOrTess = 0;
-			LOG_INFO("Filling single object into object data buffer..."); fill_object_data_buffer_with_single_object();
-        }
-        if (input().key_pressed(key_code::g)) {
-			mWhatToRenderParamOrTess = 1;
-			LOG_INFO("Filling sphere grid into object data buffer...");   fill_object_data_buffer_with_sphere_grid();
-        }
-        if (input().key_pressed(key_code::c)) {
-			mWhatToRenderParamOrTess = 2;
-			LOG_INFO("Filling scene data into object data buffer...");    fill_object_data_buffer();
-        }
-        if (input().key_pressed(key_code::m)) {
-			mWhatToRenderParamOrTess = 2;
-			LOG_INFO(std::format("Filling {} seashells into object data buffer...", MAX_OBJECTS)); fill_object_data_buffer_with_seashell_grid();
-        }
-
-        if (2 == mWhatToRenderParamOrTess) {
-            if (input().key_down(key_code::left_shift) && input().key_pressed(key_code::a)) {
-                if (mParametricObjectsVisibilitiesSaved.size() == 0) {
-					// => save visibilities and enable all:
-					mParametricObjectsVisibilitiesSaved.resize(mParametricObjects.size());
-					for (int i = 0; i < mParametricObjects.size(); ++i) {
-						mParametricObjectsVisibilitiesSaved[i] = mParametricObjects[i].is_enabled();
-						mParametricObjects[i].set_enabled(true);
-					}
-					fill_object_data_buffer();
-                }
-                else {
-					// => restore visibilities and enable previously enabled ones:
-					for (int i = 0; i < std::min(mParametricObjectsVisibilitiesSaved.size(), mParametricObjects.size()); ++i) {
-						mParametricObjects[i].set_enabled(mParametricObjectsVisibilitiesSaved[i]);
-					}
-					mParametricObjectsVisibilitiesSaved.resize(0);
-					fill_object_data_buffer();
-                }
-            }
-        }
-
 		if (avk::input().key_pressed(avk::key_code::i)) {
 			LOG_INFO(std::format("O orbitCam pos: {:.5}f, {:.5}f, {:.5}f | distance from origin: {:.5}f", 
 				mOrbitCam.translation().x, mOrbitCam.translation().y, mOrbitCam.translation().z, glm::length(mOrbitCam.translation())));
@@ -1881,7 +1520,6 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 		const float MeasureSecsPerStep = TEST_DURATION_PER_STEP;
 		if (mStartMeasurement) {
 #if TEST_MODE_ON
-			mWhatToRenderParamOrTess = 2;
 			for (int ii = 0; ii < mParametricObjects.size(); ++ii) {
 				mParametricObjects[ii].set_enabled(ii == TEST_ENABLE_OBJ_IDX);
 			}
@@ -1891,7 +1529,6 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 			mScreenDistanceThreshold = static_cast<float>(TEST_SCREEN_DISTANCE_THRESHOLD);
 			mUseMaxPatchResolutionDuringPxFill = 1 == TEST_USEINDIVIDUAL_PATCH_RES;
 			mRenderExtra3DModel = 1 == TEST_ENABLE_3D_MODEL;
-			mRenderingMethod = TEST_RENDERING_METHOD;
 			mWhatToCopyToBackbuffer = TEST_TARGET_IMAGE;
 			mGatherPipelineStats = 1 == TEST_GATHER_PIPELINE_STATS;
 			mPxFillPatchTargetResolutionScaler[0] = POINT_RENDERIN_PATCH_RES_S_X;
@@ -1931,19 +1568,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 			    //auto imguiManager = current_composition()->element_by_type<imgui_manager>();
 			    //imguiManager->enable();
 			    mMeasurementInProgress = false;
-				std::string whichMethod = "";
-                switch (mRenderingMethod) {
-                case rendering_method::point_rendered: 
-					whichMethod = "patch lod -> compute point rendering";
-                    break;
-                case rendering_method::vertices_rasterized:
-                    whichMethod = "ordinary vertex shader-based";
-					break;
-                case rendering_method::tessellated_rasterized:
-                case rendering_method::tessellated_rasterized_wireframe:
-					whichMethod = std::format("patch lod -> fixed tess rendering ({} inner, {} outer)", mConstInnerTessLevel, mConstOuterTessLevel);
-					break;
-                }
+				std::string whichMethod = "TODO: not implemented yet";
 				LOG_INFO_EM(std::format("{} frames rendered during {} sec. measurement time frame with {} method.", std::get<int>(mMeasurementFrameCounters.back()), mMeasurementEndTime - mMeasurementStartTime, whichMethod));
 				LOG_INFO("The following settings were active:");
 #if STATS_ENABLED
@@ -1951,27 +1576,26 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 #else
 				LOG_INFO(            " - mGatherPipelineStats not included in build (!STATS_ENABLED)");
 #endif
-                switch (mRenderingMethod) {
-                case rendering_method::point_rendered: 
-					LOG_INFO(std::format(" - Use individual patch resolution during px fill: {}", mUseMaxPatchResolutionDuringPxFill));
-					LOG_INFO(std::format(" - Adaptive pixel fill enabled:                    {}", mAdaptivePxFill));
-					LOG_INFO(std::format(" - PX_FILL_LOCAL_FB enabled: {}", (0 != PX_FILL_LOCAL_FB)));
-#if PX_FILL_LOCAL_FB
-					LOG_INFO(std::format("   - Tile size:     {}x{}", PX_FILL_LOCAL_FB_TILE_SIZE_X, PX_FILL_LOCAL_FB_TILE_SIZE_Y));
-					LOG_INFO(std::format("   - Tile factor:   {}x{}", TILE_FACTOR_X, TILE_FACTOR_Y));
-					LOG_INFO(std::format("   - Local FB size: {}x{}", LOCAL_FB_X, LOCAL_FB_Y));
-
-#endif
-                    break;
-                case rendering_method::tessellated_rasterized:
-                case rendering_method::tessellated_rasterized_wireframe:
-					LOG_INFO(std::format(" - Constant Inner Tessellation Level: {}", mConstInnerTessLevel));
-					LOG_INFO(std::format(" - Constant Outer Tessellation Level: {}", mConstOuterTessLevel));
-					LOG_INFO(std::format(" - Use individual patch resolution during px fill: {}", mUseMaxPatchResolutionDuringPxFill));
-					LOG_INFO(std::format(" - MSAA ENABLED {}, namely: {}", (0 != MSAA_ENABLED), vk::to_string(SAMPLE_COUNT)));
-					LOG_INFO(std::format(" - SSAA ENABLED {}, namely: {}", (0 != SSAA_ENABLED), avk::to_string(SSAA_FACTOR)));
-					break;
-                }
+//                switch (mRenderingMethod) {
+//                case rendering_method::point_rendered: 
+//					LOG_INFO(std::format(" - Use individual patch resolution during px fill: {}", mUseMaxPatchResolutionDuringPxFill));
+//					LOG_INFO(std::format(" - Adaptive pixel fill enabled:                    {}", mAdaptivePxFill));
+//					LOG_INFO(std::format(" - PX_FILL_LOCAL_FB enabled: {}", (0 != PX_FILL_LOCAL_FB)));
+//#if PX_FILL_LOCAL_FB
+//					LOG_INFO(std::format("   - Tile size:     {}x{}", PX_FILL_LOCAL_FB_TILE_SIZE_X, PX_FILL_LOCAL_FB_TILE_SIZE_Y));
+//					LOG_INFO(std::format("   - Tile factor:   {}x{}", TILE_FACTOR_X, TILE_FACTOR_Y));
+//					LOG_INFO(std::format("   - Local FB size: {}x{}", LOCAL_FB_X, LOCAL_FB_Y));
+//
+//#endif
+//                    break;
+//                case rendering_method::tessellated_rasterized:
+//                case rendering_method::tessellated_rasterized_wireframe:
+//					LOG_INFO(std::format(" - Constant Inner Tessellation Level: {}", mConstInnerTessLevel));
+//					LOG_INFO(std::format(" - Constant Outer Tessellation Level: {}", mConstOuterTessLevel));
+//					LOG_INFO(std::format(" - Use individual patch resolution during px fill: {}", mUseMaxPatchResolutionDuringPxFill));
+//					LOG_INFO(std::format(" - MSAA ENABLED {}, namely: {}", (0 != MSAA_ENABLED), vk::to_string(SAMPLE_COUNT)));
+//					break;
+//                }
 				LOG_INFO("Measurement results (elapsed time, camera distance, unique pixels (avg.), num patches out to render (avg.), FPS):");
 				for (int i = mMeasurementFrameCounters.size() - 1; i > 0; --i) {
 					std::get<double>(mMeasurementFrameCounters[i]) -= std::get<double>(mMeasurementFrameCounters[i - 1]);
@@ -2225,10 +1849,6 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 			}
 		}
 
-		assert(num_task_groups_x() >= 1);
-	    assert(num_task_groups_y() >= 1);
-        assert(num_task_groups_z() == 1);
-
 		std::vector<recorded_commands_t> commandsBeginStats;
 		std::vector<recorded_commands_t> commandsEndStats;
 		if (mGatherPipelineStats)
@@ -2243,419 +1863,18 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 		}
 #endif
 
-		// ============> LOD STAGE START:
-		
+		// Render tessellated patches into framebuffer (whether or not that is super sampled).
 
 
+		// Render extra 3D models into the same framebuffer (super-sampled or not)
 
-		// Sun Temple or Sponza anyone?
-		std::vector<recorded_commands_t> extra3DModelRenderCmds;
-		if (mExtra3DModelBeginIndex >= 0 && mRenderExtra3DModel) {
-			extra3DModelRenderCmds = command::gather(
-                command::bind_pipeline(mVertexPipeline.as_reference()),
-		        command::bind_descriptors(mVertexPipeline->layout(), mDescriptorCache->get_or_create_descriptor_sets({
-			        descriptor_binding(0, 0, mFrameDataBuffers[inFlightIndex]),
-                    descriptor_binding(0, 1, as_combined_image_samplers(mImageSamplers, layout::shader_read_only_optimal)),
-                    descriptor_binding(0, 2, mMaterialBuffer),
-			        descriptor_binding(1, 0, mCombinedAttachmentView->as_storage_image(layout::general)),
-#if STATS_ENABLED
-			        descriptor_binding(1, 1, mHeatMapImageView->as_storage_image(layout::general)),
-#endif
-                    descriptor_binding(2, 0, mCountersSsbo->as_storage_buffer())
-		        })),
-				command::many_n_times(static_cast<int>(mDrawCalls.size()-mExtra3DModelBeginIndex), [this](int i) {
-					i += mExtra3DModelBeginIndex;
-				    return command::gather(
-				        command::push_constants(mVertexPipeline->layout(), vertex_pipe_push_constants{ 
-						    mDrawCalls[i].mModelMatrix,
-						    mDrawCalls[i].mMaterialIndex
-					    }),
-		                command::draw_indexed(
-					        // Bind and use the index buffer:
-                            std::forward_as_tuple(mIndexBuffer.as_reference(), size_t{mDrawCalls[i].mIndexBufferOffset}, mDrawCalls[i].mNumElements),
-					        // Bind the vertex input buffers in the right order (corresponding to the layout specifiers in the vertex shader)
-					        std::forward_as_tuple(mPositionsBuffer.as_reference(), size_t{mDrawCalls[i].mPositionsBufferOffset}), 
-						    std::forward_as_tuple(mTexCoordsBuffer.as_reference(), size_t{mDrawCalls[i].mTexCoordsBufferOffset}),
-						    std::forward_as_tuple(mNormalsBuffer.as_reference()  , size_t{mDrawCalls[i].mNormalsBufferOffset})
-				        )
-				    );
-		        } )
-			);
-		}
+		// Resolve
 
-		graphics_pipeline& tessPipePxFillToBeUsed = mWireframeModeOn ? mTessPipelinePxFillWireframe : mTessPipelinePxFill;
+		// Resolved (colr + depth) -> combined attachment 
 
-		std::vector<recorded_commands_t> parametricRenderCmds;
-		auto [lodStageCommands, firstPing, finalPong] = get_lod_stage_commands();
-        switch (mRenderingMethod) {
-        case rendering_method::point_rendered:
-			parametricRenderCmds = command::gather(
-                command::bind_pipeline(mInitPatchesComputePipe.as_reference()),
-				command::bind_descriptors(mInitPatchesComputePipe->layout(), mDescriptorCache->get_or_create_descriptor_sets({
-				    descriptor_binding(0, 0, mFrameDataBuffers[inFlightIndex]), 
-			        descriptor_binding(1, 0, mCountersSsbo->as_storage_buffer()),
-				    descriptor_binding(2, 0, mObjectDataBuffer->as_storage_buffer()),
-				    descriptor_binding(2, 1, mIndirectPxFillParamsBuffer->as_storage_buffer()),
-				    descriptor_binding(2, 2, mIndirectPxFillCountBuffer->as_storage_buffer()),
-	                descriptor_binding(3, 0, (*firstPing)->as_storage_buffer()),
-	                descriptor_binding(3, 1, (*finalPong)->as_storage_buffer()),
-	                descriptor_binding(3, 2, mPatchLodCountBuffer->as_storage_buffer())
-				})),
-				
-				// 1st pass compute shader: density estimation PER OBJECT
-				command::dispatch(mNumEnabledObjects, 1u, 1u),
+		// Perform point rendering intp combined attachment 
 
-				// All the knit yarn inits:
-				get_yarn_cuves_init_commands(firstPing, finalPong),
-
-				sync::global_memory_barrier(stage::compute_shader + access::memory_write >> stage::compute_shader + access::memory_read),
-
-				// 2nd passes: patch lods
-                lodStageCommands,
-
-#if STATS_ENABLED
-				mTimestampPool->write_timestamp(firstQueryIndex + 2, stage::compute_shader),
-#endif
-
-#if PX_FILL_LOCAL_FB && SEPARATE_PATCH_TILE_ASSIGNMENT_PASS
-				// Inject another intermediate pass:
-				command::bind_pipeline(mSelectTilePatchesPipe.as_reference()),
-				command::bind_descriptors(mSelectTilePatchesPipe->layout(), mDescriptorCache->get_or_create_descriptor_sets({
-				    descriptor_binding(0, 0, mFrameDataBuffers[inFlightIndex]), 
-			        descriptor_binding(0, 1, as_combined_image_samplers(mImageSamplers, layout::shader_read_only_optimal)),
-			        descriptor_binding(0, 2, mMaterialBuffer),
-			        descriptor_binding(1, 0, mCountersSsbo->as_storage_buffer()),
-				    descriptor_binding(2, 0, mObjectDataBuffer->as_storage_buffer()),
-				    descriptor_binding(2, 1, mIndirectPxFillParamsBuffer->as_storage_buffer()),
-				    descriptor_binding(2, 2, mIndirectPxFillCountBuffer->as_storage_buffer()),
-                    descriptor_binding(3, 0, mCombinedAttachmentView->as_storage_image(layout::general))
-#if STATS_ENABLED
-                    , descriptor_binding(3, 1, mHeatMapImageView->as_storage_image(layout::general))
-#endif
-					, descriptor_binding(4, 0, mTilePatchesBuffer->as_storage_buffer())
-				})),
-
-				command::dispatch(128u /* <--- TODO: num tiles / 32 */, 1u, 1u),
-
-				sync::global_memory_barrier(stage::compute_shader + access::memory_write >> stage::compute_shader + access::memory_read),
-#endif
-#if STATS_ENABLED
-				mTimestampPool->write_timestamp(firstQueryIndex + 3, stage::compute_shader),
-#endif
-
-				// Extra 3D model here:
-				command::conditional(
-					[&extra3DModelRenderCmds] { return !extra3DModelRenderCmds.empty(); },
-					[&extra3DModelRenderCmds, this] {
-						return command::render_pass(mVertexPipeline->renderpass_reference(), mFramebuffer.as_reference(), extra3DModelRenderCmds);
-					}
-				),
-
-				// 3rd pass compute shader: px fill PER DRAW PACKAGE
-                command::bind_pipeline(mPxFillComputePipe.as_reference()),
-				command::bind_descriptors(mPxFillComputePipe->layout(), mDescriptorCache->get_or_create_descriptor_sets({
-				    descriptor_binding(0, 0, mFrameDataBuffers[inFlightIndex]), 
-			        descriptor_binding(0, 1, as_combined_image_samplers(mImageSamplers, layout::shader_read_only_optimal)),
-			        descriptor_binding(0, 2, mMaterialBuffer),
-			        descriptor_binding(1, 0, mCountersSsbo->as_storage_buffer()),
-				    descriptor_binding(2, 0, mObjectDataBuffer->as_storage_buffer()),
-				    descriptor_binding(2, 1, mIndirectPxFillParamsBuffer->as_storage_buffer()),
-				    descriptor_binding(2, 2, mIndirectPxFillCountBuffer->as_storage_buffer()),
-                    descriptor_binding(3, 0, mCombinedAttachmentView->as_storage_image(layout::general))
-#if STATS_ENABLED
-                    , descriptor_binding(3, 1, mHeatMapImageView->as_storage_image(layout::general))
-#endif
-#if PX_FILL_LOCAL_FB && SEPARATE_PATCH_TILE_ASSIGNMENT_PASS
-					, descriptor_binding(4, 0, mTilePatchesBuffer->as_storage_buffer())
-#endif
-				})),
-
-				command::push_constants(mPxFillComputePipe->layout(), pass3_push_constants{
-					mGatherPipelineStats ? VK_TRUE : VK_FALSE,
-					mScreenDistanceThreshold,
-					glm::vec2{ mPxFillPatchTargetResolutionScaler[0], mPxFillPatchTargetResolutionScaler[1] },
-					glm::vec2{ mPxFillParamShift[0], mPxFillParamShift[1] },
-					glm::vec2{ mPxFillParamStretch[0], mPxFillParamStretch[1] },
-				}),
-
-#if PX_FILL_LOCAL_FB
-				command::dispatch((resolution.x + PX_FILL_LOCAL_FB_TILE_SIZE_X - 1) / PX_FILL_LOCAL_FB_TILE_SIZE_X, (resolution.y + PX_FILL_LOCAL_FB_TILE_SIZE_Y - 1) / PX_FILL_LOCAL_FB_TILE_SIZE_Y, 1)
-				//command::dispatch(25, 25, 1)
-#else
-				command::dispatch_indirect(mIndirectPxFillCountBuffer, sizeof(VkDrawIndirectCommand::vertexCount)) // => in order to use the instanceCount!
-#endif
-
-#if STATS_ENABLED
-				, mTimestampPool->write_timestamp(firstQueryIndex + 4, stage::compute_shader)
-#endif
-			);
-			break;
-        case rendering_method::vertices_rasterized:
-			parametricRenderCmds = command::gather(
-				command::render_pass(mVertexPipeline->renderpass_reference(), mFramebuffer.as_reference(), command::gather(
-
-					// Extra 3D model here:
-					extra3DModelRenderCmds,
-
-                    command::bind_pipeline(mVertexPipeline.as_reference()),
-					command::bind_descriptors(mVertexPipeline->layout(), mDescriptorCache->get_or_create_descriptor_sets({
-						descriptor_binding(0, 0, mFrameDataBuffers[inFlightIndex]),
-			            descriptor_binding(0, 1, as_combined_image_samplers(mImageSamplers, layout::shader_read_only_optimal)),
-			            descriptor_binding(0, 2, mMaterialBuffer),
-						descriptor_binding(1, 0, mCombinedAttachmentView->as_storage_image(layout::general)),
-#if STATS_ENABLED
-						descriptor_binding(1, 1, mHeatMapImageView->as_storage_image(layout::general)),
-#endif
-			            descriptor_binding(2, 0, mCountersSsbo->as_storage_buffer())
-					})),
-
-					command::conditional([this] { return 1 == mWhatToRenderStupidVert; },
-						// IF render all them sphere positions:
-					    [&, this] {
-							return command::gather(
-							    command::many_for_each(mSpherePositions, [&, this] (const auto& pos) mutable {
-								    // For each position, check which sphere model to use
-								    int i = 0;
-								    int n = mDrawCalls.size() - 1;
-								    for (; i < n; ++i) {
-								        // Sphere radius is 1 always
-								        // 1) Into view space:
-									    auto posVS   = glm::vec3{uboData.mViewMatrix * glm::vec4{pos, 1.0f}};
-									    auto ortho   = orthogonal(posVS);
-									    auto rightVS = posVS + ortho;
-									    auto leftVS  = posVS - ortho;
-									    auto rightSS = clipSpaceToViewport(projMat * glm::vec4{rightVS, 1.0f}, glm::vec2{resolution});
-									    auto leftSS  = clipSpaceToViewport(projMat * glm::vec4{leftVS , 1.0f}, glm::vec2{resolution});
-									    auto diff    = rightSS - leftSS;
-									    auto pxDist  = glm::length(diff);
-									    //LOG_INFO(fmt::format("pxDist[{}]", pxDist));
-
-									    if (pxDist < mDrawCalls[i].mPixelsOnMeridian * 1.5f) {
-										    break; // found the right LOD
-									    }
-								    }
-							        return command::gather(
-									    command::push_constants(mVertexPipeline->layout(), vertex_pipe_push_constants{ 
-											glm::translate(glm::mat4{1.0f}, pos) * mDrawCalls[i].mModelMatrix,
-											mDrawCalls[i].mMaterialIndex
-									    }),
-					                    command::draw_indexed(
-								            // Bind and use the index buffer:
-                                            std::forward_as_tuple(mIndexBuffer.as_reference(), size_t{mDrawCalls[i].mIndexBufferOffset}, mDrawCalls[i].mNumElements),
-								            // Bind the vertex input buffers in the right order (corresponding to the layout specifiers in the vertex shader)
-								            std::forward_as_tuple(mPositionsBuffer.as_reference(), size_t{mDrawCalls[i].mPositionsBufferOffset}), 
-										    std::forward_as_tuple(mTexCoordsBuffer.as_reference(), size_t{mDrawCalls[i].mTexCoordsBufferOffset}),
-										    std::forward_as_tuple(mNormalsBuffer.as_reference()  , size_t{mDrawCalls[i].mNormalsBufferOffset})
-							            )
-    							    );
-                                })
-							);
-						},
-						// ELSE render single object (there is no scene composer support for triangle meshes):
-					    [&, this] {
-							return command::gather(
-								command::push_constants(mVertexPipeline->layout(), vertex_pipe_push_constants{ 
-									mDrawCalls[mSingleObjectToRenderStupidVert].mModelMatrix,
-									mDrawCalls[mSingleObjectToRenderStupidVert].mMaterialIndex
-								}),
-					            command::draw_indexed(
-								    // Bind and use the index buffer:
-                                    std::forward_as_tuple(mIndexBuffer.as_reference(), size_t{mDrawCalls[mSingleObjectToRenderStupidVert].mIndexBufferOffset}, mDrawCalls[mSingleObjectToRenderStupidVert].mNumElements),
-								    // Bind the vertex input buffers in the right order (corresponding to the layout specifiers in the vertex shader)
-								    std::forward_as_tuple(mPositionsBuffer.as_reference(), size_t{mDrawCalls[mSingleObjectToRenderStupidVert].mPositionsBufferOffset}), 
-									std::forward_as_tuple(mTexCoordsBuffer.as_reference(), size_t{mDrawCalls[mSingleObjectToRenderStupidVert].mTexCoordsBufferOffset}),
-									std::forward_as_tuple(mNormalsBuffer.as_reference()  , size_t{mDrawCalls[mSingleObjectToRenderStupidVert].mNormalsBufferOffset})
-							    )
-							);
-						}
-					)
-				))
-#if STATS_ENABLED
-				, mTimestampPool->write_timestamp(firstQueryIndex + 2, stage::fragment_shader)
-				, mTimestampPool->write_timestamp(firstQueryIndex + 3, stage::fragment_shader)
-				, mTimestampPool->write_timestamp(firstQueryIndex + 4, stage::fragment_shader)
-#endif
-		    );
-			break;
-        case rendering_method::tessellated_rasterized:
-        case rendering_method::tessellated_rasterized_wireframe:
-			parametricRenderCmds = command::gather(
-				command::bind_pipeline(mInitPatchesComputePipe.as_reference()),
-				command::bind_descriptors(mInitPatchesComputePipe->layout(), mDescriptorCache->get_or_create_descriptor_sets({
-				    descriptor_binding(0, 0, mFrameDataBuffers[inFlightIndex]), 
-			        descriptor_binding(1, 0, mCountersSsbo->as_storage_buffer()),
-				    descriptor_binding(2, 0, mObjectDataBuffer->as_storage_buffer()),
-				    descriptor_binding(2, 1, mIndirectPxFillParamsBuffer->as_storage_buffer()),
-				    descriptor_binding(2, 2, mIndirectPxFillCountBuffer->as_storage_buffer()),
-	                descriptor_binding(3, 0, (*firstPing)->as_storage_buffer()),
-	                descriptor_binding(3, 1, (*finalPong)->as_storage_buffer()),
-	                descriptor_binding(3, 2, mPatchLodCountBuffer->as_storage_buffer())
-				})),
-				
-				// 1st pass compute shader: density estimation PER OBJECT
-				command::dispatch(mNumEnabledObjects, 1u, 1u),
-				
-				// All the knit yarn inits:
-				get_yarn_cuves_init_commands(firstPing, finalPong),
-
-				sync::global_memory_barrier(stage::compute_shader + access::memory_write >> stage::compute_shader + access::memory_read),
-				
-				// 2nd passes: patch lods
-                lodStageCommands,
-		
-                sync::global_memory_barrier(stage::compute_shader + access::memory_write >> stage::all_graphics + access::memory_read),
-#if STATS_ENABLED
-				mTimestampPool->write_timestamp(firstQueryIndex + 2, stage::compute_shader),
-				mTimestampPool->write_timestamp(firstQueryIndex + 3, stage::compute_shader),
-#endif
-
-				// 3rd pass: FIXED-SIZE 64er TESS PX FILL
-				command::render_pass(tessPipePxFillToBeUsed->renderpass_reference(), mFramebuffer.as_reference(), command::gather(
-
-					// Extra 3D model here:
-					extra3DModelRenderCmds,
-
-                    command::bind_pipeline(tessPipePxFillToBeUsed.as_reference()),
-					command::bind_descriptors(tessPipePxFillToBeUsed->layout(), mDescriptorCache->get_or_create_descriptor_sets({
-						descriptor_binding(0, 0, mFrameDataBuffers[inFlightIndex]),
-			            descriptor_binding(0, 1, as_combined_image_samplers(mImageSamplers, layout::shader_read_only_optimal)),
-			            descriptor_binding(0, 2, mMaterialBuffer),
-						descriptor_binding(1, 0, mCombinedAttachmentView->as_storage_image(layout::general)),
-#if STATS_ENABLED
-						descriptor_binding(1, 1, mHeatMapImageView->as_storage_image(layout::general)),
-#endif
-			            descriptor_binding(2, 0, mCountersSsbo->as_storage_buffer()),
-				        descriptor_binding(3, 0, mObjectDataBuffer->as_storage_buffer()),
-						descriptor_binding(3, 1, mIndirectPxFillParamsBuffer->as_storage_buffer()),
-				        descriptor_binding(3, 2, mIndirectPxFillCountBuffer->as_storage_buffer())
-					})),
-					
-					command::push_constants(tessPipePxFillToBeUsed->layout(), patch_into_tess_push_constants{ mConstOuterTessLevel, mConstInnerTessLevel }),
-
-					command::draw_vertices_indirect(mIndirectPxFillCountBuffer.as_reference(), 0, sizeof(VkDrawIndirectCommand), 1u) // <-- Exactly ONE draw (but potentially a lot of instances)
-				))
-#if STATS_ENABLED
-				, mTimestampPool->write_timestamp(firstQueryIndex + 4, stage::fragment_shader)
-#endif
-		    );
-			break;
-        default:
-			assert(false);
-			break;
-        };
-
-		//auto& pipeline = mUseNvPipeline.value_or(false) ? mMeshletPipeNv : mMeshletPipeExt;
-		context().record(command::gather(
-#if STATS_ENABLED
-			    commandsBeginStats,
-				mTimestampPool->reset(firstQueryIndex, NUM_TIMESTAMP_QUERIES), // reset the four values relevant for the current frame in flight
-				mTimestampPool->write_timestamp(firstQueryIndex + 0, stage::all_commands), // measure before everything starts
-#endif
-
-				command::bind_pipeline(mClearCombinedAttachmentPipe.as_reference()),
-				command::bind_descriptors(mClearCombinedAttachmentPipe->layout(), mDescriptorCache->get_or_create_descriptor_sets({
-			        descriptor_binding(0, 0, mCountersSsbo->as_storage_buffer()),
-			        descriptor_binding(1, 0, mObjectDataBuffer->as_storage_buffer()),
-			        descriptor_binding(1, 1, mIndirectPxFillParamsBuffer->as_storage_buffer()),
-			        descriptor_binding(1, 2, mIndirectPxFillCountBuffer->as_storage_buffer()),
-                    descriptor_binding(2, 0, mCombinedAttachmentView->as_storage_image(layout::general)),
-#if STATS_ENABLED
-                    descriptor_binding(2, 1, mHeatMapImageView->as_storage_image(layout::general)),
-#endif
-                    descriptor_binding(3, 0, mPatchLodBufferPing->as_storage_buffer()),
-                    descriptor_binding(3, 1, mPatchLodBufferPong->as_storage_buffer()),
-                    descriptor_binding(3, 2, mPatchLodCountBuffer->as_storage_buffer())
-#if PX_FILL_LOCAL_FB && SEPARATE_PATCH_TILE_ASSIGNMENT_PASS
-					, descriptor_binding(4, 0, mTilePatchesBuffer->as_storage_buffer())
-#endif
-				})),
-				command::dispatch((resolution.x + 15u) / 16u, (resolution.y + 15u) / 16u, 1u),
-
-		        sync::global_memory_barrier(stage::all_commands >> stage::all_commands, access::memory_write >> access::memory_write | access::memory_read),
-#if STATS_ENABLED
-				mTimestampPool->write_timestamp(firstQueryIndex + 1, stage::compute_shader), // measure after clearing
-#endif
-
-			    // PARAMETRIC RENDERING
-			    //          vvv
-			    parametricRenderCmds,
-			    //          ^^^
-			    // PARAMETRIC RENDERING
-
-#if STATS_ENABLED
-			    commandsEndStats,
-#else
-			    // Fascinating: Without that following barrier, we get rendering artifacts in the ABSENCE of the timestamp write!
-			    // TODO:            ^ investigate further!
-			    sync::global_memory_barrier(stage::fragment_shader | stage::compute_shader >> stage::compute_shader, access::shader_write >> access::shader_read),
-#endif
-
-				command::conditional([this]() {
-						if (rendering_method::point_rendered == mRenderingMethod && mWhatToCopyToBackbuffer > 2) {
-							if (!mWarnedLastFrame) {
-								LOG_WARNING("Invalid combination: point_rendering and copying framebuffer's color attachment.");
-							}
-							mWarnedLastFrame = true;
-						}
-						else {
-							mWarnedLastFrame = false;
-						}
-
-						return mWhatToCopyToBackbuffer <= 2 || rendering_method::point_rendered == mRenderingMethod;
-					},
-				    [&, this] {
-						return command::gather(
-							// Copy from Uint64 image into back buffer:
-					        sync::image_memory_barrier(context().main_window()->current_backbuffer()->image_at(0),  // Window's back buffer's color attachment
-					                                   stage::none          >>   stage::compute_shader,
-					                                   access::none         >>   access::shader_storage_write)
-					            .with_layout_transition(layout::undefined   >>   layout::general),                  // Don't care about the previous layout
-						
-							command::bind_pipeline(mCopyToBackufferPipe.as_reference()),
-							command::push_constants(mCopyToBackufferPipe->layout(), copy_to_backbuffer_push_constants{ 
-							    mWhatToCopyToBackbuffer > 1 ? 0 : mWhatToCopyToBackbuffer // 0 => 0, 1 => 1, 2 => 0
-							}),
-							command::bind_descriptors(mCopyToBackufferPipe->layout(), mDescriptorCache->get_or_create_descriptor_sets({
-								descriptor_binding(0, 0, mCombinedAttachmentView->as_storage_image(layout::general)),
-#if STATS_ENABLED
-								descriptor_binding(0, 1, mHeatMapImageView->as_storage_image(layout::general)),
-#endif
-								descriptor_binding(1, 0, context().main_window()->current_backbuffer()->image_view_at(0)->as_storage_image(layout::general))
-							})),
-							command::dispatch((resolution.x + 15u) / 16u, (resolution.y + 15u) / 16u, 1u),
-
-					        sync::image_memory_barrier(context().main_window()->current_backbuffer()->image_at(0),  // Window's back buffer's color attachment
-					                                   stage::compute_shader          >>   stage::color_attachment_output, // <-- for ImGui, which draws afterwards
-					                                   access::shader_storage_write   >>   access::color_attachment_read | access::color_attachment_write)
-					            .with_layout_transition(            layout::general   >>   layout::color_attachment_optimal)
-						);
-					},
-					[&, this] {
-						return command::gather(
-							// Copy from framebuffer into back buffer:
-					        sync::image_memory_barrier(context().main_window()->current_backbuffer()->image_at(0),  // Window's back buffer's color attachment
-					                                   stage::none          >>   stage::blit,
-					                                   access::none         >>   access::transfer_write)
-					            .with_layout_transition(layout::undefined   >>   layout::transfer_dst),             // Don't care about the previous layout
-
-							blit_image(mFramebuffer->image_at(0), layout::transfer_src, context().main_window()->current_backbuffer()->image_at(0), layout::transfer_dst, 
-							           vk::ImageAspectFlagBits::eColor, vk::Filter::eLinear),
-
-							sync::image_memory_barrier(context().main_window()->current_backbuffer()->image_at(0),  // Window's back buffer's color attachment
-					                                   stage::blit                    >>   stage::color_attachment_output, // <-- for ImGui, which draws afterwards
-					                                   access::transfer_write         >>   access::color_attachment_read | access::color_attachment_write)
-					            .with_layout_transition(       layout::transfer_dst   >>   layout::color_attachment_optimal)
-						);
-					}
-				)
-			))
-			.into_command_buffer(cmdBfr)
-			.then_submit_to(*mQueue)
-			// Do not start to render before the image has become available:
-			.waiting_for(imageAvailableSemaphore >> stage::color_attachment_output)
-			.submit();
-					
-		mainWnd->handle_lifetime(std::move(cmdBfr));
+		// Combined attachment -> back buffer
 
 		std::chrono::steady_clock::time_point renderEnd = std::chrono::steady_clock::now();
 		auto renderMs = static_cast<double>(std::chrono::duration_cast<std::chrono::milliseconds>(renderEnd - renderBegin).count());
@@ -2738,8 +1957,6 @@ private: // v== Member variables ==v
 	avk::buffer mIndirectPxFillParamsBuffer;
 	avk::buffer mIndirectPxFillCountBuffer;
 
-    rendering_method mRenderingMethod = rendering_method::tessellated_rasterized;
-
     avk::graphics_pipeline mVertexPipeline;
     avk::graphics_pipeline mTessPipelinePxFill;
     avk::graphics_pipeline mTessPipelinePxFillWireframe;
@@ -2789,11 +2006,6 @@ private: // v== Member variables ==v
 	avk::buffer mVertexBuffersOffsetsSizesBuffer;
 	glm::uvec4  mVertexBuffersOffsetsSizesCount = glm::uvec4{0}; // only .x is used
 	avk::buffer mVertexBuffersOffsetsSizesCountBuffer;
-
-	int mWhatToRenderParamOrTess = 2; // 2 == Scene Composer => TODO: Refactor away!
-	int mWhatToRenderStupidVert = 0;
-	int mSingleObjectToRenderParamOrTess = 0;
-	int mSingleObjectToRenderStupidVert = 0;
 
 	int mLodStrategy = 1; // 1 ... screen distance-based
 	float mScreenDistanceThreshold = 62.0f; // param for mLodStrategy == 1
