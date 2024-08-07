@@ -2020,6 +2020,100 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 
 			// 3.5) Perform point rendering into combined attachment 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#if PX_FILL_LOCAL_FB && SEPARATE_PATCH_TILE_ASSIGNMENT_PASS
+				// Inject another intermediate pass:
+				command::bind_pipeline(mSelectTilePatchesPipe.as_reference()),
+				command::bind_descriptors(mSelectTilePatchesPipe->layout(), mDescriptorCache->get_or_create_descriptor_sets({
+				    descriptor_binding(0, 0, mFrameDataBuffers[inFlightIndex]), 
+			        descriptor_binding(0, 1, as_combined_image_samplers(mImageSamplers, layout::shader_read_only_optimal)),
+			        descriptor_binding(0, 2, mMaterialBuffer),
+			        descriptor_binding(1, 0, mCountersSsbo->as_storage_buffer()),
+				    descriptor_binding(2, 0, mObjectDataBuffer->as_storage_buffer()),
+				    descriptor_binding(2, 1, mIndirectPxFillParamsBuffer->as_storage_buffer()),
+				    descriptor_binding(2, 2, mIndirectPxFillCountBuffer->as_storage_buffer()),
+                    descriptor_binding(3, 0, mCombinedAttachmentView->as_storage_image(layout::general))
+#if STATS_ENABLED
+                    , descriptor_binding(3, 1, mHeatMapImageView->as_storage_image(layout::general))
+#endif
+					, descriptor_binding(4, 0, mTilePatchesBuffer->as_storage_buffer())
+				})),
+
+				command::dispatch(128u /* <--- TODO: num tiles / 32 */, 1u, 1u),
+
+				sync::global_memory_barrier(stage::compute_shader + access::memory_write >> stage::compute_shader + access::memory_read),
+#endif
+#if STATS_ENABLED
+				mTimestampPool->write_timestamp(firstQueryIndex + 3, stage::compute_shader),
+#endif
+
+				// 3rd pass compute shader: px fill PER DRAW PACKAGE
+                command::bind_pipeline(mPxFillComputePipe.as_reference()),
+				command::bind_descriptors(mPxFillComputePipe->layout(), mDescriptorCache->get_or_create_descriptor_sets({
+				    descriptor_binding(0, 0, mFrameDataBuffers[inFlightIndex]), 
+			        descriptor_binding(0, 1, as_combined_image_samplers(mImageSamplers, layout::shader_read_only_optimal)),
+			        descriptor_binding(0, 2, mMaterialBuffer),
+			        descriptor_binding(1, 0, mCountersSsbo->as_storage_buffer()),
+				    descriptor_binding(2, 0, mObjectDataBuffer->as_storage_buffer()),
+				    descriptor_binding(2, 1, mIndirectPxFillParamsBuffer->as_storage_buffer()),
+				    descriptor_binding(2, 2, mIndirectPxFillCountBuffer->as_storage_buffer()),
+                    descriptor_binding(3, 0, mCombinedAttachmentView->as_storage_image(layout::general))
+#if STATS_ENABLED
+                    , descriptor_binding(3, 1, mHeatMapImageView->as_storage_image(layout::general))
+#endif
+#if PX_FILL_LOCAL_FB && SEPARATE_PATCH_TILE_ASSIGNMENT_PASS
+					, descriptor_binding(4, 0, mTilePatchesBuffer->as_storage_buffer())
+#endif
+				})),
+
+				command::push_constants(mPxFillComputePipe->layout(), pass3_push_constants{
+					mGatherPipelineStats ? VK_TRUE : VK_FALSE,
+					mScreenDistanceThreshold,
+					glm::vec2{ mPxFillPatchTargetResolutionScaler[0], mPxFillPatchTargetResolutionScaler[1] },
+					glm::vec2{ mPxFillParamShift[0], mPxFillParamShift[1] },
+					glm::vec2{ mPxFillParamStretch[0], mPxFillParamStretch[1] },
+				}),
+
+#if PX_FILL_LOCAL_FB
+				command::dispatch((resolution.x + PX_FILL_LOCAL_FB_TILE_SIZE_X - 1) / PX_FILL_LOCAL_FB_TILE_SIZE_X, (resolution.y + PX_FILL_LOCAL_FB_TILE_SIZE_Y - 1) / PX_FILL_LOCAL_FB_TILE_SIZE_Y, 1),
+				//command::dispatch(25, 25, 1)
+#else
+				command::dispatch_indirect(mIndirectPxFillCountBuffer, sizeof(VkDrawIndirectCommand::vertexCount)), // => in order to use the instanceCount!
+#endif
+
+#if STATS_ENABLED
+				mTimestampPool->write_timestamp(firstQueryIndex + 4, stage::compute_shader),
+#endif
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 #if STATS_ENABLED
 			    commandsEndStats,
 #else
