@@ -18,7 +18,14 @@ struct object_data
     mat4  mTransformationMatrix;
     int   mCurveIndex;
     int   mMaterialIndex;
-    int   padding[2];
+    // The following means "adaptive tessellation levels" (for tessellation-based rendering) or "adaptive sampling" (for point-based rendering):
+    int   mUseAdaptiveDetail;
+    int   _padding;
+    // The following settings are stored in the vec4:
+    //  .xy ... Percent how much to increase patch parameters (s.t. neighboring patches overlap a bit)
+    //  .z  ... screen-space threshold for the LOD stage
+    //  .w  ... sampling factor for point-based rendering (< 1.0 probably means too little samples, > 1.0 might mean oversampling but also filling holes) 
+    vec4  mLodAndRenderSettings;
 };
 
 struct px_fill_data

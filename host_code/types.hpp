@@ -41,18 +41,13 @@ struct frame_data_ubo
     glm::vec4            mDebugSliders;
     glm::ivec4           mDebugSlidersi;
     // Common, global settings:
-    VkBool32             mHoleFillingEnabled;
-    VkBool32             mCreateTrianglesEnabled;
-    VkBool32             mLimitFilledPixelsInShaders;
     VkBool32             mHeatMapEnabled;
     VkBool32             mGatherPipelineStats;
-    VkBool32             mAdaptivePxFill;
     VkBool32             mUseMaxPatchResolutionDuringPxFill;
     VkBool32             mWriteToCombinedAttachmentInFragmentShader;
     float                mAbsoluteTime;
     float                mDeltaTime;
-	float                mScreenDistanceThreshold;
-    float                _padding;
+    float               _padding[2];
 };
 
 // Defines the type of parametric object to draw:
@@ -166,15 +161,24 @@ struct object_data
         , mTransformationMatrix{1.f}
         , mCurveIndex{0}
         , mMaterialIndex{0}
-        , padding{ 0xDEAD, 0xBEEF }
+        , mUseAdaptiveDetail{1}
+        , _padding{ 0xDEAD }
+        , mLodAndRenderSettings{ 1.0f, 1.0f, 100.0f, 1.0f }
     {}
 
     glm::vec4  mParams;
-    glm::uvec4 mDetailEvalDims; // Think: Task Shader Dimensions
+    glm::uvec4 mDetailEvalDims;
     glm::mat4  mTransformationMatrix;
     int32_t    mCurveIndex;
     int32_t    mMaterialIndex;
-    int32_t    padding[2];
+    // The following means "adaptive tessellation levels" (for tessellation-based rendering) or "adaptive sampling" (for point-based rendering)
+    int32_t    mUseAdaptiveDetail;
+    int32_t    _padding;
+    // The following settings are stored in the vec4:
+    //  .xy ... Percent how much to increase patch parameters (s.t. neighboring patches overlap a bit)
+    //  .z  ... screen-space distance for the LOD stage
+    //  .w  ... sampling factor for point-based rendering (< 1.0 probably means too little samples, > 1.0 might mean oversampling but also filling holes) 
+    glm::vec4  mLodAndRenderSettings;
 };
 
 struct px_fill_data
@@ -256,15 +260,6 @@ struct pass2x_push_constants
 {
     vk::Bool32 mGatherPipelineStats;
     uint32_t   mPatchLodLevel; // corresponding to the n-th dispatch invocation
-
-    // 0 ... none (subdivide always) 
-	// 1 ... screen dist threshold
-    int32_t    mLodStrategy;
-
-	// for 0 ... subdiv steps (clamped to [1, MAX_PATCH_SUBDIV_STEPS-1])
-	// for 1 ... the screen dist threshold, e.g. 64.0
-	float mStrategyParam;
-
     vk::Bool32 mPerformFrustumCulling;
 };
 
@@ -272,11 +267,10 @@ struct pass2x_push_constants
 struct pass3_push_constants
 {
     vk::Bool32 mGatherPipelineStats;
-	float mPatchTargetResolution; // What resolution one "px fill" workgroup is supposed to fill.
-	                              // Squared resolution that is, i.e.: mPatchTargetResolution x mPatchTargetResolution
-	glm::vec2 mPatchTargetResolutionScaler; // Scaler to increase/decrease point density
-	glm::vec2 mParamShift;   // Shift u/v params by amount of deltaU/deltaV (in order to fill holes to neighboring tiles)
-	glm::vec2 mParamStretch; // Stretch u/v params by amount of deltaU/deltaV (in order to fill holes to neighboring tiles)
+    int32_t    _padding;
+	glm::vec2  mPatchTargetResolutionScaler; // Scaler to increase/decrease point density
+	glm::vec2  mParamShift;   // Shift u/v params by amount of deltaU/deltaV (in order to fill holes to neighboring tiles)
+	glm::vec2  mParamStretch; // Stretch u/v params by amount of deltaU/deltaV (in order to fill holes to neighboring tiles)
 };
 
 // Push constants for standalone tessellation shaders

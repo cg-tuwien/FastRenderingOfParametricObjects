@@ -82,9 +82,6 @@
     <None Include="shaders\pass2x_patch_lod.comp">
       <Filter>shaders</Filter>
     </None>
-    <None Include="shaders\pass3_triangle_write.comp">
-      <Filter>shaders</Filter>
-    </None>
     <None Include="shaders\standalone-tess\patch_eval.tese">
       <Filter>shaders\standalone-tess</Filter>
     </None>

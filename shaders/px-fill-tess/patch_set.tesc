@@ -69,7 +69,7 @@ void main()
             const float absoluteMin =  4.0;
             const float absoluteMax = 64.0;
             const vec2 screenDists = uPxFillParams.mElements[pxFillId].mScreenDists.xy;
-            const float threshold  = ubo.mScreenDistanceThreshold;
+            const float threshold  = uObjectData.mElements[objectId].mLodAndRenderSettings.z;
 
             const float factorU = screenDists.x / threshold;
             gl_TessLevelOuter[1] = clamp(pushConstants.mConstOuterSubdivLevel * factorU, absoluteMin, absoluteMax);

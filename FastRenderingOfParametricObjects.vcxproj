@@ -48,7 +48,6 @@
     <None Include="shaders\pass3_px_fill.comp" />
     <None Include="shaders\frag_out.frag" />
     <None Include="shaders\pass3_px_fill_local_fb.comp" />
-    <None Include="shaders\pass3_triangle_write.comp" />
     <None Include="shaders\px-fill-tess\patch_go.tese" />
     <None Include="shaders\px-fill-tess\patch_ready.vert" />
     <None Include="shaders\px-fill-tess\patch_set.tesc" />

@@ -14,16 +14,11 @@ layout(set = 0, binding = 0) uniform FrameData
     vec4    mDebugSliders;
     ivec4   mDebugSlidersi;
     // Common, global settings:
-    bool    mHoleFillingEnabled;
-    bool    mCreateTrianglesEnabled;
-    bool    mLimitFilledPixelsInShaders;
     bool    mHeatMapEnabled;
     bool    mGatherPipelineStats;
-    bool    mAdaptivePxFill;
     bool    mUseMaxPatchResolutionDuringPxFill;
     bool    mWriteToCombinedAttachmentInFragmentShader;
     float   mAbsoluteTime;
     float   mDeltaTime;
-	float   mScreenDistanceThreshold;
-    float   _padding;
+    float   _padding[2];
 } ubo;

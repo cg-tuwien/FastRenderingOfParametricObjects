@@ -106,22 +106,8 @@ layout(push_constant) uniform PushConstants
 {
     bool mGatherPipelineStats;
     uint mPatchLodLevel; // corresponding to the n-th dispatch invocation
-
-	// 0 ... none (subdivide always) 
-	// 1 ... screen dist threshold
-	int  mLodStrategy;
-
-	// for 0 ... subdiv steps (clamped to [1, MAX_PATCH_SUBDIV_STEPS-1])
-	// for 1 ... the screen dist threshold, e.g. 64.0
-	float mStrategyParam;
-
 	bool  mPerformFrustumCulling;
 } pushConstants;
-
-bool isScreenDistThresholdBasedLodStrategy() 
-{
-	return pushConstants.mLodStrategy == 1;
-}
 
 shared bool  splitU[EVAL_GRID_Y];
 shared bool  splitV[EVAL_GRID_Y];
@@ -143,13 +129,13 @@ shared uint  workgroupAnd[EVAL_GRID_Z];
 // @param aParamsStart     Where u and v params start
 // @param aParamsRange     The ranges for u and v, respectively, between their start and end values.
 #if WRITE_OUT_MIN_MAX_SCREEN_COORDS
-void evalSplitDecision(bool aTransposeEval, vec2 aParamsStart, vec2 aParamsRange, int aCurveIndex, uvec3 aUserData, mat4 aTM, out vec4 posCS, out vec2 subgroupMinCoords
+void evalSplitDecision(bool aTransposeEval, vec2 aParamsStart, vec2 aParamsRange, float screenThreshold, int aCurveIndex, uvec3 aUserData, mat4 aTM, out vec4 posCS, out vec2 subgroupMinCoords
 #if WRITE_MAX_COORDS_IN_PASS2
 , out vec2 subgroupMaxCoords
 #endif
 )
 #else
-void evalSplitDecision(bool aTransposeEval, vec2 aParamsStart, vec2 aParamsRange, int aCurveIndex, uvec3 aUserData, mat4 aTM, out vec4 posCS)
+void evalSplitDecision(bool aTransposeEval, vec2 aParamsStart, vec2 aParamsRange, float screenThreshold, int aCurveIndex, uvec3 aUserData, mat4 aTM, out vec4 posCS)
 #endif
 {
 	const uvec2 rangeDivisor = !aTransposeEval 
@@ -212,16 +198,12 @@ void evalSplitDecision(bool aTransposeEval, vec2 aParamsStart, vec2 aParamsRange
 	const bool isDeciderInvocation = gl_SubgroupInvocationID == (sumRefInvocation + EVAL_GRID_X - 1);
 	if (isDeciderInvocation) {
 		if (!aTransposeEval) {
-			splitU[sumRefIndex] = isScreenDistThresholdBasedLodStrategy() 
-				? summedScreenDists >= pushConstants.mStrategyParam 
-				: true; // <-- otherwise, always split
+			splitU[sumRefIndex] = summedScreenDists >= screenThreshold;
 //			debugPrintfEXT("in u row[%d], summedScreenDists[%f], splitU[%d]", sumRefIndex, summedScreenDists, splitU[sumRefIndex] ? 1 : 0);
 			screenDistsU[sumRefIndex] = summedScreenDists;
 		}
 		else {
-			splitV[sumRefIndex] = isScreenDistThresholdBasedLodStrategy() 
-				? summedScreenDists >= pushConstants.mStrategyParam 
-				: true; // <-- otherwise, always split
+			splitV[sumRefIndex] = summedScreenDists >= screenThreshold;
 //			debugPrintfEXT("in v col[%d], summedScreenDists[%f], splitV[%d]", sumRefIndex, summedScreenDists, splitV[sumRefIndex] ? 1 : 0);
 			screenDistsV[sumRefIndex] = summedScreenDists;
 		}
@@ -257,11 +239,6 @@ void patchOut(const uint levelIn, float uStart, float uEnd, float vStart, float 
 	// out (from ping->pong):
 	uint maxLevel = MAX_PATCH_SUBDIV_STEPS-1;
 
-	if (!isScreenDistThresholdBasedLodStrategy()) {
-		// In this case, the param might limit the #subdivisions
-		maxLevel = clamp(uint(pushConstants.mStrategyParam), 1, MAX_PATCH_SUBDIV_STEPS-1);
-	}
-
 	if (levelIn != maxLevel) { // Split and continue with ping->pong
 		const uint levelOut = levelIn + 1;
 		const uint insertIdx = atomicAdd(uPatchLodCount.mDispatchCounts[levelOut].x, 1);
@@ -285,15 +262,18 @@ void main()
 	subgroupMemoryBarrierShared();
 
 	// in:
-	const uint levelIn = pushConstants.mPatchLodLevel;
-	const uint elementIdxIn = gl_WorkGroupID.x;
-	const vec2 paramsStart = vec2(uPatchLodPing.mElements[elementIdxIn].mParams[0], uPatchLodPing.mElements[elementIdxIn].mParams[2]);
-	const vec2 paramsEnd   = vec2(uPatchLodPing.mElements[elementIdxIn].mParams[1], uPatchLodPing.mElements[elementIdxIn].mParams[3]);
-	const vec2 paramsRange = vec2(paramsEnd.x - paramsStart.x, paramsEnd.y - paramsStart.y);
-	const uint objectId    = uPatchLodPing.mElements[elementIdxIn].mObjectIdUserData[0];
-	const uvec3 userData   = uPatchLodPing.mElements[elementIdxIn].mObjectIdUserData.yzw;
-	const int curveIndex   = uObjectData.mElements[objectId].mCurveIndex;
-	const mat4 tM          = uObjectData.mElements[objectId].mTransformationMatrix;
+	const uint  levelIn = pushConstants.mPatchLodLevel;
+	const uint  elementIdxIn         = gl_WorkGroupID.x;
+	const vec2  paramsStart          = vec2(uPatchLodPing.mElements[elementIdxIn].mParams[0], uPatchLodPing.mElements[elementIdxIn].mParams[2]);
+	const vec2  paramsEnd            = vec2(uPatchLodPing.mElements[elementIdxIn].mParams[1], uPatchLodPing.mElements[elementIdxIn].mParams[3]);
+	const vec2  paramsRange          = vec2(paramsEnd.x - paramsStart.x, paramsEnd.y - paramsStart.y);
+	const uint  objectId             = uPatchLodPing.mElements[elementIdxIn].mObjectIdUserData[0];
+	const uvec3 userData             = uPatchLodPing.mElements[elementIdxIn].mObjectIdUserData.yzw;
+	const int   curveIndex           = uObjectData.mElements[objectId].mCurveIndex;
+	const mat4  tM                   = uObjectData.mElements[objectId].mTransformationMatrix;
+	const bool  useAdaptive          = uObjectData.mElements[objectId].mUseAdaptiveDetail == 1;
+	const vec4  lodAndRenderSettings = uObjectData.mElements[objectId].mLodAndRenderSettings;
+	const float screenSpaceThreshold = lodAndRenderSettings.z;
 
 	// Do we have to split? Or are we already good to go (to px fill)?
 
@@ -303,32 +283,32 @@ void main()
 #if WRITE_OUT_MIN_MAX_SCREEN_COORDS
 #if WRITE_MAX_COORDS_IN_PASS2
 	vec2 minScreenC, maxScreenC;
-	evalSplitDecision(gl_LocalInvocationID.z == 0 ? false : true, paramsStart, paramsRange, curveIndex, translation, scale, posCS, minScreenC, maxScreenC);
+	evalSplitDecision(gl_LocalInvocationID.z == 0 ? false : true, paramsStart, paramsRange, screenSpaceThreshold, curveIndex, translation, scale, posCS, minScreenC, maxScreenC);
 #else
 	vec2 minScreenC;
-	evalSplitDecision(gl_LocalInvocationID.z == 0 ? false : true, paramsStart, paramsRange, curveIndex, translation, scale, posCS, minScreenC);
+	evalSplitDecision(gl_LocalInvocationID.z == 0 ? false : true, paramsStart, paramsRange, screenSpaceThreshold, curveIndex, translation, scale, posCS, minScreenC);
 #endif
 #else
-	evalSplitDecision(gl_LocalInvocationID.z == 0 ? false : true, paramsStart, paramsRange, curveIndex, translation, scale, posCS);
+	evalSplitDecision(gl_LocalInvocationID.z == 0 ? false : true, paramsStart, paramsRange, screenSpaceThreshold, curveIndex, translation, scale, posCS);
 #endif
 #else
 	vec4 posCS_u, posCS_v;
 #if WRITE_OUT_MIN_MAX_SCREEN_COORDS
 #if WRITE_MAX_COORDS_IN_PASS2
 	vec2 minScreenC_u, minScreenC_v, maxScreenC_u, maxScreenC_v;
-	evalSplitDecision(false, paramsStart, paramsRange, curveIndex, userData, tM, posCS_u, minScreenC_u, maxScreenC_u);  // <-- for u
-	evalSplitDecision(true , paramsStart, paramsRange, curveIndex, userData, tM, posCS_v, minScreenC_v, maxScreenC_v);  // <-- for v
+	evalSplitDecision(false, paramsStart, paramsRange, screenSpaceThreshold, curveIndex, userData, tM, posCS_u, minScreenC_u, maxScreenC_u);  // <-- for u
+	evalSplitDecision(true , paramsStart, paramsRange, screenSpaceThreshold, curveIndex, userData, tM, posCS_v, minScreenC_v, maxScreenC_v);  // <-- for v
 	vec2 minScreenC = min(minScreenC_u, minScreenC_v);
 	vec2 maxScreenC = max(maxScreenC_u, maxScreenC_v);
 #else 
 	vec2 minScreenC_u, minScreenC_v;
-	evalSplitDecision(false, paramsStart, paramsRange, curveIndex, userData, tM, posCS_u, minScreenC_u);  // <-- for u
-	evalSplitDecision(true , paramsStart, paramsRange, curveIndex, userData, tM, posCS_v, minScreenC_v);  // <-- for v
+	evalSplitDecision(false, paramsStart, paramsRange, screenSpaceThreshold, curveIndex, userData, tM, posCS_u, minScreenC_u);  // <-- for u
+	evalSplitDecision(true , paramsStart, paramsRange, screenSpaceThreshold, curveIndex, userData, tM, posCS_v, minScreenC_v);  // <-- for v
 	vec2 minScreenC = min(minScreenC_u, minScreenC_v);
 #endif
 #else
-	evalSplitDecision(false, paramsStart, paramsRange, curveIndex, userData, tM, posCS_u);  // <-- for u
-	evalSplitDecision(true , paramsStart, paramsRange, curveIndex, userData, tM, posCS_v);  // <-- for v
+	evalSplitDecision(false, paramsStart, paramsRange, screenSpaceThreshold, curveIndex, userData, tM, posCS_u);  // <-- for u
+	evalSplitDecision(true , paramsStart, paramsRange, screenSpaceThreshold, curveIndex, userData, tM, posCS_v);  // <-- for v
 #endif
 #endif
 

@@ -124,227 +124,6 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
         }
 	}
 
-	void record_triangles_from_parametric() {
-		using namespace avk;
-
-		auto& drawCall = mDrawCalls.emplace_back();
-        drawCall.mModelMatrix      = glm::mat4{1.0f};
-		drawCall.mMaterialIndex	   = 0;
-		drawCall.mPixelsOnMeridian = 1;
-
-		const auto insertIdx = mVertexBuffersOffsetsSizesCount.x++;
-		uint32_t posOffset = 0;
-		uint32_t nrmOffset = 0;
-		uint32_t tcoOffset = 0;
-		uint32_t idxOffset = 0;
-        if (0 != insertIdx) { // There are already elements => update offsets:
-			const auto& b = mVertexBuffersOffsetsSizes.back();
-			posOffset = roundUpToMultipleOf(b.mPositionsOffset + b.mPositionsSize, 16u);
-			nrmOffset = roundUpToMultipleOf(b.mNormalsOffset   + b.mNormalsSize  , 16u);
-			tcoOffset = roundUpToMultipleOf(b.mTexCoordsOffset + b.mTexCoordsSize, 16u);
-			idxOffset = roundUpToMultipleOf(b.mIndicesOffset   + b.mIndicesSize  , 16u);
-        }
-		LOG_INFO_EM(std::format("About to triangulate a triangle mesh at index #{} from parametric...", insertIdx));
-
-		// --------------> OMG BEGIN
-		vertex_buffers_offsets_sizes elementOffsetsSizesIn;
-		elementOffsetsSizesIn.mPositionsOffset = posOffset / 4;
-		elementOffsetsSizesIn.mPositionsSize   = 0;
-		elementOffsetsSizesIn.mNormalsOffset   = nrmOffset / 4;
-		elementOffsetsSizesIn.mNormalsSize     = 0;
-		elementOffsetsSizesIn.mTexCoordsOffset = tcoOffset / 4;
-		elementOffsetsSizesIn.mTexCoordsSize   = 0;
-		elementOffsetsSizesIn.mIndicesOffset   = idxOffset / 4;
-		elementOffsetsSizesIn.mIndicesSize     = 0;
-		
-		auto elementOffsetSizesBuffer = context().create_buffer(
-			memory_usage::host_coherent, {},
-			storage_buffer_meta::create_from_data(elementOffsetsSizesIn)
-		);
-        auto empteyCmd = elementOffsetSizesBuffer->fill(&elementOffsetsSizesIn, 0);
-		
-		auto mainWnd = context().main_window();
-		//auto resolution = mainWnd->resolution();
-		auto resolution = glm::uvec2(mFramebuffer->image_at(0).width(), mFramebuffer->image_at(0).height());
-
-		glm::mat4 projMat = mQuakeCam.is_enabled() ? mQuakeCam.projection_matrix() : mOrbitCam.projection_matrix();
-
-		frame_data_ubo uboData;
-		if (mQuakeCam.is_enabled()) {
-            uboData.mViewMatrix        = mQuakeCam.view_matrix();
-            uboData.mViewProjMatrix    = mQuakeCam.projection_and_view_matrix();
-			uboData.mInverseProjMatrix = glm::inverse(mQuakeCam.projection_matrix());
-		}
-        else {
-            uboData.mViewMatrix        = mOrbitCam.view_matrix();
-            uboData.mViewProjMatrix    = mOrbitCam.projection_and_view_matrix();
-			uboData.mInverseProjMatrix = glm::inverse(mOrbitCam.projection_matrix());
-        }
-        uboData.mResolutionAndCulling                      = glm::uvec4(resolution, mBackfaceCullingOn ? 1u : 0u, 0u);
-        uboData.mDebugSliders                              = mDebugSliders;
-        uboData.mDebugSlidersi                             = mDebugSlidersi;
-        uboData.mHoleFillingEnabled                        = mHoleFillingEnabled ? VK_TRUE : VK_FALSE;
-        uboData.mCreateTrianglesEnabled                    = mCreateTrianglesEnabled ? VK_TRUE : VK_FALSE;
-        uboData.mLimitFilledPixelsInShaders                = mLimitFilledPixelsInShaders ? VK_TRUE : VK_FALSE;
-		uboData.mHeatMapEnabled                            = mWhatToCopyToBackbuffer == 1 || mWhatToCopyToBackbuffer == 2 ? VK_TRUE : VK_FALSE;
-        uboData.mAdaptivePxFill                            = mAdaptivePxFill ? VK_TRUE : VK_FALSE;
-        uboData.mUseMaxPatchResolutionDuringPxFill         = mUseMaxPatchResolutionDuringPxFill ? VK_TRUE : VK_FALSE;
-		uboData.mWriteToCombinedAttachmentInFragmentShader = 3 != mWhatToCopyToBackbuffer ? VK_TRUE : VK_FALSE;
-        uboData.mGatherPipelineStats                       = mGatherPipelineStats;
-        uboData.mAbsoluteTime                              = (mAnimationPaused ? mAnimationPauseTime : time().absolute_time()) - mTimeToSubtract;
-        uboData.mDeltaTime                                 = time().delta_time();
-		uboData.mScreenDistanceThreshold                   = mScreenDistanceThreshold;
-		// Update in host-coherent buffer:
-		auto tmpFrameDataBuffer = context().create_buffer(
-			memory_usage::host_coherent, {},
-			uniform_buffer_meta::create_from_data(frame_data_ubo{})
-		);
-        auto emptyCmd = tmpFrameDataBuffer->fill(&uboData, 0);
-		
-		// Get a command pool to allocate command buffers from:
-		auto& commandPool = context().get_command_pool_for_single_use_command_buffers(*mQueue);
-		
-		// Create a command buffer and render into the *current* swap chain image:
-		auto cmdBfr = commandPool->alloc_command_buffer(vk::CommandBufferUsageFlagBits::eOneTimeSubmit);
-
-		std::vector<recorded_commands_t> pass2xCommands;
-        pass2xCommands = command::gather(
-            command::bind_pipeline(mPatchLodComputePipe.as_reference()),
-            command::bind_descriptors(mPatchLodComputePipe->layout(), mDescriptorCache->get_or_create_descriptor_sets({
-	            descriptor_binding(0, 0, tmpFrameDataBuffer), 
-	            descriptor_binding(1, 0, mCountersSsbo->as_storage_buffer()),
-	            descriptor_binding(2, 0, mObjectDataBuffer->as_storage_buffer()),
-	            descriptor_binding(2, 1, mIndirectPxFillParamsBuffer->as_storage_buffer()),
-	            descriptor_binding(2, 2, mIndirectPxFillCountBuffer->as_storage_buffer())
-            }))
-		);
-		buffer* firstPing = nullptr;
-		buffer* finalPong = nullptr;
-        for (uint32_t lodLevel = 0; lodLevel < MAX_PATCH_SUBDIV_STEPS; ++lodLevel) {
-			// ping-pong:
-			bool evenOdd = (lodLevel & 0x1) == 0x0;
-			buffer* ping = evenOdd ? &mPatchLodBufferPing : &mPatchLodBufferPong;
-			buffer* pong = evenOdd ? &mPatchLodBufferPong : &mPatchLodBufferPing;
-
-			if (nullptr == firstPing) {
-				firstPing = ping;
-            }
-
-			auto moreCommands = command::gather(
-                command::bind_descriptors(mPatchLodComputePipe->layout(), mDescriptorCache->get_or_create_descriptor_sets({
-	                descriptor_binding(3, 0, (*ping)->as_storage_buffer()),
-	                descriptor_binding(3, 1, (*pong)->as_storage_buffer()),
-	                descriptor_binding(3, 2, mPatchLodCountBuffer->as_storage_buffer())
-                })),
-
-				command::push_constants(mPatchLodComputePipe->layout(), pass2x_push_constants{ 
-					mGatherPipelineStats ? VK_TRUE : VK_FALSE,
-				    lodLevel,
-					mLodStrategy,
-					0 == mLodStrategy ? static_cast<float>(mNumSubdivisions) : mScreenDistanceThreshold,
-					mFrustumCullingOn ? VK_TRUE : VK_FALSE
-				}),
-
-                command::dispatch_indirect(mPatchLodCountBuffer, sizeof(glm::uvec4) * lodLevel),
-
-                sync::global_memory_barrier(stage::compute_shader + access::memory_write >> stage::compute_shader + access::memory_read)
-			);
-			add_commands(pass2xCommands, moreCommands);
-
-			finalPong = pong;
-        }
-		assert(nullptr != firstPing);
-		assert(nullptr != finalPong);
-		assert((MAX_PATCH_SUBDIV_STEPS %2 == 0 && firstPing == finalPong) || (MAX_PATCH_SUBDIV_STEPS %2 == 1 && firstPing != finalPong));
-
-		context().record_and_submit_with_fence(command::gather(
-			command::bind_pipeline(mClearCombinedAttachmentPipe.as_reference()),
-			command::bind_descriptors(mClearCombinedAttachmentPipe->layout(), mDescriptorCache->get_or_create_descriptor_sets({
-			    descriptor_binding(0, 0, mCountersSsbo->as_storage_buffer()),
-			    descriptor_binding(1, 0, mObjectDataBuffer->as_storage_buffer()),
-			    descriptor_binding(1, 1, mIndirectPxFillParamsBuffer->as_storage_buffer()),
-			    descriptor_binding(1, 2, mIndirectPxFillCountBuffer->as_storage_buffer()),
-                descriptor_binding(2, 0, mCombinedAttachmentView->as_storage_image(layout::general)),
-#if STATS_ENABLED
-                descriptor_binding(2, 1, mHeatMapImageView->as_storage_image(layout::general)),
-#endif
-                descriptor_binding(3, 0, mPatchLodBufferPing->as_storage_buffer()),
-                descriptor_binding(3, 1, mPatchLodBufferPong->as_storage_buffer()),
-                descriptor_binding(3, 2, mPatchLodCountBuffer->as_storage_buffer())
-#if PX_FILL_LOCAL_FB && SEPARATE_PATCH_TILE_ASSIGNMENT_PASS
-				, descriptor_binding(4, 0, mTilePatchesBuffer->as_storage_buffer())
-#endif
-			})),
-			command::dispatch((resolution.x + 15u) / 16u, (resolution.y + 15u) / 16u, 1u),
-
-		    sync::global_memory_barrier(stage::all_commands >> stage::all_commands, access::memory_write >> access::memory_write | access::memory_read),
-				
-			// Use the parametric pipe to draw some parametric functions:
-			
-            command::bind_pipeline(mInitPatchesComputePipe.as_reference()),
-			command::bind_descriptors(mInitPatchesComputePipe->layout(), mDescriptorCache->get_or_create_descriptor_sets({
-				descriptor_binding(0, 0, tmpFrameDataBuffer), 
-			    descriptor_binding(1, 0, mCountersSsbo->as_storage_buffer()),
-				descriptor_binding(2, 0, mObjectDataBuffer->as_storage_buffer()),
-				descriptor_binding(2, 1, mIndirectPxFillParamsBuffer->as_storage_buffer()),
-				descriptor_binding(2, 2, mIndirectPxFillCountBuffer->as_storage_buffer()),
-	            descriptor_binding(3, 0, (*firstPing)->as_storage_buffer()),
-	            descriptor_binding(3, 1, (*finalPong)->as_storage_buffer()),
-	            descriptor_binding(3, 2, mPatchLodCountBuffer->as_storage_buffer())
-			})),
-			
-			// 1st pass compute shader: density estimation PER OBJECT
-			command::dispatch(mNumEnabledObjects, 1u, 1u),
-
-			sync::global_memory_barrier(stage::compute_shader + access::memory_write >> stage::compute_shader + access::memory_read),
-
-			// 2nd passes: patch lods
-            pass2xCommands,
-			
-			// 3rd pass compute shader: px fill PER DRAW PACKAGE
-            command::bind_pipeline(mTriangleWriteComputePipe.as_reference()),
-			command::bind_descriptors(mTriangleWriteComputePipe->layout(), mDescriptorCache->get_or_create_descriptor_sets({
-				descriptor_binding(0, 0, tmpFrameDataBuffer), 
-			    descriptor_binding(1, 0, mCountersSsbo->as_storage_buffer()),
-				descriptor_binding(2, 0, mObjectDataBuffer->as_storage_buffer()),
-				descriptor_binding(2, 1, mIndirectPxFillParamsBuffer->as_storage_buffer()),
-				descriptor_binding(2, 2, mIndirectPxFillCountBuffer->as_storage_buffer()),
-                // all them vertex buffers:
-                descriptor_binding(3, 0, mPositionsBuffer->as_storage_buffer()),
-                descriptor_binding(3, 1, mNormalsBuffer->as_storage_buffer()),
-                descriptor_binding(3, 2, mTexCoordsBuffer->as_storage_buffer()),
-                descriptor_binding(3, 3, mIndexBuffer->as_storage_buffer()),
-                descriptor_binding(3, 4, elementOffsetSizesBuffer->as_storage_buffer())
-			})),
-
-			command::dispatch_indirect(mIndirectPxFillCountBuffer, 0)
-		), *mQueue)->wait_until_signalled();
-
-		vertex_buffers_offsets_sizes elementOffsetsSizesOut = elementOffsetSizesBuffer->read<vertex_buffers_offsets_sizes>(0);
-		// --------------> OMG END
-
-		const auto& os = mVertexBuffersOffsetsSizes.emplace_back(
-			posOffset, elementOffsetsSizesOut.mPositionsSize * 4,
-			nrmOffset, elementOffsetsSizesOut.mNormalsSize * 4,
-			tcoOffset, elementOffsetsSizesOut.mTexCoordsSize * 4,
-			idxOffset, elementOffsetsSizesOut.mIndicesSize * 4
-		);
-
-		drawCall.mPositionsBufferOffset = posOffset;
-	    drawCall.mTexCoordsBufferOffset = tcoOffset;
-	    drawCall.mNormalsBufferOffset   = nrmOffset;
-	    drawCall.mIndexBufferOffset     = idxOffset;
-        drawCall.mNumElements           = elementOffsetsSizesOut.mIndicesSize;
-
-		LOG_INFO(std::format("New triangle mesh at: pos[{}, {}], nrm[{}, {}], tco[{}, {}], idx[{}, {}], numElements[{}]",
-			os.mPositionsOffset, os.mPositionsSize,
-			os.mNormalsOffset,   os.mNormalsSize,
-			os.mTexCoordsOffset, os.mTexCoordsSize,
-			os.mIndicesOffset,   os.mIndicesSize,
-			drawCall.mNumElements));
-		LOG_INFO_EM(std::format("...done. Now go and marvel at the result of triangle mesh at index #{}!", insertIdx));
-	}
-
 	/** Creates buffers for all the drawcalls.
 	 *  Called after everything has been loaded and split into meshlets properly.
 	 *  @param dataForDrawCall		The loaded data for the drawcalls.
@@ -663,21 +442,6 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 		);
         mUpdater->on(shader_files_changed_event(mSelectTilePatchesPipe.as_reference())).update(mSelectTilePatchesPipe);
 #endif
-
-		auto tmpOffSizeBuffer = context().create_buffer(
-			memory_usage::host_coherent, {},
-			storage_buffer_meta::create_from_data(vertex_buffers_offsets_sizes{})
-		);
-		mTriangleWriteComputePipe = create_compute_pipe_for_parametric(
-			"shaders/pass3_triangle_write.comp", 
-            // all them vertex buffers:
-            descriptor_binding(3, 0, mPositionsBuffer->as_storage_buffer()),
-            descriptor_binding(3, 1, mNormalsBuffer->as_storage_buffer()),
-            descriptor_binding(3, 2, mTexCoordsBuffer->as_storage_buffer()),
-            descriptor_binding(3, 3, mIndexBuffer->as_storage_buffer()),
-            descriptor_binding(3, 4, tmpOffSizeBuffer->as_storage_buffer())
-		);
-        mUpdater->on(shader_files_changed_event(mTriangleWriteComputePipe.as_reference())).update(mTriangleWriteComputePipe);
     }
 
 	avk::graphics_pipeline create_vertex_pipe()
@@ -803,8 +567,8 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 #endif
 
         mRenderpass = context().create_renderpass({// Define attachments and sub pass usages:                          vvv  Note: All the draw calls are in the same (first) subpass: SS, noAA, simple-stupid vertex pipe (because... why not?!)
-                attachment::declare(aAttachmentFormats[0], on_load::clear.from_previous_layout(layout::undefined), usage::unused                              , on_store::store.in_layout(layout::transfer_src)),
-                attachment::declare(aAttachmentFormats[1], on_load::clear.from_previous_layout(layout::undefined), usage::unused                              , on_store::store.in_layout(layout::transfer_src)),
+                attachment::declare(aAttachmentFormats[0], on_load::clear.from_previous_layout(layout::undefined), usage::unused                              , on_store::store.in_layout(layout::shader_read_only_optimal)),
+                attachment::declare(aAttachmentFormats[1], on_load::clear.from_previous_layout(layout::undefined), usage::unused                              , on_store::store.in_layout(layout::shader_read_only_optimal)),
                 attachment::declare(colorFormatMS        , on_load::clear.from_previous_layout(layout::undefined), usage::color(0)      + usage::resolve_to(0), on_store::dont_care),
                 attachment::declare(depthFormatMS        , on_load::clear.from_previous_layout(layout::undefined), usage::depth_stencil + usage::resolve_to(1), on_store::dont_care)
             }, {
@@ -1215,8 +979,8 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 		mCopyToCombinedAttachmentPipe = context().create_compute_pipeline_for(
 			"shaders/copy_to_combined_attachment.comp",
             descriptor_binding(0, 0, mCombinedAttachmentView->as_storage_image(layout::general)),
-			descriptor_binding(1, 0, mColorAttachmentView->as_sampled_image(layout::transfer_src)),
-			descriptor_binding(1, 1, mDepthAttachmentView->as_sampled_image(layout::transfer_src))
+			descriptor_binding(1, 0, mColorAttachmentView->as_sampled_image(layout::shader_read_only_optimal)),
+			descriptor_binding(1, 1, mDepthAttachmentView->as_sampled_image(layout::shader_read_only_optimal))
 		);
         mUpdater->on(shader_files_changed_event(mCopyToCombinedAttachmentPipe.as_reference())).update(mCopyToCombinedAttachmentPipe);
 
@@ -1381,21 +1145,6 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 
 				// Some parameters to pass to the GPU:
                 ImGui::TextColored(ImVec4(0.f, .6f, .8f, 1.f), "Pipeline Config:");
-				ImGui::Combo("LOD Strategy (pass2x)", &mLodStrategy, "None (subdivide always)\0Screen Distance-Based\0");
-                if (0 == mLodStrategy) {
-					ImGui::Indent();
-                    ImGui::PushItemWidth(imGuiWindowWidth * 0.6f);
-					ImGui::SliderInt("#subdivisions", &mNumSubdivisions, 1, MAX_PATCH_SUBDIV_STEPS-1);
-					ImGui::PopItemWidth();
-					ImGui::Unindent();
-                }
-                if (1 == mLodStrategy) {
-					ImGui::Indent();
-                    ImGui::PushItemWidth(imGuiWindowWidth * 0.6f);
-					ImGui::SliderFloat("screen threshold (pixel dist.)", &mScreenDistanceThreshold, 4.0f, 512.0f);
-					ImGui::PopItemWidth();
-					ImGui::Unindent();
-                }
                 ImGui::TextColored(ImVec4(0.f, .6f, .8f, 1.f), "PxFill shader config params (besides ^ screen threshold)");
 					ImGui::Indent();
                     ImGui::PushItemWidth(imGuiWindowWidth * 0.6f);
@@ -1440,9 +1189,6 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
                 }
 
 				ImGui::Checkbox("Use individual patch resolution during px fill", &mUseMaxPatchResolutionDuringPxFill);
-                if (ImGui::Button("Triangulate current parametric scene")) {
-                    record_triangles_from_parametric();
-                }
 
 				ImGui::End();
 
@@ -1579,7 +1325,6 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 			fill_object_data_buffer();
 			mConstInnerTessLevel = static_cast<float>(TEST_INNER_TESS_LEVEL);
 			mConstOuterTessLevel = static_cast<float>(TEST_OUTER_TESS_LEVEL);
-			mScreenDistanceThreshold = static_cast<float>(TEST_SCREEN_DISTANCE_THRESHOLD);
 			mUseMaxPatchResolutionDuringPxFill = 1 == TEST_USEINDIVIDUAL_PATCH_RES;
 			mRenderExtra3DModel = 1 == TEST_ENABLE_3D_MODEL;
 			mWhatToCopyToBackbuffer = TEST_TARGET_IMAGE;
@@ -1767,8 +1512,6 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 				command::push_constants(mPatchLodComputePipe->layout(), pass2x_push_constants{ 
 					mGatherPipelineStats ? VK_TRUE : VK_FALSE,
 				    lodLevel,
-					mLodStrategy,
-					0 == mLodStrategy ? static_cast<float>(mNumSubdivisions) : mScreenDistanceThreshold,
 					mFrustumCullingOn ? VK_TRUE : VK_FALSE
 				}),
 
@@ -1862,17 +1605,12 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
         uboData.mResolutionAndCulling                      = glm::uvec4(resolution, mBackfaceCullingOn ? 1u : 0u, 0u);
         uboData.mDebugSliders                              = mDebugSliders;
         uboData.mDebugSlidersi                             = mDebugSlidersi;
-        uboData.mHoleFillingEnabled                        = mHoleFillingEnabled ? VK_TRUE : VK_FALSE;
-        uboData.mCreateTrianglesEnabled                    = mCreateTrianglesEnabled ? VK_TRUE : VK_FALSE;
-        uboData.mLimitFilledPixelsInShaders                = mLimitFilledPixelsInShaders ? VK_TRUE : VK_FALSE;
 		uboData.mHeatMapEnabled                            = mWhatToCopyToBackbuffer == 1 || mWhatToCopyToBackbuffer == 2 ? VK_TRUE : VK_FALSE;
-        uboData.mAdaptivePxFill                            = mAdaptivePxFill ? VK_TRUE : VK_FALSE;
         uboData.mUseMaxPatchResolutionDuringPxFill         = mUseMaxPatchResolutionDuringPxFill ? VK_TRUE : VK_FALSE;
 		uboData.mWriteToCombinedAttachmentInFragmentShader = 3 != mWhatToCopyToBackbuffer ? VK_TRUE : VK_FALSE;
         uboData.mGatherPipelineStats                       = mGatherPipelineStats;
         uboData.mAbsoluteTime                              = (mAnimationPaused ? mAnimationPauseTime : time().absolute_time()) - mTimeToSubtract;
         uboData.mDeltaTime                                 = time().delta_time();
-		uboData.mScreenDistanceThreshold                   = mScreenDistanceThreshold;
 		// Update in host-coherent buffer:
         auto emptyCmd = mFrameDataBuffers[inFlightIndex]->fill(&uboData, 0);
 		
@@ -2051,8 +1789,8 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 			command::bind_pipeline(mCopyToCombinedAttachmentPipe.as_reference()),
 				command::bind_descriptors(mCopyToCombinedAttachmentPipe->layout(), mDescriptorCache->get_or_create_descriptor_sets({
 					descriptor_binding(0, 0, mCombinedAttachmentView->as_storage_image(layout::general)),
-					descriptor_binding(1, 0, mColorAttachmentView->as_sampled_image(layout::transfer_src)),
-					descriptor_binding(1, 1, mDepthAttachmentView->as_sampled_image(layout::transfer_src))
+					descriptor_binding(1, 0, mColorAttachmentView->as_sampled_image(layout::shader_read_only_optimal)),
+					descriptor_binding(1, 1, mDepthAttachmentView->as_sampled_image(layout::shader_read_only_optimal))
 				})),
 			command::dispatch((resolution.x + 15u) / 16u, (resolution.y + 15u) / 16u, 1u),
 
@@ -2122,8 +1860,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 				})),
 
 				command::push_constants(mPxFillComputePipe->layout(), pass3_push_constants{
-					mGatherPipelineStats ? VK_TRUE : VK_FALSE,
-					mScreenDistanceThreshold,
+					mGatherPipelineStats ? VK_TRUE : VK_FALSE,  /* padding: */ 0,
 					glm::vec2{ mPxFillPatchTargetResolutionScaler[0], mPxFillPatchTargetResolutionScaler[1] },
 					glm::vec2{ mPxFillParamShift[0], mPxFillParamShift[1] },
 					glm::vec2{ mPxFillParamStretch[0], mPxFillParamStretch[1] },
@@ -2239,7 +1976,6 @@ private: // v== Member variables ==v
 	avk::compute_pipeline mInitKnitYarnComputePipe;
 	avk::compute_pipeline mPatchLodComputePipe;
 	avk::compute_pipeline mPxFillComputePipe;
-	avk::compute_pipeline mTriangleWriteComputePipe;
 #if PX_FILL_LOCAL_FB && SEPARATE_PATCH_TILE_ASSIGNMENT_PASS
 	avk::compute_pipeline mSelectTilePatchesPipe;
 #endif
@@ -2338,10 +2074,7 @@ private: // v== Member variables ==v
 	uint32_t mNumPxFillPatchesCreated;
 
 	// Other, global settings, stored in common UBO:
-    bool mHoleFillingEnabled = true;
-    bool mCreateTrianglesEnabled = false;
     bool m2ndPassEnabled = false;
-    bool mLimitFilledPixelsInShaders = false;
     bool mAdaptivePxFill = false;
     bool mUseMaxPatchResolutionDuringPxFill = false;
 
@@ -2355,9 +2088,6 @@ private: // v== Member variables ==v
 	glm::uvec4  mVertexBuffersOffsetsSizesCount = glm::uvec4{0}; // only .x is used
 	avk::buffer mVertexBuffersOffsetsSizesCountBuffer;
 
-	int mLodStrategy = 1; // 1 ... screen distance-based
-	float mScreenDistanceThreshold = 62.0f; // param for mLodStrategy == 1
-	int   mNumSubdivisions = 4;             // param for mLodStrategy == 0
 	bool mFrustumCullingOn = true;
     bool mBackfaceCullingOn = true;
 	std::array<float, 2> mPxFillPatchTargetResolutionScaler {{ 1.2f, 1.2f }};

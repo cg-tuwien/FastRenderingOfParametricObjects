@@ -78,8 +78,7 @@ layout(set = 4, binding = 0) buffer TilePatchesBuffer { uint mPatchIndices[]; } 
 layout(push_constant) uniform PushConstants
 {
     bool mGatherPipelineStats;
-	float mPatchTargetResolution; // What resolution one "px fill" workgroup is supposed to fill.
-	                              // Squared resolution that is, i.e.: mPatchTargetResolution x mPatchTargetResolution
+	int  _padding;
 	vec2 mPatchTargetResolutionScaler; // Scaler to increase/decrease point density
 	vec2 mParamShift;   // Shift u/v params by amount of deltaU/deltaV (in order to fill holes to neighboring tiles)
 	vec2 mParamStretch; // Stretch u/v params by amount of deltaU/deltaV (in order to fill holes to neighboring tiles)
@@ -292,17 +291,20 @@ void main()
 			uPxFillParams.mElements[pxFillId].mParams[1] - uPxFillParams.mElements[pxFillId].mParams[0],
 			uPxFillParams.mElements[pxFillId].mParams[3] - uPxFillParams.mElements[pxFillId].mParams[2]
 		);
-		const uint objectId    = uPxFillParams.mElements[pxFillId].mObjectIdUserData[0];
-		const uvec3 userData   = uPxFillParams.mElements[pxFillId].mObjectIdUserData.yzw;
-		const mat4  tM         = uObjectData.mElements[objectId].mTransformationMatrix;
-		const int  curveIndex  = uObjectData.mElements[objectId].mCurveIndex;
-		const int  matIndex    = uObjectData.mElements[objectId].mMaterialIndex; 
+		const uint  objectId             = uPxFillParams.mElements[pxFillId].mObjectIdUserData[0];
+		const uvec3 userData             = uPxFillParams.mElements[pxFillId].mObjectIdUserData.yzw;
+		const mat4  tM                   = uObjectData.mElements[objectId].mTransformationMatrix;
+		const int   curveIndex           = uObjectData.mElements[objectId].mCurveIndex;
+		const int   matIndex             = uObjectData.mElements[objectId].mMaterialIndex; 
+		const bool  useAdaptive          = uObjectData.mElements[objectId].mUseAdaptiveDetail == 1; 
+		const vec4  lodAndRenderSettings = uObjectData.mElements[objectId].mLodAndRenderSettings;
+		const float screenSpaceThreshold = lodAndRenderSettings.z;
 
 		// Let's see how many iterations we need in each direction:
 		const float numPixelProducingInvocs = float(gl_WorkGroupSize.x - 1);
 		float numIterationsU = ubo.mUseMaxPatchResolutionDuringPxFill 
 			? max(floor((uPxFillParams.mElements[pxFillId].mScreenDists.x * float(TILE_FACTOR_X) * pushConstants.mPatchTargetResolutionScaler.x + numPixelProducingInvocs - 1) / numPixelProducingInvocs), 1.0)
-			:     floor((pushConstants.mPatchTargetResolution             * float(TILE_FACTOR_X) * pushConstants.mPatchTargetResolutionScaler.x + numPixelProducingInvocs - 1) / numPixelProducingInvocs);
+			:     floor((screenSpaceThreshold                             * float(TILE_FACTOR_X) * pushConstants.mPatchTargetResolutionScaler.x + numPixelProducingInvocs - 1) / numPixelProducingInvocs);
 	//	debugPrintfEXT("mPatchTargetResolution[%f], numPixelProducingInvocs[%f], numIterationsU[%f]", pushConstants.mPatchTargetResolution, numPixelProducingInvocs, numIterationsU);
 
 		// With that info, calc our deltas:
@@ -310,7 +312,7 @@ void main()
 		float deltaU = iterationDeltaU / numPixelProducingInvocs;
 		float deltaV = ubo.mUseMaxPatchResolutionDuringPxFill 
 			? paramsRange[1] / max(uPxFillParams.mElements[pxFillId].mScreenDists.y * float(TILE_FACTOR_Y) * pushConstants.mPatchTargetResolutionScaler.y - 1.0, 1.0)  // -1.0 because we need to overshoot by one
-			: paramsRange[1] /    (pushConstants.mPatchTargetResolution             * float(TILE_FACTOR_Y) * pushConstants.mPatchTargetResolutionScaler.y - 1.0); // -1.0 because we need to overshoot by one
+			: paramsRange[1] /    (screenSpaceThreshold                             * float(TILE_FACTOR_Y) * pushConstants.mPatchTargetResolutionScaler.y - 1.0); // -1.0 because we need to overshoot by one
 	//	debugPrintfEXT("iterationDeltaU[%f], deltaU[%f], deltaV[%f]", iterationDeltaU, deltaU, deltaV);
 
 		paramsStart -= vec2(deltaU, deltaV) * pushConstants.mParamShift;
@@ -349,7 +351,7 @@ void main()
 				vec3 vpcPong = calcPoint(u, v, curveIndex, userData, tM, /* out: */ wsPong, /* out: */ offPong);
 
 				bool tryAgain = false;
-				if (ubo.mAdaptivePxFill) {
+				if (useAdaptive) {
 					// Adaptive deltaV:
 					float pxDist = dot(vpcPong.xy - vpcPing.xy, vpcPong.xy - vpcPing.xy);
 					if (isnan(pxDist)) pxDist = 0.0;
