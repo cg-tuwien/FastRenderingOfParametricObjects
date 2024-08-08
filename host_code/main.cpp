@@ -103,11 +103,11 @@ static std::array<parametric_object, 13> PredefinedParametricObjects {{
 	parametric_object{"Seashell 1"  , "assets/po-seashell1.png",          false, parametric_object_type::Seashell1,              glm::two_pi<float>() * 8.0f,/* -> */0.0f,   0.0f,/* -> */glm::two_pi<float>(), glm::mat4{ 1.0f }, 2},
 	parametric_object{"Seashell 2"  , "assets/po-seashell2.png",          false, parametric_object_type::Seashell2,              glm::two_pi<float>() * 8.0f,/* -> */0.0f,   0.0f,/* -> */glm::two_pi<float>(), glm::translate(glm::vec3{-4.5f, 7.0f, 0.0f }), 2},
 	parametric_object{"Seashell 3"  , "assets/po-seashell3.png",          false, parametric_object_type::Seashell3,              glm::two_pi<float>() * 8.0f,/* -> */0.0f,   0.0f,/* -> */glm::two_pi<float>(), glm::translate(glm::vec3{ 4.5f, 7.0f, 0.0f }), 2},
-	parametric_object{"Yarn Curve"  , "assets/po-yarn-curve-single.png",  false, parametric_object_type::YarnCurve,  1.0f, 1.0f, /* <-- yarn dimensions | #fibers --> */ 4.f, 1.f, glm::translate(glm::vec3{-3.35f, 0.08f, 5.32f}) * glm::scale(glm::vec3{ 0.005f }), 27},
-	parametric_object{"Fiber Curve" , "assets/po-fiber-curve-single.png", false, parametric_object_type::FiberCurve, 1.0f, 1.0f, /* <-- yarn dimensions | #fibers --> */ 4.f, 1.f, glm::translate(glm::vec3{-3.35f, 0.08f, 5.32f}) * glm::scale(glm::vec3{ 0.005f }), 27},
-	parametric_object{"Blue Curtain", "assets/po-blue-curtain.png",		  false, parametric_object_type::YarnCurve,  235.0f, 254.0f, /* <-- yarn dimensions | #fibers --> */ 4.f, 1.f, glm::translate(glm::vec3{-3.35f, 0.08f, 5.32f}) * glm::scale(glm::vec3{ 0.005f }), 27},
+	parametric_object{"Yarn Curve"  , "assets/po-yarn-curve-single.png",  false, parametric_object_type::YarnCurve,  1.0f, 1.0f, /* <-- yarn dimensions | #fibers --> */ 4.f, 1.f, glm::translate(glm::vec3{-3.35f, 0.08f, 5.32f}) * glm::scale(glm::vec3{ 0.005f }), 17},
+	parametric_object{"Fiber Curve" , "assets/po-fiber-curve-single.png", false, parametric_object_type::FiberCurve, 1.0f, 1.0f, /* <-- yarn dimensions | #fibers --> */ 4.f, 1.f, glm::translate(glm::vec3{-3.35f, 0.08f, 5.32f}) * glm::scale(glm::vec3{ 0.005f }), 17},
+	parametric_object{"Blue Curtain", "assets/po-blue-curtain.png",		  false, parametric_object_type::YarnCurve,  235.0f, 254.0f, /* <-- yarn dimensions | #fibers --> */ 4.f, 1.f, glm::translate(glm::vec3{-3.35f, 0.08f, 5.32f}) * glm::scale(glm::vec3{ 0.005f }), 17},
 	parametric_object{"Palm Tree"   , "assets/po-palm-tree.png",		  false, parametric_object_type::PalmTreeTrunk,          0.0f,   1.0f,            0.0f,  glm::two_pi<float>(), glm::translate(glm::vec3{ 0.f,  0.f, -4.f})},
-	parametric_object{"Giant Worm"  , "assets/po-giant-worm.png",		  false, parametric_object_type::PalmTreeTrunk,  235.0f, 254.0f, /* <-- yarn dimensions | #fibers --> */ 4.f, 1.f, glm::translate(glm::vec3{-3.35f, 0.08f, 5.32f}) * glm::scale(glm::vec3{ 0.005f }), 27},
+	parametric_object{"Giant Worm"  , "assets/po-giant-worm.png",		  false, parametric_object_type::PalmTreeTrunk,  235.0f, 254.0f, /* <-- yarn dimensions | #fibers --> */ 4.f, 1.f, glm::translate(glm::vec3{-3.35f, 0.08f, 5.32f}) * glm::scale(glm::vec3{ 0.005f }), 17},
 	parametric_object{"SH Glyph"    , "assets/po-single-sh-glyph.png",    false, parametric_object_type::SHGlyph,                0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>()},
 	parametric_object{"Brain Scan"  , "assets/po-sh-brain.png",           false, parametric_object_type::SHGlyph,                0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>()}
 }};
@@ -697,8 +697,6 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 				cfg::viewport_depth_scissors_config::from_framebuffer(mFramebuffer.as_reference()),
 
 				mRenderpass,
-				// This is the second subpass and it's gonna be shaded per fragment (i.e., only multi-sampled, not super-sampled):
-				cfg::subpass_index(1), 
 				cfg::shade_per_fragment(), 
 			
 				mDisableColorAttachmentOut 
@@ -735,9 +733,6 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 				cfg::viewport_depth_scissors_config::from_framebuffer(mFramebuffer.as_reference()),
 
                 mRenderpass,
-				// This is the first subpass and it's gonna be shaded per sample (i.e., super-sampled):
-				cfg::subpass_index(0), 
-				cfg::shade_per_sample(),
 
 				mDisableColorAttachmentOut 
 					? cfg::color_blending_config { {}, true , cfg::color_channel::none }
@@ -807,21 +802,17 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 		mHeatMapImageView          = context().create_image_view(std::move(heatMapImage));
 #endif
 
-        mRenderpass = context().create_renderpass({// Define attachments and sub pass usages:
-                attachment::declare(aAttachmentFormats[0], on_load::clear.from_previous_layout(layout::undefined), usage::unused        >> usage::unused                              , on_store::store.in_layout(layout::transfer_src)),
-                attachment::declare(aAttachmentFormats[1], on_load::clear.from_previous_layout(layout::undefined), usage::unused        >> usage::unused                              , on_store::store.in_layout(layout::transfer_src)),
-                attachment::declare(colorFormatMS        , on_load::clear.from_previous_layout(layout::undefined), usage::color(0)      >> usage::color(0)      + usage::resolve_to(0), on_store::dont_care),
-                attachment::declare(depthFormatMS        , on_load::clear.from_previous_layout(layout::undefined), usage::depth_stencil >> usage::depth_stencil + usage::resolve_to(1), on_store::dont_care)
+        mRenderpass = context().create_renderpass({// Define attachments and sub pass usages:                          vvv  Note: All the draw calls are in the same (first) subpass: SS, noAA, simple-stupid vertex pipe (because... why not?!)
+                attachment::declare(aAttachmentFormats[0], on_load::clear.from_previous_layout(layout::undefined), usage::unused                              , on_store::store.in_layout(layout::transfer_src)),
+                attachment::declare(aAttachmentFormats[1], on_load::clear.from_previous_layout(layout::undefined), usage::unused                              , on_store::store.in_layout(layout::transfer_src)),
+                attachment::declare(colorFormatMS        , on_load::clear.from_previous_layout(layout::undefined), usage::color(0)      + usage::resolve_to(0), on_store::dont_care),
+                attachment::declare(depthFormatMS        , on_load::clear.from_previous_layout(layout::undefined), usage::depth_stencil + usage::resolve_to(1), on_store::dont_care)
             }, {
 				subpass_dependency{subpass::external >> subpass::index(0),
 					stage::none    >>   stage::all_graphics,
 					access::none   >>   access::color_attachment_write | access::depth_stencil_attachment_read | access::depth_stencil_attachment_write
 				},
-				subpass_dependency{subpass::index(0) >> subpass::index(1),
-					stage::all_graphics    >>   stage::all_graphics,
-					access::color_attachment_write | access::depth_stencil_attachment_write   >>   access::color_attachment_write | access::depth_stencil_attachment_read | access::depth_stencil_attachment_write
-				},
-				subpass_dependency{subpass::index(1) >> subpass::external,
+				subpass_dependency{subpass::index(0) >> subpass::external,
 					stage::fragment_shader       | stage::color_attachment_output  >>   stage::compute_shader                                      | stage::transfer,
 					access::shader_storage_write | access::color_attachment_write  >>   access::shader_storage_read | access::shader_storage_write | access::memory_read
 				}
@@ -928,6 +919,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 				ImGui::Image(inputTexId, ImVec2(previewImageWidth, previewImageWidth), ImVec2(0, 0), ImVec2(1, 1), ImVec4(1.0f, 1.0f, 1.0f, 1.0f), ImVec4(1.0f, 1.0f, 1.0f, 0.5f));
 			}
 
+			// One table row for checkboxes to enable/disable DRAWING, and for showing ImGuizmo for MODificiation:
 			int modifyIndex = -1;
 			ImGui::TableNextRow();
 			int poId  = 0;
@@ -967,6 +959,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 				}
 			}
 
+			// One table row for setting the rendering mdethod:
 			std::vector<int> howRendered(mParametricObjects.size(), 0);
 			ImGui::TableNextRow();
 			poId = 0;
@@ -989,7 +982,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 				poId++;
 				ImGui::PopID();
 			}
-
+			// ...and another (related) table row for enabling/disabling super sampling:
 			poId = 0;
 			for (auto& po : mParametricObjects) {
 				ImGui::TableNextColumn();
@@ -1001,6 +994,8 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 				ImGui::PopID();
 			}
 
+			// One table row for some buttons about duplicating/deleting objects:
+			ImGui::TableNextRow();
 			int duplicateIndex = -1;
 			int deleteIndex = -1;
 			poId = 0;
@@ -1026,6 +1021,17 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 				updateObjects = true;
 			}
 
+			// One table row for setting the material index:
+			ImGui::TableNextRow();
+			poId = 0;
+			for (auto& po : mParametricObjects) {
+				ImGui::TableNextColumn();
+				auto matIndex = po.material_index();
+				if (ImGui::SliderInt("Material Index", &matIndex, -1, mNumMaterials - 1)) {
+					po.set_material_index(matIndex);
+					updateObjects = true;
+				}
+			}
 			ImGui::EndTable();
 		}
 		ImGui::End();
@@ -1147,7 +1153,8 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 			"shaders/px-fill-tess/patch_ready.vert", 
 			"shaders/px-fill-tess/patch_set.tesc", 
 			"shaders/px-fill-tess/patch_go.tese",
-			push_constant_binding_data{shader_type::all, 0, sizeof(patch_into_tess_push_constants)}
+			push_constant_binding_data{shader_type::all, 0, sizeof(patch_into_tess_push_constants)},
+			cfg::shade_per_fragment()
 		);
 		mUpdater->on(shader_files_changed_event(mTessPipelinePxFill.as_reference())).update(mTessPipelinePxFill);
 
@@ -1156,6 +1163,21 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 			p.rasterization_state_create_info().setPolygonMode(vk::PolygonMode::eLine);
 		});
 		mUpdater->on(shader_files_changed_event(mTessPipelinePxFillWireframe.as_reference())).update(mTessPipelinePxFillWireframe);
+
+		mTessPipelinePxFillSS = create_tess_pipe(
+			"shaders/px-fill-tess/patch_ready.vert", 
+			"shaders/px-fill-tess/patch_set.tesc", 
+			"shaders/px-fill-tess/patch_go.tese",
+			push_constant_binding_data{shader_type::all, 0, sizeof(patch_into_tess_push_constants)},
+			cfg::shade_per_sample()
+		);
+		mUpdater->on(shader_files_changed_event(mTessPipelinePxFillSS.as_reference())).update(mTessPipelinePxFillSS);
+
+		// Create an (almost identical) pipeline to render the scene in wireframe mode
+		mTessPipelinePxFillWireframeSS = context().create_graphics_pipeline_from_template(mTessPipelinePxFillSS.as_reference(), [](graphics_pipeline_t& p) {
+			p.rasterization_state_create_info().setPolygonMode(vk::PolygonMode::eLine);
+		});
+		mUpdater->on(shader_files_changed_event(mTessPipelinePxFillWireframeSS.as_reference())).update(mTessPipelinePxFillWireframeSS);
 
 		mCopyToBackufferPipe = context().create_compute_pipeline_for(
 			"shaders/copy_to_backbuffer.comp",
@@ -1456,20 +1478,39 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 					std::swap(*mVertexPipeline, *newVertexPipe); // new pipe is now old pipe
 					context().main_window()->handle_lifetime(std::move(newVertexPipe));
 
-					auto newTessPipePxFill = create_tess_pipe(
-						"shaders/px-fill-tess/patch_ready.vert", 
-						"shaders/px-fill-tess/patch_set.tesc", 
-						"shaders/px-fill-tess/patch_go.tese",
-						push_constant_binding_data{shader_type::all, 0, sizeof(patch_into_tess_push_constants)}
-					);
-					std::swap(*mTessPipelinePxFill, *newTessPipePxFill);
-					context().main_window()->handle_lifetime(std::move(newTessPipePxFill));
+					{
+						auto newTessPipePxFill = create_tess_pipe(
+							"shaders/px-fill-tess/patch_ready.vert", 
+							"shaders/px-fill-tess/patch_set.tesc", 
+							"shaders/px-fill-tess/patch_go.tese",
+							push_constant_binding_data{shader_type::all, 0, sizeof(patch_into_tess_push_constants)}
+						);
+						std::swap(*mTessPipelinePxFill, *newTessPipePxFill);
+						context().main_window()->handle_lifetime(std::move(newTessPipePxFill));
 
-					auto newTessPipePxFillWire = context().create_graphics_pipeline_from_template(mTessPipelinePxFill.as_reference(), [](graphics_pipeline_t& p) {
-						p.rasterization_state_create_info().setPolygonMode(vk::PolygonMode::eLine);
-					});
-					std::swap(*mTessPipelinePxFillWireframe, *newTessPipePxFillWire);
-					context().main_window()->handle_lifetime(std::move(newTessPipePxFillWire));
+						auto newTessPipePxFillWire = context().create_graphics_pipeline_from_template(mTessPipelinePxFill.as_reference(), [](graphics_pipeline_t& p) {
+							p.rasterization_state_create_info().setPolygonMode(vk::PolygonMode::eLine);
+						});
+						std::swap(*mTessPipelinePxFillWireframe, *newTessPipePxFillWire);
+						context().main_window()->handle_lifetime(std::move(newTessPipePxFillWire));
+					}
+
+					{
+						auto newTessPipePxFillSS = create_tess_pipe(
+							"shaders/px-fill-tess/patch_ready.vert", 
+							"shaders/px-fill-tess/patch_set.tesc", 
+							"shaders/px-fill-tess/patch_go.tese",
+							push_constant_binding_data{shader_type::all, 0, sizeof(patch_into_tess_push_constants)}
+						);
+						std::swap(*mTessPipelinePxFillSS, *newTessPipePxFillSS);
+						context().main_window()->handle_lifetime(std::move(newTessPipePxFillSS));
+
+						auto newTessPipePxFillWireSS = context().create_graphics_pipeline_from_template(mTessPipelinePxFillSS.as_reference(), [](graphics_pipeline_t& p) {
+							p.rasterization_state_create_info().setPolygonMode(vk::PolygonMode::eLine);
+						});
+						std::swap(*mTessPipelinePxFillWireframeSS, *newTessPipePxFillWireSS);
+						context().main_window()->handle_lifetime(std::move(newTessPipePxFillWireSS));
+					}
 				}
 			});
 		}
@@ -1968,7 +2009,6 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 
 				command::draw_vertices_indirect(mIndirectPxFillCountBuffer.as_reference(), 0, sizeof(VkDrawIndirectCommand), 1u), // <-- Exactly ONE draw (but potentially a lot of instances)
 				// 3.2) Render extra 3D models into the same framebuffer (super-sampled or not)
-				command::next_subpass(),
 
 				command::bind_pipeline(mVertexPipeline.as_reference()),
 		        command::bind_descriptors(mVertexPipeline->layout(), mDescriptorCache->get_or_create_descriptor_sets({
@@ -2265,7 +2305,9 @@ private: // v== Member variables ==v
 
     avk::graphics_pipeline mVertexPipeline;
     avk::graphics_pipeline mTessPipelinePxFill;
+    avk::graphics_pipeline mTessPipelinePxFillSS;
     avk::graphics_pipeline mTessPipelinePxFillWireframe;
+    avk::graphics_pipeline mTessPipelinePxFillWireframeSS;
 	float mConstOuterTessLevel = 16.0;
 	float mConstInnerTessLevel = 16.0;
 
