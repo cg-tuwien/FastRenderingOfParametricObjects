@@ -162,7 +162,7 @@ struct object_data
         , mCurveIndex{0}
         , mMaterialIndex{0}
         , mUseAdaptiveDetail{1}
-        , _padding{ 0xDEAD }
+        , mPxFillSetIndex{ 0 }
         , mLodAndRenderSettings{ 1.0f, 1.0f, 100.0f, 1.0f }
     {}
 
@@ -173,7 +173,7 @@ struct object_data
     int32_t    mMaterialIndex;
     // The following means "adaptive tessellation levels" (for tessellation-based rendering) or "adaptive sampling" (for point-based rendering)
     int32_t    mUseAdaptiveDetail;
-    int32_t    _padding;
+    int32_t    mPxFillSetIndex;
     // The following settings are stored in the vec4:
     //  .xy ... Percent how much to increase patch parameters (s.t. neighboring patches overlap a bit)
     //  .z  ... screen-space distance for the LOD stage

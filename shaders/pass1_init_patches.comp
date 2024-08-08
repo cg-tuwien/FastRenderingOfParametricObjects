@@ -26,7 +26,7 @@ layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
 layout(set = 1, binding = 0) buffer SsboCounters { uint mCounters[4]; } uCounters;
 layout(set = 2, binding = 0) buffer ObjectData   { object_data mElements[]; }  uObjectData;
 layout(set = 2, binding = 1) buffer PxFillParams { px_fill_data mElements[]; } uPxFillParams; 
-layout(set = 2, binding = 2) buffer PxFillCount  { VkDrawIndirectCommand mDrawParams; } uPxFillCount;
+layout(set = 2, binding = 2) buffer PxFillCount  { VkDrawIndirectCommand mDrawParams[]; } uPxFillCounts;
 layout(set = 3, binding = 0) buffer PatchLodPing { px_fill_data mElements[]; } uPatchLodPing; // initial target
 //layout(set = 3, binding = 1) buffer PatchLodPong { px_fill_data mElements[]; } uPatchLodPong; // unused in this whole shader
 layout(set = 3, binding = 2) buffer PatchLodCount { uvec4 mDispatchCounts[]; } uPatchLodCount; 

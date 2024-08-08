@@ -46,7 +46,7 @@ shared fb_data LocalFramebuffer[LOCAL_FB_X][LOCAL_FB_Y];
 layout(set = 1, binding = 0) buffer SsboCounters { uint mCounters[4]; } uCounters;
 layout(set = 2, binding = 0) buffer ObjectData   { object_data mElements[]; }  uObjectData;
 layout(set = 2, binding = 1) buffer PxFillParams { px_fill_data mElements[]; } uPxFillParams; 
-layout(set = 2, binding = 2) buffer PxFillCount  { VkDrawIndirectCommand mDrawParams; } uPxFillCount;
+layout(set = 2, binding = 2) buffer PxFillCount  { VkDrawIndirectCommand mDrawParams[]; } uPxFillCounts;
 layout(set = 3, binding = 0, r64ui) uniform restrict volatile u64image2D uCombinedAttachment;
 #if STATS_ENABLED
 layout(set = 3, binding = 1, r32ui) uniform restrict uimage2D   uHeatmapImage;

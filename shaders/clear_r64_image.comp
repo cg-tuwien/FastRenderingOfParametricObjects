@@ -15,7 +15,7 @@ layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
 layout(set = 0, binding = 0) buffer SsboCounters { uint mCounters[4]; } uCounters;
 layout(set = 1, binding = 0) buffer ObjectData   { object_data mElements[]; }  uObjectData;
 layout(set = 1, binding = 1) buffer PxFillParams { px_fill_data mElements[]; } uPxFillParams; 
-layout(set = 1, binding = 2) buffer PxFillCount  { VkDrawIndirectCommand mDrawParams; } uPxFillCount;
+layout(set = 1, binding = 2) buffer PxFillCount  { VkDrawIndirectCommand mDrawParams[]; } uPxFillCounts;
 layout(set = 2, binding = 0, r64ui) uniform restrict u64image2D uCombinedAttachment;
 #if STATS_ENABLED
 layout(set = 2, binding = 1, r32ui) uniform restrict uimage2D   uHeatmapImage;
@@ -59,11 +59,11 @@ void main()
 #endif
 
 	if (gl_WorkGroupID.x == 0 && gl_WorkGroupID.y == 0) {
-		// This computer shader serves another purpose: Clearing the draw count in the storage buffer
-		// Do it (but only once is enough):
-		if (gl_LocalInvocationIndex == 0) {
-			uPxFillCount.mDrawParams = VkDrawIndirectCommand(4, 0, 1, 1);
-			//                        ATTENTION: We need these two ^  ^ for dispatch dimensions in the case of point rendering.
+		// This compute shader serves another purpose: Clearing the draw counts in the storage buffer
+		// Do the clear for each of the three entries:
+		if (gl_LocalInvocationIndex < 3) {
+			uPxFillCounts.mDrawParams[gl_LocalInvocationIndex] = VkDrawIndirectCommand(4, 0, 1, 1);
+			//                                                  ATTENTION: We need these two ^  ^ for dispatch dimensions in the case of point rendering.
 		}
 	
 		// Clear all the counters here:

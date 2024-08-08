@@ -618,7 +618,13 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 			tmp.mDetailEvalDims = po.eval_dims();
             tmp.mTransformationMatrix = po.transformation_matrix();
 			tmp.mMaterialIndex = po.material_index();
-			
+			tmp.mUseAdaptiveDetail = mAdaptivePxFill ? 1 : 0;
+			tmp.mPxFillSetIndex = po.how_to_render() == rendering_method::tessellated_rasterized ? 0 : 2;  // handle Tess. noAA and point rendering
+			if (po.how_to_render() == rendering_method::tessellated_rasterized && po.super_sampling_on()) {
+				tmp.mPxFillSetIndex = 1; // handle Tess. SS
+			}
+			tmp.mLodAndRenderSettings = { 1.0f, 1.0f, 500.0f * po.super_sampling_on() ? 0.3f : 1.0f, 1.0f }; // TODO: super sampling properly!
+
 			if (!is_knit_yarn(po.param_obj_type())) {
 				mObjectData[i] = tmp;
 				++i;
@@ -742,6 +748,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 				auto howRendered = po.how_to_render();
 				if (ImGui::Combo("##renderingmethod", reinterpret_cast<int*>(&howRendered), "Point-rendered\0Tessellated -> rasterized\0(Wireframe) Tessellated -> rasterized\0Hybrid\0")) {
 					po.set_how_to_render(howRendered);
+					updateObjects = true;
 				}
 				poId++;
 				ImGui::PopID();
@@ -754,6 +761,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 				bool ss = po.super_sampling_on();
 				if (ImGui::Checkbox("Super-Sampled", &ss)) {
 					po.set_super_sampling(ss);
+					updateObjects = true;
 				}
 				ImGui::PopID();
 			}
@@ -887,10 +895,11 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 		);
 #endif
 
+		constexpr float numDifferentRenderVariants = 3;
 		// Create buffers for the indirect draw calls of the parametric pipelines:
         mIndirectPxFillParamsBuffer = context().create_buffer(
 			memory_usage::device, {}, 
-			storage_buffer_meta::create_from_size(         MAX_INDIRECT_DISPATCHES * sizeof(px_fill_data))
+			storage_buffer_meta::create_from_size(numDifferentRenderVariants * MAX_INDIRECT_DISPATCHES * sizeof(px_fill_data))
 		);
 		// ATTENTION: We're going to use the COUNT buffer for both, the compute-based pixel fill method, and also for
 		//            the "patch into tessellation" method. For the latter, we need a full VkDrawIndirectCommand structure,
@@ -902,8 +911,9 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 #else 
 			{},
 #endif
-			indirect_buffer_meta::create_from_num_elements(1, sizeof(VkDrawIndirectCommand)),
-			storage_buffer_meta::create_from_size(            sizeof(VkDrawIndirectCommand))
+			// NOTE: We're creating numDifferentRenderVariants-many such  vvv  entries, because: [0] = Tess. noAA, [1] = Tess. SS, [2] = point rendered
+			indirect_buffer_meta::create_from_num_elements(numDifferentRenderVariants, sizeof(VkDrawIndirectCommand)),
+			storage_buffer_meta::create_from_size(                                     sizeof(VkDrawIndirectCommand))
 		);
 
 		// PARAMETRIC PIPES:
@@ -1679,6 +1689,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 
 		// Now render everything:
 		graphics_pipeline& tessPipePxFillToBeUsed = mWireframeModeOn ? mTessPipelinePxFillWireframe : mTessPipelinePxFill;
+		graphics_pipeline& tessPipePxFillSSToBeUsed = mWireframeModeOn ? mTessPipelinePxFillWireframeSS : mTessPipelinePxFillSS;
 		auto gatheredCommands = command::gather(
 #if STATS_ENABLED
 			    commandsBeginStats,
@@ -1727,7 +1738,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 			// 3) Render patches:
 			command::render_pass(mRenderpass.as_reference(), mFramebuffer.as_reference(), command::gather(
 
-				// 3.1) Render tessellated patches into framebuffer (whether or not that is super sampled).
+				// 3.1) Render tessellated patches with noAA
                 command::bind_pipeline(tessPipePxFillToBeUsed.as_reference()),
 				command::bind_descriptors(tessPipePxFillToBeUsed->layout(), mDescriptorCache->get_or_create_descriptor_sets({
 					descriptor_binding(0, 0, mFrameDataBuffers[inFlightIndex]),
@@ -1745,9 +1756,29 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 					
 				command::push_constants(tessPipePxFillToBeUsed->layout(), patch_into_tess_push_constants{ mConstOuterTessLevel, mConstInnerTessLevel }),
 
-				command::draw_vertices_indirect(mIndirectPxFillCountBuffer.as_reference(), 0, sizeof(VkDrawIndirectCommand), 1u), // <-- Exactly ONE draw (but potentially a lot of instances)
-				// 3.2) Render extra 3D models into the same framebuffer (super-sampled or not)
+				command::draw_vertices_indirect(mIndirectPxFillCountBuffer.as_reference(), 0, sizeof(VkDrawIndirectCommand), 1u), // <-- Exactly ONE draw (but potentially a lot of instances), use the one at [0]
 
+				// 3.2) Render tessellated patches with SS
+                command::bind_pipeline(tessPipePxFillSSToBeUsed.as_reference()),
+				command::bind_descriptors(tessPipePxFillSSToBeUsed->layout(), mDescriptorCache->get_or_create_descriptor_sets({
+					descriptor_binding(0, 0, mFrameDataBuffers[inFlightIndex]),
+			        descriptor_binding(0, 1, as_combined_image_samplers(mImageSamplers, layout::shader_read_only_optimal)),
+			        descriptor_binding(0, 2, mMaterialBuffer),
+					descriptor_binding(1, 0, mCombinedAttachmentView->as_storage_image(layout::general)),
+#if STATS_ENABLED
+					descriptor_binding(1, 1, mHeatMapImageView->as_storage_image(layout::general)),
+#endif
+			        descriptor_binding(2, 0, mCountersSsbo->as_storage_buffer()),
+				    descriptor_binding(3, 0, mObjectDataBuffer->as_storage_buffer()),
+					descriptor_binding(3, 1, mIndirectPxFillParamsBuffer->as_storage_buffer()),
+				    descriptor_binding(3, 2, mIndirectPxFillCountBuffer->as_storage_buffer())
+				})),
+					
+				command::push_constants(tessPipePxFillSSToBeUsed->layout(), patch_into_tess_push_constants{ mConstOuterTessLevel, mConstInnerTessLevel }),
+
+				command::draw_vertices_indirect(mIndirectPxFillCountBuffer.as_reference(), sizeof(VkDrawIndirectCommand), sizeof(VkDrawIndirectCommand), 1u), // <-- Exactly ONE draw (but potentially a lot of instances), use the one at [1]
+
+				// 3.3) Render extra 3D models into the same framebuffer (with multi-sampling):
 				command::bind_pipeline(mVertexPipeline.as_reference()),
 		        command::bind_descriptors(mVertexPipeline->layout(), mDescriptorCache->get_or_create_descriptor_sets({
 			        descriptor_binding(0, 0, mFrameDataBuffers[inFlightIndex]),
@@ -1781,8 +1812,8 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 #if STATS_ENABLED
 			mTimestampPool->write_timestamp(firstQueryIndex + 4, stage::fragment_shader),
 #endif
-			// 3.3) Color attachment has been resolved into non-super sampled image
-			// 3.4) TODO: Copy resolved (color + depth) --into--> combined attachment 
+			// 3.4) Color attachment has been resolved into non-super sampled image
+			// 3.5) TODO: Copy resolved (color + depth) --into--> combined attachment 
 
 			sync::global_memory_barrier(stage::all_commands + access::memory_write >> stage::compute_shader + access::memory_read), // TODO: Barrier too heavy
 
@@ -1796,7 +1827,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 
 			sync::global_memory_barrier(stage::compute_shader + access::memory_write >> stage::compute_shader + access::memory_read),
 
-			// 3.5) Perform point rendering into combined attachment 
+			// 3.6) Perform point rendering into combined attachment 
 
 
 

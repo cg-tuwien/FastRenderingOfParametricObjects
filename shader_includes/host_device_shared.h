@@ -17,6 +17,7 @@
 #define MAX_LOD_PATCHES				1000000
 
 // Maximum number of indirect dispatch calls for the "pixel fill" compute pass (2nd pass):
+// NOTE: This  vvv  is also the stride for the start indices of the different rendering variants.
 #define MAX_INDIRECT_DISPATCHES		1000000
 
 // The vertex buffers offer  space for 67M vertices each (=> 800MB for positions data):

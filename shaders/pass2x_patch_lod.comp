@@ -52,7 +52,7 @@ layout(local_size_x = EVAL_GRID_X, local_size_y = EVAL_GRID_Y, local_size_z = EV
 layout(set = 1, binding = 0) buffer SsboCounters { uint mCounters[4]; } uCounters;
 layout(set = 2, binding = 0) buffer ObjectData   { object_data mElements[]; }  uObjectData;
 layout(set = 2, binding = 1) buffer PxFillParams { px_fill_data mElements[]; } uPxFillParams; 
-layout(set = 2, binding = 2) buffer PxFillCount  { VkDrawIndirectCommand mDrawParams; } uPxFillCount;
+layout(set = 2, binding = 2) buffer PxFillCount  { VkDrawIndirectCommand mDrawParams[]; } uPxFillCounts;
 layout(set = 3, binding = 0) buffer PatchLodPing { px_fill_data mElements[]; } uPatchLodPing; 
 layout(set = 3, binding = 1) buffer PatchLodPong { px_fill_data mElements[]; } uPatchLodPong; 
 layout(set = 3, binding = 2) buffer PatchLodCount { uvec4 mDispatchCounts[]; } uPatchLodCount; 
@@ -210,10 +210,13 @@ void evalSplitDecision(bool aTransposeEval, vec2 aParamsStart, vec2 aParamsRange
 	}
 }
 
-void pxFillOut(float uStart, float uEnd, float vStart, float vEnd, vec2 screenDists, const uint elementIdxIn) 
+// pxFillSetIndex:  [0] = Tess. noAA, [1] = Tess. SS, [2] = point rendered
+void pxFillOut(int pxFillSetIndex, float uStart, float uEnd, float vStart, float vEnd, vec2 screenDists, const uint elementIdxIn) 
 {
 //	if (uStart < 0.8 || vStart < 1.8) return;
-	const uint insertIdx = atomicAdd(uPxFillCount.mDrawParams.instanceCount, 1); // <-- ATTENTION: Use the instanceCount member here!
+	const uint insertIdx 
+		= MAX_INDIRECT_DISPATCHES * pxFillSetIndex // <-- start offset (depending on rendering variant)
+		+ atomicAdd(uPxFillCounts.mDrawParams[pxFillSetIndex].instanceCount, 1); // <-- ATTENTION: Use the instanceCount member here!
 //	if (0 == insertIdx) debugPrintfEXT("%u, screenDistsU[%f, %f, %f, %f], screenDistsV[%f, %f, %f, %f]", insertIdx, screenDistsU[0], screenDistsU[1], screenDistsU[2], screenDistsU[3], screenDistsV[0], screenDistsV[1], screenDistsV[2], screenDistsV[3]);
 	uPxFillParams.mElements[insertIdx].mParams           = vec4(uStart, uEnd, vStart, vEnd);
 	uPxFillParams.mElements[insertIdx].mObjectIdUserData = uPatchLodPing.mElements[elementIdxIn].mObjectIdUserData;
@@ -234,7 +237,8 @@ void pxFillOut(float uStart, float uEnd, float vStart, float vEnd, vec2 screenDi
 #endif
 }
 
-void patchOut(const uint levelIn, float uStart, float uEnd, float vStart, float vEnd, vec2 screenDists, const uint elementIdxIn) 
+// pxFillSetIndex:  [0] = Tess. noAA, [1] = Tess. SS, [2] = point rendered
+void patchOut(int pxFillSetIndex, const uint levelIn, float uStart, float uEnd, float vStart, float vEnd, vec2 screenDists, const uint elementIdxIn) 
 {
 	// out (from ping->pong):
 	uint maxLevel = MAX_PATCH_SUBDIV_STEPS-1;
@@ -246,7 +250,8 @@ void patchOut(const uint levelIn, float uStart, float uEnd, float vStart, float 
 		uPatchLodPong.mElements[insertIdx].mObjectIdUserData = uPatchLodPing.mElements[elementIdxIn].mObjectIdUserData;
 	} 
 	else { // We do not split OR we have reached max.level (i.e., no more patch lod calls afterwards):
-		pxFillOut(uStart, uEnd, vStart, vEnd, 
+		pxFillOut(pxFillSetIndex,
+		          uStart, uEnd, vStart, vEnd, 
 		          screenDists,
 		          elementIdxIn);
 	}
@@ -272,6 +277,7 @@ void main()
 	const int   curveIndex           = uObjectData.mElements[objectId].mCurveIndex;
 	const mat4  tM                   = uObjectData.mElements[objectId].mTransformationMatrix;
 	const bool  useAdaptive          = uObjectData.mElements[objectId].mUseAdaptiveDetail == 1;
+	const int   pxFillSetIndex       = uObjectData.mElements[objectId].mPxFillSetIndex;
 	const vec4  lodAndRenderSettings = uObjectData.mElements[objectId].mLodAndRenderSettings;
 	const float screenSpaceThreshold = lodAndRenderSettings.z;
 
@@ -415,10 +421,10 @@ void main()
 		float vStarts[2] = { paramsStart.y,                  paramsStart.y + halfParamsRange.y };
 		float vEnds[2]   = { vStarts[0] + halfParamsRange.y, vStarts[1] + halfParamsRange.y };
 		for (int i = 0; i < 2; ++i) {
-			patchOut(levelIn, paramsStart.x                    , paramsStart.x + halfParamsRange.x, vStarts[i], vEnds[i], 
+			patchOut(pxFillSetIndex, levelIn, paramsStart.x                    , paramsStart.x + halfParamsRange.x, vStarts[i], vEnds[i], 
 				        vec2(max(screenDistsU[0], screenDistsU[1]), max(screenDistsV[i*2], screenDistsV[i*2 + 1])),
 				        elementIdxIn);
-			patchOut(levelIn, paramsStart.x + halfParamsRange.x, paramsStart.x + paramsRange.x    , vStarts[i], vEnds[i], 
+			patchOut(pxFillSetIndex, levelIn, paramsStart.x + halfParamsRange.x, paramsStart.x + paramsRange.x    , vStarts[i], vEnds[i], 
 				        vec2(max(screenDistsU[2], screenDistsU[3]), max(screenDistsV[i*2], screenDistsV[i*2 + 1])),
 				        elementIdxIn);
 		}
@@ -429,15 +435,15 @@ void main()
 		float vEnds[2]   = { vStarts[0] + halfParamsRange.y, vStarts[1] + halfParamsRange.y };
 		for (int i = 0; i < 2; ++i) {
 			if (shallSplitU[i]) {
-				patchOut(levelIn, paramsStart.x                    , paramsStart.x + halfParamsRange.x, vStarts[i], vEnds[i], 
+				patchOut(pxFillSetIndex, levelIn, paramsStart.x                    , paramsStart.x + halfParamsRange.x, vStarts[i], vEnds[i], 
 				         vec2(max(screenDistsU[0], screenDistsU[1]), max(screenDistsV[i*2], screenDistsV[i*2 + 1])),
 				         elementIdxIn);
-				patchOut(levelIn, paramsStart.x + halfParamsRange.x, paramsStart.x + paramsRange.x    , vStarts[i], vEnds[i], 
+				patchOut(pxFillSetIndex, levelIn, paramsStart.x + halfParamsRange.x, paramsStart.x + paramsRange.x    , vStarts[i], vEnds[i], 
 				         vec2(max(screenDistsU[2], screenDistsU[3]), max(screenDistsV[i*2], screenDistsV[i*2 + 1])),
 				         elementIdxIn);
 			}
 			else {
-				patchOut(levelIn, paramsStart.x                    , paramsStart.x + paramsRange.x    , vStarts[i], vEnds[i], 
+				patchOut(pxFillSetIndex, levelIn, paramsStart.x                    , paramsStart.x + paramsRange.x    , vStarts[i], vEnds[i], 
 				         vec2(max(max(max(screenDistsU[0], screenDistsU[1]), screenDistsU[2]), screenDistsU[3]), max(screenDistsV[i*2], screenDistsV[i*2 + 1])),
 				         elementIdxIn);
 			}
@@ -448,15 +454,15 @@ void main()
 		float uEnds[2]   = { uStarts[0] + halfParamsRange.x, uStarts[1] + halfParamsRange.x };
 		for (int i = 0; i < 2; ++i) {
 			if (shallSplitV[i]) {
-				patchOut(levelIn, uStarts[i], uEnds[i], paramsStart.y                    , paramsStart.y + halfParamsRange.y, 
+				patchOut(pxFillSetIndex, levelIn, uStarts[i], uEnds[i], paramsStart.y                    , paramsStart.y + halfParamsRange.y, 
 				         vec2(max(screenDistsU[i*2], screenDistsU[i*2 + 1]), max(screenDistsV[0], screenDistsV[1])),
 				         elementIdxIn);
-				patchOut(levelIn, uStarts[i], uEnds[i], paramsStart.y + halfParamsRange.y, paramsStart.y + paramsRange.y    , 
+				patchOut(pxFillSetIndex, levelIn, uStarts[i], uEnds[i], paramsStart.y + halfParamsRange.y, paramsStart.y + paramsRange.y    , 
 				         vec2(max(screenDistsU[i*2], screenDistsU[i*2 + 1]), max(screenDistsV[2], screenDistsV[3])),
 				         elementIdxIn);
 			}
 			else {
-				patchOut(levelIn, uStarts[i], uEnds[i], paramsStart.y                    , paramsStart.y + paramsRange.y    , 
+				patchOut(pxFillSetIndex, levelIn, uStarts[i], uEnds[i], paramsStart.y                    , paramsStart.y + paramsRange.y    , 
 				         vec2(max(screenDistsU[i*2], screenDistsU[i*2 + 1]), max(max(max(screenDistsV[0], screenDistsV[1]), screenDistsV[2]), screenDistsV[3])),
 				         elementIdxIn);
 			}
@@ -465,7 +471,7 @@ void main()
 #endif
 	else {
 		// No splits required
-		pxFillOut(paramsStart.x, paramsStart.x + paramsRange.x, paramsStart.y, paramsStart.y + paramsRange.y, 
+		pxFillOut(pxFillSetIndex, paramsStart.x, paramsStart.x + paramsRange.x, paramsStart.y, paramsStart.y + paramsRange.y, 
 		          vec2(max(max(max(screenDistsU[0], screenDistsU[1]), screenDistsU[2]), screenDistsU[3]), max(max(max(screenDistsV[0], screenDistsV[1]), screenDistsV[2]), screenDistsV[3])),
 		          elementIdxIn);
 	}

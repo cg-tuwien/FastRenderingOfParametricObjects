@@ -24,7 +24,7 @@ layout (vertices=4) out;
 layout(set = 2, binding = 0) buffer SsboCounters { uint mCounters[4]; } uCounters;
 layout(set = 3, binding = 0) buffer ObjectData   { object_data mElements[]; }  uObjectData;
 layout(set = 3, binding = 1) buffer PxFillParams { px_fill_data mElements[]; } uPxFillParams; 
-layout(set = 3, binding = 2) buffer PxFillCount  { VkDrawIndirectCommand mDrawParams; } uPxFillCount;
+layout(set = 3, binding = 2) buffer PxFillCount  { VkDrawIndirectCommand mDrawParams[]; } uPxFillCounts;
 
 #include "../../shader_includes/param/shape_functions.glsl"
 

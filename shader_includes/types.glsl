@@ -20,7 +20,7 @@ struct object_data
     int   mMaterialIndex;
     // The following means "adaptive tessellation levels" (for tessellation-based rendering) or "adaptive sampling" (for point-based rendering):
     int   mUseAdaptiveDetail;
-    int   _padding;
+    int   mPxFillSetIndex;
     // The following settings are stored in the vec4:
     //  .xy ... Percent how much to increase patch parameters (s.t. neighboring patches overlap a bit)
     //  .z  ... screen-space threshold for the LOD stage
