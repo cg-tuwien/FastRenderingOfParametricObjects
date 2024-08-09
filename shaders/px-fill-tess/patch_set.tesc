@@ -50,6 +50,7 @@ layout(push_constant) uniform PushConstants
 {
     float mConstOuterSubdivLevel;
     float mConstInnerSubdivLevel;
+    int   mPxFillParamsBufferOffset;
 }
 pushConstants;
 

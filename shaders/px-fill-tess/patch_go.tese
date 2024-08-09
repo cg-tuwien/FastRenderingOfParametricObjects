@@ -49,6 +49,14 @@ layout (location = 0) out PerVertexData
 	flat vec3 color;
 } eval_out;
 
+layout(push_constant) uniform PushConstants
+{
+    float mConstOuterSubdivLevel;
+    float mConstInnerSubdivLevel;
+    int   mPxFillParamsBufferOffset;
+}
+pushConstants;
+
 #define MAX_COLORS 13
 vec3 vertexColors[MAX_COLORS] = {
     vec3(0.987, 0.537, 0.490), // Saturated Peach

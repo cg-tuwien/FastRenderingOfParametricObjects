@@ -33,15 +33,22 @@ layout (location = 0) out PerVertexPayload
     flat uint mPxFillId; // ... is not varying :ugly:
 } vert_out;
 
+layout(push_constant) uniform PushConstants
+{
+    float mConstOuterSubdivLevel;
+    float mConstInnerSubdivLevel;
+    int   mPxFillParamsBufferOffset;
+}
+pushConstants;
+
 void main() 
 {
-	uint pxFillId = gl_InstanceIndex - 1; // Gotta subtract 1 (see clear_r64_image.comp)
+	uint pxFillId = gl_InstanceIndex - 1 // Gotta subtract 1 (see clear_r64_image.comp)
+	              + pushConstants.mPxFillParamsBufferOffset;
+//	if (pushConstants.mPxFillParamsBufferOffset != 0)
+//        debugPrintfEXT("%u", pxFillId);
 	vert_out.mPxFillId = pxFillId;
 	
-	const uint  objectId           = uPxFillParams.mElements[pxFillId].mObjectIdUserData[0];
-	const int   pxFillSetIndex     = uObjectData.mElements[objectId].mPxFillSetIndex;
-	pxFillId  += MAX_INDIRECT_DISPATCHES * pxFillSetIndex;
-
 	// in: 
 	const vec2 paramsFrom = vec2(
 		uPxFillParams.mElements[pxFillId].mParams[0],

@@ -282,6 +282,7 @@ struct standalone_tess_push_constants
 // Push constants for patch->tess method
 struct patch_into_tess_push_constants
 {
-    float mConstOuterSubdivLevel;
-    float mConstInnerSubdivLevel;
+    float   mConstOuterSubdivLevel;
+    float   mConstInnerSubdivLevel;
+    int32_t mPxFillParamsBufferOffset;
 };

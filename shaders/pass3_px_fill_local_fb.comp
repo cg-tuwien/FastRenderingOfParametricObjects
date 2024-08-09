@@ -231,10 +231,10 @@ void main()
 	if (gl_LocalInvocationID.yz == uvec2(0, 0)) {
 		for (uint p = gl_LocalInvocationID.x; p < numPatches; p += gl_WorkGroupSize.x) {
 			// Bounds check: 
-			vec4 patchScreenInfo  = uPxFillParams.mElements[p + MAX_INDIRECT_DISPATCHES * pointRenderingVariantIndex].mScreenDists;
+			vec4 patchScreenInfo  = uPxFillParams.mElements[p].mScreenDists;
 			ivec2 minScreenCoords = ivec2(patchScreenInfo.zw);
 #if WRITE_MAX_COORDS_IN_PASS2
-			ivec2 maxScreenCoords = ivec2(uPxFillParams.mElements[p + MAX_INDIRECT_DISPATCHES * pointRenderingVariantIndex].mScreenMax.xy);
+			ivec2 maxScreenCoords = ivec2(uPxFillParams.mElements[p].mScreenMax.xy);
 #else
 			// TODO: Why is this                                  vvv              buggy?
 			ivec2 maxScreenCoords = minScreenCoords + ivec2(sqrt(patchScreenInfo.x*patchScreenInfo.x + patchScreenInfo.y*patchScreenInfo.y));

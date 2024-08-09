@@ -16,9 +16,13 @@ layout(set = 1, binding = 0) uniform texture2D uColorSrc;
 layout(set = 1, binding = 1) uniform texture2D uDepthSrc;
 // -------------------------------------------------------
 
-#include "../shader_includes/combined_attachment_shared.glsl"
-
-
+uint64_t getUint64ForFramebuffer(float depth, vec4 color)
+{
+	uint64_t depthEncoded = depth_to_ui64(depth);
+	uint64_t colorEncoded = color_to_ui64(color);
+	uint64_t data = combine_depth_and_color(depthEncoded, colorEncoded);
+	return data;
+}
 
 // ################## compute shader main ###################
 void main()
@@ -33,5 +37,9 @@ void main()
 //	uint64_t combinedValue = combine_depth_and_color(depth_to_ui64(depth), color_to_ui64(color));
 //	imageStore(uCombinedAttachment, iuv, combinedValue);
 
-	writeToCombinedAttachment(iuv, depth, color);
+	uvec2 imSize = imageSize(uCombinedAttachment);
+	if (iuv.x >= imSize.x || iuv.y >= imSize.y) {
+		return;
+	}
+	imageAtomicMin(uCombinedAttachment, iuv, getUint64ForFramebuffer(depth, color));
 }

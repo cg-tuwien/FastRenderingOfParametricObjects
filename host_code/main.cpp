@@ -97,9 +97,9 @@
 //#define TEST_TARGET_IMAGE              0
 
 static std::array<parametric_object, 13> PredefinedParametricObjects {{
-	parametric_object{"Sphere"      , "assets/po-sphere-patches.png",     true , parametric_object_type::Sphere,                 0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>(), glm::translate(glm::vec3{ 0.f,  0.f,  0.f})},
-	parametric_object{"Johi's Heart", "assets/po-johis-heart.png",        true, parametric_object_type::JohisHeart,             0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>(), glm::translate(glm::vec3{ 0.f,  0.f, -2.f})},
-	parametric_object{"Spiky Heart" , "assets/po-johis-heart.png",        false, parametric_object_type::SpikyHeart,             0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>(), glm::translate(glm::vec3{ 4.f,  0.f, -2.f})},
+	parametric_object{"Sphere"      , "assets/po-sphere-patches.png",     false, parametric_object_type::Sphere,                 0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>(), glm::translate(glm::vec3{ 0.f,  0.f,  0.f})},
+	parametric_object{"Johi's Heart", "assets/po-johis-heart.png",        false, parametric_object_type::JohisHeart,              0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>(), glm::translate(glm::vec3{ 0.f,  0.f, -2.f})},
+	parametric_object{"Plane" ,       "assets/po-johis-heart.png",        true,  parametric_object_type::Plane,                  1.0f,   0.0f,            0.0f,  1.0f},
 	parametric_object{"Seashell 1"  , "assets/po-seashell1.png",          false, parametric_object_type::Seashell1,              glm::two_pi<float>() * 8.0f,/* -> */0.0f,   0.0f,/* -> */glm::two_pi<float>(), glm::mat4{ 1.0f }, 2},
 	parametric_object{"Seashell 2"  , "assets/po-seashell2.png",          false, parametric_object_type::Seashell2,              glm::two_pi<float>() * 8.0f,/* -> */0.0f,   0.0f,/* -> */glm::two_pi<float>(), glm::translate(glm::vec3{-4.5f, 7.0f, 0.0f }), 2},
 	parametric_object{"Seashell 3"  , "assets/po-seashell3.png",          false, parametric_object_type::Seashell3,              glm::two_pi<float>() * 8.0f,/* -> */0.0f,   0.0f,/* -> */glm::two_pi<float>(), glm::translate(glm::vec3{ 4.5f, 7.0f, 0.0f }), 2},
@@ -623,7 +623,10 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 			if (po.how_to_render() == rendering_method::tessellated_rasterized && po.super_sampling_on()) {
 				tmp.mPxFillSetIndex = 1; // handle Tess. SS
 			}
-			tmp.mLodAndRenderSettings = { 1.0f, 1.0f, 500.0f * po.super_sampling_on() ? 0.3f : 1.0f, 1.0f }; // TODO: super sampling properly!
+			tmp.mLodAndRenderSettings = { 1.0f, 1.0f, 84.0f, 1.0f }; // TODO: super sampling properly!
+			if (po.super_sampling_on()) {
+				tmp.mLodAndRenderSettings.z *= 0.5f;
+			}
 
 			if (!is_knit_yarn(po.param_obj_type())) {
 				mObjectData[i] = tmp;
@@ -1224,7 +1227,9 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
                         ImGui::Text(std::format("{:12L} patches created at LOD level #{}", mPatchesCreatedPerLevel[i], i).c_str());
 					}
 					ImGui::Separator();
-					ImGui::Text(std::format("{:12L} pixel fill patches spawned", mNumPxFillPatchesCreated).c_str());
+					ImGui::Text(std::format("{:12L} pixel fill patches spawned[0]", mNumPxFillPatchesCreated[0]).c_str());
+					ImGui::Text(std::format("{:12L} pixel fill patches spawned[1]", mNumPxFillPatchesCreated[1]).c_str());
+					ImGui::Text(std::format("{:12L} pixel fill patches spawned[2]", mNumPxFillPatchesCreated[2]).c_str());
 					ImGui::End();
 				}
 
@@ -1447,7 +1452,8 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 				std::get<3>(mMeasurementFrameCounters[curIdx]) += mLastPatchLodDuration;
 #else
 				std::get<2>(mMeasurementFrameCounters[curIdx]) += mCounterValues[1];
-				std::get<3>(mMeasurementFrameCounters[curIdx]) += mNumPxFillPatchesCreated;
+				//                                                       TODO: Is that   vvv   the right way to handle [0], [1] and [2]?? 
+				std::get<3>(mMeasurementFrameCounters[curIdx]) += std::max({ mNumPxFillPatchesCreated[0], mNumPxFillPatchesCreated[1], mNumPxFillPatchesCreated[2] });
 #endif 
 				std::get<int>(mMeasurementFrameCounters[curIdx]) += 1;
             	auto f = static_cast<float>((curTime - curIdx * MeasureSecsPerStep - mMeasurementStartTime) / MeasureSecsPerStep);
@@ -1655,14 +1661,16 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 
 		// Read the counter values:
 		if (mGatherPipelineStats) {
-			VkDrawIndirectCommand pxFillCountBufferContents;
+			std::array<VkDrawIndirectCommand, 3> pxFillCountBufferContents;
 			std::array<glm::uvec4, MAX_PATCH_SUBDIV_STEPS> patchLodCountBufferContents;
 			context().record_and_submit_with_fence({
 				mCountersSsbo->read_into(mCounterValues.data(), 0),
-		        mIndirectPxFillCountBuffer->read_into(&pxFillCountBufferContents, 0),
+		        mIndirectPxFillCountBuffer->read_into(pxFillCountBufferContents.data(), 0),
 			    mPatchLodCountBuffer->read_into(patchLodCountBufferContents.data(), 0)
 			}, *mQueue)->wait_until_signalled();
-			mNumPxFillPatchesCreated = pxFillCountBufferContents.instanceCount;
+			mNumPxFillPatchesCreated[0] = pxFillCountBufferContents[0].instanceCount;
+			mNumPxFillPatchesCreated[1] = pxFillCountBufferContents[1].instanceCount;
+			mNumPxFillPatchesCreated[2] = pxFillCountBufferContents[2].instanceCount;
 			for (int i = 0; i < patchLodCountBufferContents.size(); ++i) {
 			    mPatchesCreatedPerLevel[i] = patchLodCountBufferContents[i].x;
 			}
@@ -1754,8 +1762,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 				    descriptor_binding(3, 2, mIndirectPxFillCountBuffer->as_storage_buffer())
 				})),
 					
-				command::push_constants(tessPipePxFillToBeUsed->layout(), patch_into_tess_push_constants{ mConstOuterTessLevel, mConstInnerTessLevel }),
-
+				command::push_constants(tessPipePxFillToBeUsed->layout(), patch_into_tess_push_constants{ mConstOuterTessLevel, mConstInnerTessLevel, 0 }),
 				command::draw_vertices_indirect(mIndirectPxFillCountBuffer.as_reference(), 0, sizeof(VkDrawIndirectCommand), 1u), // <-- Exactly ONE draw (but potentially a lot of instances), use the one at [0]
 
 				// 3.2) Render tessellated patches with SS
@@ -1774,8 +1781,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 				    descriptor_binding(3, 2, mIndirectPxFillCountBuffer->as_storage_buffer())
 				})),
 					
-				command::push_constants(tessPipePxFillSSToBeUsed->layout(), patch_into_tess_push_constants{ mConstOuterTessLevel, mConstInnerTessLevel }),
-
+				command::push_constants(tessPipePxFillSSToBeUsed->layout(), patch_into_tess_push_constants{ mConstOuterTessLevel, mConstInnerTessLevel, 1 * MAX_INDIRECT_DISPATCHES }),
 				command::draw_vertices_indirect(mIndirectPxFillCountBuffer.as_reference(), sizeof(VkDrawIndirectCommand), sizeof(VkDrawIndirectCommand), 1u), // <-- Exactly ONE draw (but potentially a lot of instances), use the one at [1]
 
 				// 3.3) Render extra 3D models into the same framebuffer (with multi-sampling):
@@ -2102,7 +2108,7 @@ private: // v== Member variables ==v
 	avk::buffer mCountersSsbo;
 	std::array<uint32_t, 4> mCounterValues;
 	std::array<uint32_t, MAX_PATCH_SUBDIV_STEPS> mPatchesCreatedPerLevel;
-	uint32_t mNumPxFillPatchesCreated;
+	std::array<uint32_t, 3> mNumPxFillPatchesCreated;
 
 	// Other, global settings, stored in common UBO:
     bool m2ndPassEnabled = false;

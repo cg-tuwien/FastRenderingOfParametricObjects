@@ -129,13 +129,13 @@ shared uint  workgroupAnd[EVAL_GRID_Z];
 // @param aParamsStart     Where u and v params start
 // @param aParamsRange     The ranges for u and v, respectively, between their start and end values.
 #if WRITE_OUT_MIN_MAX_SCREEN_COORDS
-void evalSplitDecision(bool aTransposeEval, vec2 aParamsStart, vec2 aParamsRange, float screenThreshold, int aCurveIndex, uvec3 aUserData, mat4 aTM, out vec4 posCS, out vec2 subgroupMinCoords
+void evalSplitDecision(bool aTransposeEval, vec2 aParamsStart, vec2 aParamsRange, vec2 screenThresholds, int aCurveIndex, uvec3 aUserData, mat4 aTM, out vec4 posCS, out vec2 subgroupMinCoords
 #if WRITE_MAX_COORDS_IN_PASS2
 , out vec2 subgroupMaxCoords
 #endif
 )
 #else
-void evalSplitDecision(bool aTransposeEval, vec2 aParamsStart, vec2 aParamsRange, float screenThreshold, int aCurveIndex, uvec3 aUserData, mat4 aTM, out vec4 posCS)
+void evalSplitDecision(bool aTransposeEval, vec2 aParamsStart, vec2 aParamsRange, vec2 screenThresholds, int aCurveIndex, uvec3 aUserData, mat4 aTM, out vec4 posCS)
 #endif
 {
 	const uvec2 rangeDivisor = !aTransposeEval 
@@ -198,12 +198,12 @@ void evalSplitDecision(bool aTransposeEval, vec2 aParamsStart, vec2 aParamsRange
 	const bool isDeciderInvocation = gl_SubgroupInvocationID == (sumRefInvocation + EVAL_GRID_X - 1);
 	if (isDeciderInvocation) {
 		if (!aTransposeEval) {
-			splitU[sumRefIndex] = summedScreenDists >= screenThreshold;
+			splitU[sumRefIndex] = summedScreenDists >= screenThresholds[0];
 //			debugPrintfEXT("in u row[%d], summedScreenDists[%f], splitU[%d]", sumRefIndex, summedScreenDists, splitU[sumRefIndex] ? 1 : 0);
 			screenDistsU[sumRefIndex] = summedScreenDists;
 		}
 		else {
-			splitV[sumRefIndex] = summedScreenDists >= screenThreshold;
+			splitV[sumRefIndex] = summedScreenDists >= screenThresholds[1];
 //			debugPrintfEXT("in v col[%d], summedScreenDists[%f], splitV[%d]", sumRefIndex, summedScreenDists, splitV[sumRefIndex] ? 1 : 0);
 			screenDistsV[sumRefIndex] = summedScreenDists;
 		}
@@ -279,7 +279,8 @@ void main()
 	const bool  useAdaptive          = uObjectData.mElements[objectId].mUseAdaptiveDetail == 1;
 	const int   pxFillSetIndex       = uObjectData.mElements[objectId].mPxFillSetIndex;
 	const vec4  lodAndRenderSettings = uObjectData.mElements[objectId].mLodAndRenderSettings;
-	const float screenSpaceThreshold = lodAndRenderSettings.z;
+	const float t_u                  = lodAndRenderSettings.z;
+	const float t_v                  = t_u; // same same
 
 	// Do we have to split? Or are we already good to go (to px fill)?
 
@@ -289,32 +290,32 @@ void main()
 #if WRITE_OUT_MIN_MAX_SCREEN_COORDS
 #if WRITE_MAX_COORDS_IN_PASS2
 	vec2 minScreenC, maxScreenC;
-	evalSplitDecision(gl_LocalInvocationID.z == 0 ? false : true, paramsStart, paramsRange, screenSpaceThreshold, curveIndex, translation, scale, posCS, minScreenC, maxScreenC);
+	evalSplitDecision(gl_LocalInvocationID.z == 0 ? false : true, paramsStart, paramsRange, vec2(t_u, t_v), curveIndex, translation, scale, posCS, minScreenC, maxScreenC);
 #else
 	vec2 minScreenC;
-	evalSplitDecision(gl_LocalInvocationID.z == 0 ? false : true, paramsStart, paramsRange, screenSpaceThreshold, curveIndex, translation, scale, posCS, minScreenC);
+	evalSplitDecision(gl_LocalInvocationID.z == 0 ? false : true, paramsStart, paramsRange, vec2(t_u, t_v), curveIndex, translation, scale, posCS, minScreenC);
 #endif
 #else
-	evalSplitDecision(gl_LocalInvocationID.z == 0 ? false : true, paramsStart, paramsRange, screenSpaceThreshold, curveIndex, translation, scale, posCS);
+	evalSplitDecision(gl_LocalInvocationID.z == 0 ? false : true, paramsStart, paramsRange, vec2(t_u, t_v), curveIndex, translation, scale, posCS);
 #endif
 #else
 	vec4 posCS_u, posCS_v;
 #if WRITE_OUT_MIN_MAX_SCREEN_COORDS
 #if WRITE_MAX_COORDS_IN_PASS2
 	vec2 minScreenC_u, minScreenC_v, maxScreenC_u, maxScreenC_v;
-	evalSplitDecision(false, paramsStart, paramsRange, screenSpaceThreshold, curveIndex, userData, tM, posCS_u, minScreenC_u, maxScreenC_u);  // <-- for u
-	evalSplitDecision(true , paramsStart, paramsRange, screenSpaceThreshold, curveIndex, userData, tM, posCS_v, minScreenC_v, maxScreenC_v);  // <-- for v
+	evalSplitDecision(false, paramsStart, paramsRange, vec2(t_u, t_v), curveIndex, userData, tM, posCS_u, minScreenC_u, maxScreenC_u);  // <-- for u
+	evalSplitDecision(true , paramsStart, paramsRange, vec2(t_u, t_v), curveIndex, userData, tM, posCS_v, minScreenC_v, maxScreenC_v);  // <-- for v
 	vec2 minScreenC = min(minScreenC_u, minScreenC_v);
 	vec2 maxScreenC = max(maxScreenC_u, maxScreenC_v);
 #else 
 	vec2 minScreenC_u, minScreenC_v;
-	evalSplitDecision(false, paramsStart, paramsRange, screenSpaceThreshold, curveIndex, userData, tM, posCS_u, minScreenC_u);  // <-- for u
-	evalSplitDecision(true , paramsStart, paramsRange, screenSpaceThreshold, curveIndex, userData, tM, posCS_v, minScreenC_v);  // <-- for v
+	evalSplitDecision(false, paramsStart, paramsRange, vec2(t_u, t_v), curveIndex, userData, tM, posCS_u, minScreenC_u);  // <-- for u
+	evalSplitDecision(true , paramsStart, paramsRange, vec2(t_u, t_v), curveIndex, userData, tM, posCS_v, minScreenC_v);  // <-- for v
 	vec2 minScreenC = min(minScreenC_u, minScreenC_v);
 #endif
 #else
-	evalSplitDecision(false, paramsStart, paramsRange, screenSpaceThreshold, curveIndex, userData, tM, posCS_u);  // <-- for u
-	evalSplitDecision(true , paramsStart, paramsRange, screenSpaceThreshold, curveIndex, userData, tM, posCS_v);  // <-- for v
+	evalSplitDecision(false, paramsStart, paramsRange, vec2(t_u, t_v), curveIndex, userData, tM, posCS_u);  // <-- for u
+	evalSplitDecision(true , paramsStart, paramsRange, vec2(t_u, t_v), curveIndex, userData, tM, posCS_v);  // <-- for v
 #endif
 #endif
 
