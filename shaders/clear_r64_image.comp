@@ -61,7 +61,7 @@ void main()
 	if (gl_WorkGroupID.x == 0 && gl_WorkGroupID.y == 0) {
 		// This compute shader serves another purpose: Clearing the draw counts in the storage buffer
 		// Do the clear for each of the three entries:
-		if (gl_LocalInvocationIndex < 3) {
+		if (gl_LocalInvocationIndex < 4) {
 			uPxFillCounts.mDrawParams[gl_LocalInvocationIndex] = VkDrawIndirectCommand(4, 0, 1, 1);
 			//                                                  ATTENTION: We need these two ^  ^ for dispatch dimensions in the case of point rendering.
 		}

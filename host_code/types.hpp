@@ -104,6 +104,7 @@ public:
         , mTransformationMatrix{ aTransformationMatrix }
         , mMaterialIndex{ aMaterialIndex }
         , mRenderingMethod{ rendering_method::tessellated_rasterized }
+        , mMultiSampled{ false }
         , mSuperSampled{ false }
     { }
 
@@ -120,6 +121,7 @@ public:
     int32_t   curve_index() const { return static_cast<std::underlying_type_t<parametric_object_type>>(mParamObjType); }
     int32_t   material_index() const { return mMaterialIndex; }
     auto      how_to_render() const { return mRenderingMethod; }
+    bool      multi_sampling_on() const { return mMultiSampled; }
     bool      super_sampling_on() const { return mSuperSampled; }
 
     void set_enabled(bool yesOrNo) { mEnabled = yesOrNo; }
@@ -132,6 +134,7 @@ public:
     void set_curve_index(int32_t curveIndex) { mParamObjType = static_cast<parametric_object_type>(curveIndex); }
     void set_material_index(int32_t matIndex) { mMaterialIndex = matIndex; }
     void set_how_to_render(rendering_method renderMeth) { mRenderingMethod = renderMeth; }
+    void set_multi_sampling(bool onOrOff) { mMultiSampled = onOrOff; }
     void set_super_sampling(bool onOrOff) { mSuperSampled = onOrOff; }
 
 private:
@@ -145,6 +148,7 @@ private:
     parametric_object_type mParamObjType;
     int32_t mMaterialIndex;
     rendering_method mRenderingMethod;
+    bool mMultiSampled;
     bool mSuperSampled;
 };
 

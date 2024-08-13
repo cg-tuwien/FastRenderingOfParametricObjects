@@ -210,7 +210,7 @@ void evalSplitDecision(bool aTransposeEval, vec2 aParamsStart, vec2 aParamsRange
 	}
 }
 
-// pxFillSetIndex:  [0] = Tess. noAA, [1] = Tess. SS, [2] = point rendered
+// pxFillSetIndex:  [0] = Tess. noAA, [1] = Tess. Multisampled, [2] = point rendered, [3] = Tess. Supersampled
 void pxFillOut(int pxFillSetIndex, float uStart, float uEnd, float vStart, float vEnd, vec2 screenDists, const uint elementIdxIn) 
 {
 //	if (uStart < 0.8 || vStart < 1.8) return;
@@ -237,7 +237,7 @@ void pxFillOut(int pxFillSetIndex, float uStart, float uEnd, float vStart, float
 #endif
 }
 
-// pxFillSetIndex:  [0] = Tess. noAA, [1] = Tess. SS, [2] = point rendered
+// pxFillSetIndex:  [0] = Tess. noAA, [1] = Tess. Multisampled, [2] = point rendered, [3] = Tess. Supersampled
 void patchOut(int pxFillSetIndex, const uint levelIn, float uStart, float uEnd, float vStart, float vEnd, vec2 screenDists, const uint elementIdxIn) 
 {
 	// out (from ping->pong):

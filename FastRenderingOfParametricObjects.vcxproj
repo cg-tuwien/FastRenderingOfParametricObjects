@@ -52,6 +52,8 @@
     <None Include="shaders\px-fill-tess\patch_ready.vert" />
     <None Include="shaders\px-fill-tess\patch_set.tesc" />
     <None Include="shaders\simple.vert" />
+    <None Include="shaders\ss_resolve.frag" />
+    <None Include="shaders\ss_resolve.vert" />
     <None Include="shaders\standalone-tess\patch_eval.tese" />
     <None Include="shaders\standalone-tess\patch_init.vert" />
     <None Include="shaders\standalone-tess\patch_resolution.tesc" />

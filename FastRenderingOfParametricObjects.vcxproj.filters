@@ -115,6 +115,12 @@
     <None Include="shaders\copy_to_combined_attachment.comp">
       <Filter>shaders</Filter>
     </None>
+    <None Include="shaders\ss_resolve.frag">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shaders\ss_resolve.vert">
+      <Filter>shaders</Filter>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="precompiled_headers\cg_stdafx.cpp">

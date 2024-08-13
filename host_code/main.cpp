@@ -244,22 +244,17 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 
 		mMaterialBuffer = context().create_buffer(
 			memory_usage::device, {},
-			storage_buffer_meta::create_from_size(100 * sizeof(material_gpu_data)) // Create enough space for 100 different materials
+			storage_buffer_meta::create_from_data(gpuMaterials)
 		);
 
-		// Lifetime-handle possibly existing image samplers, then overwrite with new ones:
-		for (auto& existingImageSampler : mImageSamplers) {
-			context().main_window()->handle_lifetime(std::move(existingImageSampler));
-		}
-		mImageSamplers.clear();
 		mImageSamplers = std::move(imageSamplers);
 
-		mAdditionalSemaphoreDependency = context().record_and_submit_with_semaphore({
+		context().record_and_submit_with_fence({
 			mVertexBuffersOffsetsSizesCountBuffer->fill(&mVertexBuffersOffsetsSizesCountBuffer, 0),
 			mVertexBuffersOffsetsSizesBuffer->fill(mVertexBuffersOffsetsSizes.data(), 0, 0, mVertexBuffersOffsetsSizes.size() * sizeof(mVertexBuffersOffsetsSizes[0])),
 			matCommands,
 		    mMaterialBuffer->fill(gpuMaterials.data(), 0)
-		}, *mQueue, stage::all_graphics);
+		}, *mQueue)->wait_until_signalled();
 
 		// One for each concurrent frame
 		const auto concurrentFrames = context().main_window()->number_of_frames_in_flight();
@@ -277,6 +272,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 
 		if (!mDrawCalls.empty()) {
 			LOG_WARNING("Sponza and Terrain already loaded");
+			return;
 		}
 
 		std::vector<material_config> allMatConfigs; // <-- Gather all the materials to be used
@@ -346,6 +342,8 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 			filter_mode::trilinear
 		);
 
+		// Lifetime-handle existing material buffer, then overwrite with new one:
+		context().main_window()->handle_lifetime(std::move(mMaterialBuffer));
 		mMaterialBuffer = context().create_buffer(
 			memory_usage::device, {},
 			storage_buffer_meta::create_from_data(gpuMaterials)
@@ -358,12 +356,12 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 		mImageSamplers.clear();
 		mImageSamplers = std::move(imageSamplers);
 
-		mAdditionalSemaphoreDependency = context().record_and_submit_with_semaphore({
+		context().record_and_submit_with_fence({
 			mVertexBuffersOffsetsSizesCountBuffer->fill(&mVertexBuffersOffsetsSizesCountBuffer, 0),
 			mVertexBuffersOffsetsSizesBuffer->fill(mVertexBuffersOffsetsSizes.data(), 0, 0, mVertexBuffersOffsetsSizes.size() * sizeof(mVertexBuffersOffsetsSizes[0])),
 			matCommands,
 		    mMaterialBuffer->fill(gpuMaterials.data(), 0)
-		}, *mQueue, stage::all_graphics);
+		}, *mQueue)->wait_until_signalled();
     }
 
 	/* // PC ... push constants type */
@@ -475,9 +473,9 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 			    from_buffer_binding(2) -> stream_per_vertex<glm::vec3>() -> to_location(2), // <-- corresponds to vertex shader's inNormal
                 cfg::front_face::define_front_faces_to_be_counter_clockwise(),
 			    mBackfaceCullingOn ? cfg::culling_mode::cull_back_faces : cfg::culling_mode::disabled,
-				cfg::viewport_depth_scissors_config::from_framebuffer(mFramebuffer.as_reference()),
 
-				mRenderpass,
+				cfg::viewport_depth_scissors_config::from_framebuffer(mFramebufferSS.as_reference()),
+				mRenderpassSS, cfg::subpass_index{ 0 },
 				cfg::shade_per_fragment(), 
 			
 				mDisableColorAttachmentOut 
@@ -498,6 +496,27 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 		);
 	}
 
+	avk::graphics_pipeline create_ss_resolve_pipe()
+	{
+		using namespace avk;
+
+		return context().create_graphics_pipeline_for(
+                vertex_shader("shaders/ss_resolve.vert"),
+				fragment_shader("shaders/ss_resolve.frag"),
+                cfg::front_face::define_front_faces_to_be_counter_clockwise(),
+			    mBackfaceCullingOn ? cfg::culling_mode::cull_back_faces : cfg::culling_mode::disabled,
+
+				cfg::viewport_depth_scissors_config::from_framebuffer(mFramebuffer.as_reference()),
+				mRenderpass, cfg::subpass_index{ 0u }, 
+				cfg::shade_per_fragment(),
+			
+				descriptor_binding(0, 0, mSsResolveColorSampler),
+				descriptor_binding(0, 1, mSsResolveDepthSampler),
+			    descriptor_binding(0, 2, mFramebufferSS->image_view_at(0)->as_sampled_image(layout::shader_read_only_optimal)),
+			    descriptor_binding(0, 3, mFramebufferSS->image_view_at(1)->as_sampled_image(layout::shader_read_only_optimal))
+		);
+	}
+
 	// Ts ... optional addtional bindings
 	template <typename... Ts>
 	avk::graphics_pipeline create_tess_pipe(std::string aVert, std::string aTesc, std::string aTese, Ts... args)
@@ -511,9 +530,6 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 				fragment_shader("shaders/frag_out.frag"),
                 cfg::front_face::define_front_faces_to_be_counter_clockwise(),
 			    mBackfaceCullingOn ? cfg::culling_mode::cull_back_faces : cfg::culling_mode::disabled,
-				cfg::viewport_depth_scissors_config::from_framebuffer(mFramebuffer.as_reference()),
-
-                mRenderpass,
 
 				mDisableColorAttachmentOut 
 					? cfg::color_blending_config { {}, true , cfg::color_channel::none }
@@ -591,16 +607,20 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 #endif
 
         mRenderpass = context().create_renderpass({// Define attachments and sub pass usages:                          vvv  Note: All the draw calls are in the same (first) subpass: SS, noAA, simple-stupid vertex pipe (because... why not?!)
-                attachment::declare(aAttachmentFormats[0], on_load::load .from_previous_layout(layout::transfer_dst), usage::unused                              , on_store::store.in_layout(layout::shader_read_only_optimal)),
-                attachment::declare(aAttachmentFormats[1], on_load::load .from_previous_layout(layout::transfer_dst), usage::unused                              , on_store::store.in_layout(layout::shader_read_only_optimal)),
-                attachment::declare(colorFormatMS        , on_load::clear.from_previous_layout(layout::undefined), usage::color(0)      + usage::resolve_to(0), on_store::dont_care),
-                attachment::declare(depthFormatMS        , on_load::clear.from_previous_layout(layout::undefined), usage::depth_stencil + usage::resolve_to(1), on_store::dont_care)
+                attachment::declare(aAttachmentFormats[0], on_load::clear.from_previous_layout(layout::undefined), usage::unused        >> usage::unused                              , on_store::store.in_layout(layout::shader_read_only_optimal)),
+                attachment::declare(aAttachmentFormats[1], on_load::clear.from_previous_layout(layout::undefined), usage::unused        >> usage::unused                              , on_store::store.in_layout(layout::shader_read_only_optimal)),
+                attachment::declare(colorFormatMS        , on_load::clear.from_previous_layout(layout::undefined), usage::color(0)      >> usage::color(0)      + usage::resolve_to(0), on_store::dont_care),
+                attachment::declare(depthFormatMS        , on_load::clear.from_previous_layout(layout::undefined), usage::depth_stencil >> usage::depth_stencil + usage::resolve_to(1), on_store::dont_care)
             }, {
 				subpass_dependency{subpass::external >> subpass::index(0),
 					stage::none    >>   stage::all_graphics,
 					access::none   >>   access::color_attachment_write | access::depth_stencil_attachment_read | access::depth_stencil_attachment_write
 				},
-				subpass_dependency{subpass::index(0) >> subpass::external,
+				subpass_dependency{subpass::index(0) >> subpass::index(1),
+					stage::all_graphics                                                       >>   stage::all_graphics,
+					access::color_attachment_write | access::depth_stencil_attachment_write   >>   access::color_attachment_write | access::depth_stencil_attachment_read | access::depth_stencil_attachment_write
+				},
+				subpass_dependency{subpass::index(1) >> subpass::external,
 					stage::fragment_shader       | stage::color_attachment_output  >>   stage::compute_shader                                      | stage::transfer,
 					access::shader_storage_write | access::color_attachment_write  >>   access::shader_storage_read | access::shader_storage_write | access::memory_read
 				}
@@ -614,8 +634,8 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 		));
 
         mRenderpassSS = context().create_renderpass({// Define attachments and sub pass usages:                          vvv  Note: All the draw calls are in the same (first) subpass: SS, noAA, simple-stupid vertex pipe (because... why not?!)
-                attachment::declare(aAttachmentFormats[0], on_load::clear.from_previous_layout(layout::undefined), usage::color(0)     , on_store::store.in_layout(layout::transfer_src)),
-                attachment::declare(aAttachmentFormats[1], on_load::clear.from_previous_layout(layout::undefined), usage::depth_stencil, on_store::store.in_layout(layout::transfer_src))
+                attachment::declare(aAttachmentFormats[0], on_load::clear.from_previous_layout(layout::undefined), usage::color(0)     , on_store::store.in_layout(layout::shader_read_only_optimal)),
+                attachment::declare(aAttachmentFormats[1], on_load::clear.from_previous_layout(layout::undefined), usage::depth_stencil, on_store::store.in_layout(layout::shader_read_only_optimal))
             }, {
 				subpass_dependency{subpass::external >> subpass::index(0),
 					stage::none    >>   stage::all_graphics,
@@ -663,11 +683,14 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 			tmp.mMaterialIndex = po.material_index();
 			tmp.mUseAdaptiveDetail = mAdaptivePxFill ? 1 : 0;
 			tmp.mPxFillSetIndex = po.how_to_render() == rendering_method::tessellated_rasterized ? 0 : 2;  // handle Tess. noAA and point rendering
+			if (po.how_to_render() == rendering_method::tessellated_rasterized && po.multi_sampling_on()) {
+				tmp.mPxFillSetIndex = 1; // handle Tess. Multisampling
+			}
 			if (po.how_to_render() == rendering_method::tessellated_rasterized && po.super_sampling_on()) {
-				tmp.mPxFillSetIndex = 1; // handle Tess. SS
+				tmp.mPxFillSetIndex = 3; // handle Tess. Supersampling
 			}
 			tmp.mLodAndRenderSettings = { 1.0f, 1.0f, 84.0f, 1.0f }; // TODO: super sampling properly!
-			if (po.super_sampling_on()) {
+			if (po.super_sampling_on() || po.multi_sampling_on()) {
 				tmp.mLodAndRenderSettings.z *= 0.5f;
 			}
 
@@ -809,8 +832,13 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 			for (auto& po : mParametricObjects) {
 				ImGui::TableNextColumn();
 				ImGui::PushID(poId++);
+				bool ms = po.multi_sampling_on();
+				if (ImGui::Checkbox("8xMS", &ms)) {
+					po.set_multi_sampling(ms);
+					updateObjects = true;
+				}
 				bool ss = po.super_sampling_on();
-				if (ImGui::Checkbox("Super-Sampled", &ss)) {
+				if (ImGui::Checkbox("4xSS", &ss)) {
 					po.set_super_sampling(ss);
 					updateObjects = true;
 				}
@@ -874,6 +902,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 		mDescriptorCache = context().create_descriptor_cache();
 
 		create_buffers();
+		load_sponza_and_terrain();
 
 		// Define formats for the framebuffer attachments:
         constexpr auto attachmentFormats = make_array<vk::Format>(vk::Format::eB8G8R8A8Unorm, vk::Format::eD32Sfloat);
@@ -945,7 +974,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 		);
 #endif
 
-		constexpr float numDifferentRenderVariants = 3;
+		constexpr float numDifferentRenderVariants = 4;
 		// Create buffers for the indirect draw calls of the parametric pipelines:
         mIndirectPxFillParamsBuffer = context().create_buffer(
 			memory_usage::device, {}, 
@@ -973,50 +1002,61 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 		mVertexPipeline = create_vertex_pipe();
 		mUpdater->on(shader_files_changed_event(mVertexPipeline.as_reference())).update(mVertexPipeline);
 
-		mTessPipelinePxFill = create_tess_pipe(
+		mSsResolveColorSampler = avk::context().create_sampler(avk::filter_mode::trilinear, avk::border_handling_mode::clamp_to_border, 0.0f);
+		mSsResolveDepthSampler = avk::context().create_sampler(avk::filter_mode::trilinear , avk::border_handling_mode::clamp_to_border, 0.0f);
+		mSsResolvePipeline = create_ss_resolve_pipe();
+		mUpdater->on(shader_files_changed_event(mSsResolvePipeline.as_reference())).update(mSsResolvePipeline);
+
+		mTessPipelinePxFillNoaa = create_tess_pipe(
 			"shaders/px-fill-tess/patch_ready.vert", 
 			"shaders/px-fill-tess/patch_set.tesc", 
 			"shaders/px-fill-tess/patch_go.tese",
 			push_constant_binding_data{shader_type::all, 0, sizeof(patch_into_tess_push_constants)},
-			cfg::shade_per_fragment()
+			cfg::shade_per_fragment(),
+			cfg::viewport_depth_scissors_config::from_framebuffer(mFramebuffer.as_reference()),
+			mRenderpass, cfg::subpass_index{ 1 }
 		);
-		mUpdater->on(shader_files_changed_event(mTessPipelinePxFill.as_reference())).update(mTessPipelinePxFill);
+		mUpdater->on(shader_files_changed_event(mTessPipelinePxFillNoaa.as_reference())).update(mTessPipelinePxFillNoaa);
 
 		// Create an (almost identical) pipeline to render the scene in wireframe mode
-		mTessPipelinePxFillWireframe = context().create_graphics_pipeline_from_template(mTessPipelinePxFill.as_reference(), [](graphics_pipeline_t& p) {
+		mTessPipelinePxFillNoaaWireframe = context().create_graphics_pipeline_from_template(mTessPipelinePxFillNoaa.as_reference(), [](graphics_pipeline_t& p) {
 			p.rasterization_state_create_info().setPolygonMode(vk::PolygonMode::eLine);
 		});
-		mUpdater->on(shader_files_changed_event(mTessPipelinePxFillWireframe.as_reference())).update(mTessPipelinePxFillWireframe);
+		mUpdater->on(shader_files_changed_event(mTessPipelinePxFillNoaaWireframe.as_reference())).update(mTessPipelinePxFillNoaaWireframe);
 
-		mTessPipelinePxFillSpS = create_tess_pipe(
+		mTessPipelinePxFillMultisampled = create_tess_pipe(
 			"shaders/px-fill-tess/patch_ready.vert", 
 			"shaders/px-fill-tess/patch_set.tesc", 
 			"shaders/px-fill-tess/patch_go.tese",
 			push_constant_binding_data{shader_type::all, 0, sizeof(patch_into_tess_push_constants)},
-			cfg::shade_per_sample()
+			cfg::shade_per_sample(),
+			cfg::viewport_depth_scissors_config::from_framebuffer(mFramebuffer.as_reference()),
+			mRenderpass, cfg::subpass_index{ 1 }
 		);
-		mUpdater->on(shader_files_changed_event(mTessPipelinePxFillSpS.as_reference())).update(mTessPipelinePxFillSpS);
+		mUpdater->on(shader_files_changed_event(mTessPipelinePxFillMultisampled.as_reference())).update(mTessPipelinePxFillMultisampled);
 
 		// Create an (almost identical) pipeline to render the scene in wireframe mode
-		mTessPipelinePxFillWireframeSpS = context().create_graphics_pipeline_from_template(mTessPipelinePxFillSpS.as_reference(), [](graphics_pipeline_t& p) {
+		mTessPipelinePxFillMultisampledWireframe = context().create_graphics_pipeline_from_template(mTessPipelinePxFillMultisampled.as_reference(), [](graphics_pipeline_t& p) {
 			p.rasterization_state_create_info().setPolygonMode(vk::PolygonMode::eLine);
 		});
-		mUpdater->on(shader_files_changed_event(mTessPipelinePxFillWireframeSpS.as_reference())).update(mTessPipelinePxFillWireframeSpS);
+		mUpdater->on(shader_files_changed_event(mTessPipelinePxFillMultisampledWireframe.as_reference())).update(mTessPipelinePxFillMultisampledWireframe);
 
-		mTessPipelinePxFillSuSa = create_tess_pipe(
+		mTessPipelinePxFillSupersampled = create_tess_pipe(
 			"shaders/px-fill-tess/patch_ready.vert", 
 			"shaders/px-fill-tess/patch_set.tesc", 
 			"shaders/px-fill-tess/patch_go.tese",
 			push_constant_binding_data{shader_type::all, 0, sizeof(patch_into_tess_push_constants)},
-			cfg::shade_per_fragment()
+			cfg::shade_per_fragment(),
+			cfg::viewport_depth_scissors_config::from_framebuffer(mFramebufferSS.as_reference()),
+			mRenderpassSS, cfg::subpass_index{ 0 }
 		);
-		mUpdater->on(shader_files_changed_event(mTessPipelinePxFillSuSa.as_reference())).update(mTessPipelinePxFillSuSa);
+		mUpdater->on(shader_files_changed_event(mTessPipelinePxFillSupersampled.as_reference())).update(mTessPipelinePxFillSupersampled);
 
 		// Create an (almost identical) pipeline to render the scene in wireframe mode
-		mTessPipelinePxFillWireframeSuSa = context().create_graphics_pipeline_from_template(mTessPipelinePxFillSuSa.as_reference(), [](graphics_pipeline_t& p) {
+		mTessPipelinePxFillSupersampledWireframe = context().create_graphics_pipeline_from_template(mTessPipelinePxFillSupersampled.as_reference(), [](graphics_pipeline_t& p) {
 			p.rasterization_state_create_info().setPolygonMode(vk::PolygonMode::eLine);
 		});
-		mUpdater->on(shader_files_changed_event(mTessPipelinePxFillWireframeSuSa.as_reference())).update(mTessPipelinePxFillWireframeSuSa);
+		mUpdater->on(shader_files_changed_event(mTessPipelinePxFillSupersampledWireframe.as_reference())).update(mTessPipelinePxFillSupersampledWireframe);
 
 		mCopyToBackufferPipe = context().create_compute_pipeline_for(
 			"shaders/copy_to_backbuffer.comp",
@@ -1300,15 +1340,17 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 							"shaders/px-fill-tess/patch_set.tesc", 
 							"shaders/px-fill-tess/patch_go.tese",
 							push_constant_binding_data{shader_type::all, 0, sizeof(patch_into_tess_push_constants)},
-							cfg::shade_per_fragment()
+							cfg::shade_per_fragment(),
+							cfg::viewport_depth_scissors_config::from_framebuffer(mFramebuffer.as_reference()),
+							mRenderpass, cfg::subpass_index{ 1 }
 						);
-						std::swap(*mTessPipelinePxFill, *newTessPipePxFill);
+						std::swap(*mTessPipelinePxFillNoaa, *newTessPipePxFill);
 						context().main_window()->handle_lifetime(std::move(newTessPipePxFill));
 
-						auto newTessPipePxFillWire = context().create_graphics_pipeline_from_template(mTessPipelinePxFill.as_reference(), [](graphics_pipeline_t& p) {
+						auto newTessPipePxFillWire = context().create_graphics_pipeline_from_template(mTessPipelinePxFillNoaa.as_reference(), [](graphics_pipeline_t& p) {
 							p.rasterization_state_create_info().setPolygonMode(vk::PolygonMode::eLine);
 						});
-						std::swap(*mTessPipelinePxFillWireframe, *newTessPipePxFillWire);
+						std::swap(*mTessPipelinePxFillNoaaWireframe, *newTessPipePxFillWire);
 						context().main_window()->handle_lifetime(std::move(newTessPipePxFillWire));
 					}
 
@@ -1318,15 +1360,17 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 							"shaders/px-fill-tess/patch_set.tesc", 
 							"shaders/px-fill-tess/patch_go.tese",
 							push_constant_binding_data{shader_type::all, 0, sizeof(patch_into_tess_push_constants)},
-							cfg::shade_per_sample()
+							cfg::shade_per_sample(),
+							cfg::viewport_depth_scissors_config::from_framebuffer(mFramebuffer.as_reference()),
+							mRenderpass, cfg::subpass_index{ 1 }
 						);
-						std::swap(*mTessPipelinePxFillSpS, *newTessPipePxFillSpS);
+						std::swap(*mTessPipelinePxFillMultisampled, *newTessPipePxFillSpS);
 						context().main_window()->handle_lifetime(std::move(newTessPipePxFillSpS));
 
-						auto newTessPipePxFillWireSpS = context().create_graphics_pipeline_from_template(mTessPipelinePxFillSpS.as_reference(), [](graphics_pipeline_t& p) {
+						auto newTessPipePxFillWireSpS = context().create_graphics_pipeline_from_template(mTessPipelinePxFillMultisampled.as_reference(), [](graphics_pipeline_t& p) {
 							p.rasterization_state_create_info().setPolygonMode(vk::PolygonMode::eLine);
 						});
-						std::swap(*mTessPipelinePxFillWireframeSpS, *newTessPipePxFillWireSpS);
+						std::swap(*mTessPipelinePxFillMultisampledWireframe, *newTessPipePxFillWireSpS);
 						context().main_window()->handle_lifetime(std::move(newTessPipePxFillWireSpS));
 					}
 
@@ -1336,15 +1380,17 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 							"shaders/px-fill-tess/patch_set.tesc", 
 							"shaders/px-fill-tess/patch_go.tese",
 							push_constant_binding_data{shader_type::all, 0, sizeof(patch_into_tess_push_constants)},
-							cfg::shade_per_fragment()
+							cfg::shade_per_fragment(),
+							cfg::viewport_depth_scissors_config::from_framebuffer(mFramebufferSS.as_reference()),
+							mRenderpassSS, cfg::subpass_index{ 0 }
 						);
-						std::swap(*mTessPipelinePxFillSuSa, *newTessPipePxFillSuSa);
+						std::swap(*mTessPipelinePxFillSupersampled, *newTessPipePxFillSuSa);
 						context().main_window()->handle_lifetime(std::move(newTessPipePxFillSuSa));
 
-						auto newTessPipePxFillWireSuSa = context().create_graphics_pipeline_from_template(mTessPipelinePxFillSuSa.as_reference(), [](graphics_pipeline_t& p) {
+						auto newTessPipePxFillWireSuSa = context().create_graphics_pipeline_from_template(mTessPipelinePxFillSupersampled.as_reference(), [](graphics_pipeline_t& p) {
 							p.rasterization_state_create_info().setPolygonMode(vk::PolygonMode::eLine);
 						});
-						std::swap(*mTessPipelinePxFillWireframeSuSa, *newTessPipePxFillWireSuSa);
+						std::swap(*mTessPipelinePxFillSupersampledWireframe, *newTessPipePxFillWireSuSa);
 						context().main_window()->handle_lifetime(std::move(newTessPipePxFillWireSuSa));
 					}
 
@@ -1772,8 +1818,9 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 		auto initCommands = get_init_commands(firstPing, finalPong);
 
 		// Now render everything:
-		graphics_pipeline& tessPipePxFillToBeUsed = mWireframeModeOn ? mTessPipelinePxFillWireframe : mTessPipelinePxFill;
-		graphics_pipeline& tessPipePxFillSSToBeUsed = mWireframeModeOn ? mTessPipelinePxFillWireframeSuSa : mTessPipelinePxFillSuSa;
+		graphics_pipeline& tessPipePxFillNoaaToBeUsed         = mWireframeModeOn ? mTessPipelinePxFillNoaaWireframe : mTessPipelinePxFillNoaa;
+		graphics_pipeline& tessPipePxFillMultisampledToBeUsed = mWireframeModeOn ? mTessPipelinePxFillMultisampledWireframe : mTessPipelinePxFillMultisampled;
+		graphics_pipeline& tessPipePxFillSupersampledToBeUsed = mWireframeModeOn ? mTessPipelinePxFillSupersampledWireframe : mTessPipelinePxFillSupersampled;
 		auto gatheredCommands = command::gather(
 #if STATS_ENABLED
 			    commandsBeginStats,
@@ -1821,77 +1868,8 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 
 			// 3) Render patches:
 			command::render_pass(mRenderpassSS.as_reference(), mFramebufferSS.as_reference(), command::gather(
-// 3.2) Render tessellated patches with SS
-                command::bind_pipeline(tessPipePxFillSSToBeUsed.as_reference()),
-				command::bind_descriptors(tessPipePxFillSSToBeUsed->layout(), mDescriptorCache->get_or_create_descriptor_sets({
-					descriptor_binding(0, 0, mFrameDataBuffers[inFlightIndex]),
-			        descriptor_binding(0, 1, as_combined_image_samplers(mImageSamplers, layout::shader_read_only_optimal)),
-			        descriptor_binding(0, 2, mMaterialBuffer),
-					descriptor_binding(1, 0, mCombinedAttachmentView->as_storage_image(layout::general)),
-#if STATS_ENABLED
-					descriptor_binding(1, 1, mHeatMapImageView->as_storage_image(layout::general)),
-#endif
-			        descriptor_binding(2, 0, mCountersSsbo->as_storage_buffer()),
-				    descriptor_binding(3, 0, mObjectDataBuffer->as_storage_buffer()),
-					descriptor_binding(3, 1, mIndirectPxFillParamsBuffer->as_storage_buffer()),
-				    descriptor_binding(3, 2, mIndirectPxFillCountBuffer->as_storage_buffer())
-				})),
 
-				command::push_constants(tessPipePxFillSSToBeUsed->layout(), patch_into_tess_push_constants{ mConstOuterTessLevel, mConstInnerTessLevel, 1 * MAX_INDIRECT_DISPATCHES }),
-				command::draw_vertices_indirect(mIndirectPxFillCountBuffer.as_reference(), sizeof(VkDrawIndirectCommand), sizeof(VkDrawIndirectCommand), 1u) // <-- Exactly ONE draw (but potentially a lot of instances), use the one at [1]
-
-			)),
-
-
-			sync::global_memory_barrier(stage::all_commands + access::memory_write >> stage::compute_shader + access::memory_read), // TODO: Barrier too heavy
-			blit_image(mFramebufferSS->image_at(0), layout::transfer_src, mFramebuffer->image_at(0), layout::transfer_dst, vk::ImageAspectFlagBits::eColor, vk::Filter::eLinear),
-			blit_image(mFramebufferSS->image_at(1), layout::transfer_src, mFramebuffer->image_at(1), layout::transfer_dst, vk::ImageAspectFlagBits::eColor, vk::Filter::eLinear),
-			sync::global_memory_barrier(stage::all_commands + access::memory_write >> stage::compute_shader + access::memory_read), // TODO: Barrier too heavy
-
-			command::render_pass(mRenderpass.as_reference(), mFramebuffer.as_reference(), command::gather(
-
-				// 3.1) Render tessellated patches with noAA
-                command::bind_pipeline(tessPipePxFillToBeUsed.as_reference()),
-				command::bind_descriptors(tessPipePxFillToBeUsed->layout(), mDescriptorCache->get_or_create_descriptor_sets({
-					descriptor_binding(0, 0, mFrameDataBuffers[inFlightIndex]),
-			        descriptor_binding(0, 1, as_combined_image_samplers(mImageSamplers, layout::shader_read_only_optimal)),
-			        descriptor_binding(0, 2, mMaterialBuffer),
-					descriptor_binding(1, 0, mCombinedAttachmentView->as_storage_image(layout::general)),
-#if STATS_ENABLED
-					descriptor_binding(1, 1, mHeatMapImageView->as_storage_image(layout::general)),
-#endif
-			        descriptor_binding(2, 0, mCountersSsbo->as_storage_buffer()),
-				    descriptor_binding(3, 0, mObjectDataBuffer->as_storage_buffer()),
-					descriptor_binding(3, 1, mIndirectPxFillParamsBuffer->as_storage_buffer()),
-				    descriptor_binding(3, 2, mIndirectPxFillCountBuffer->as_storage_buffer())
-				})),
-					
-				command::push_constants(tessPipePxFillToBeUsed->layout(), patch_into_tess_push_constants{ mConstOuterTessLevel, mConstInnerTessLevel, 0 }),
-				command::draw_vertices_indirect(mIndirectPxFillCountBuffer.as_reference(), 0, sizeof(VkDrawIndirectCommand), 1u)
-				//, // <-- Exactly ONE draw (but potentially a lot of instances), use the one at [0]
-				
-				
-//
-//				// 3.2) Render tessellated patches with SS
-//                command::bind_pipeline(tessPipePxFillSSToBeUsed.as_reference()),
-//				command::bind_descriptors(tessPipePxFillSSToBeUsed->layout(), mDescriptorCache->get_or_create_descriptor_sets({
-//					descriptor_binding(0, 0, mFrameDataBuffers[inFlightIndex]),
-//			        descriptor_binding(0, 1, as_combined_image_samplers(mImageSamplers, layout::shader_read_only_optimal)),
-//			        descriptor_binding(0, 2, mMaterialBuffer),
-//					descriptor_binding(1, 0, mCombinedAttachmentView->as_storage_image(layout::general)),
-//#if STATS_ENABLED
-//					descriptor_binding(1, 1, mHeatMapImageView->as_storage_image(layout::general)),
-//#endif
-//			        descriptor_binding(2, 0, mCountersSsbo->as_storage_buffer()),
-//				    descriptor_binding(3, 0, mObjectDataBuffer->as_storage_buffer()),
-//					descriptor_binding(3, 1, mIndirectPxFillParamsBuffer->as_storage_buffer()),
-//				    descriptor_binding(3, 2, mIndirectPxFillCountBuffer->as_storage_buffer())
-//				})),
-//					
-//				command::push_constants(tessPipePxFillSSToBeUsed->layout(), patch_into_tess_push_constants{ mConstOuterTessLevel, mConstInnerTessLevel, 1 * MAX_INDIRECT_DISPATCHES }),
-//				command::draw_vertices_indirect(mIndirectPxFillCountBuffer.as_reference(), sizeof(VkDrawIndirectCommand), sizeof(VkDrawIndirectCommand), 1u), // <-- Exactly ONE draw (but potentially a lot of instances), use the one at [1]
-
-				// 3.3) Render extra 3D models into the same framebuffer (with multi-sampling):
+								// 3.3) Render extra 3D models into the same framebuffer (with multi-sampling):
 				command::bind_pipeline(mVertexPipeline.as_reference()),
 		        command::bind_descriptors(mVertexPipeline->layout(), mDescriptorCache->get_or_create_descriptor_sets({
 			        descriptor_binding(0, 0, mFrameDataBuffers[inFlightIndex]),
@@ -1918,7 +1896,83 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 						    std::forward_as_tuple(mNormalsBuffer.as_reference()  , size_t{mDrawCalls[i].mNormalsBufferOffset})
 				        )
 				    );
-		        } )
+		        } ),
+
+// 3.2) Render tessellated patches with SS
+                command::bind_pipeline(tessPipePxFillSupersampledToBeUsed.as_reference()),
+				command::bind_descriptors(tessPipePxFillSupersampledToBeUsed->layout(), mDescriptorCache->get_or_create_descriptor_sets({
+					descriptor_binding(0, 0, mFrameDataBuffers[inFlightIndex]),
+			        descriptor_binding(0, 1, as_combined_image_samplers(mImageSamplers, layout::shader_read_only_optimal)),
+			        descriptor_binding(0, 2, mMaterialBuffer),
+					descriptor_binding(1, 0, mCombinedAttachmentView->as_storage_image(layout::general)),
+#if STATS_ENABLED
+					descriptor_binding(1, 1, mHeatMapImageView->as_storage_image(layout::general)),
+#endif
+			        descriptor_binding(2, 0, mCountersSsbo->as_storage_buffer()),
+				    descriptor_binding(3, 0, mObjectDataBuffer->as_storage_buffer()),
+					descriptor_binding(3, 1, mIndirectPxFillParamsBuffer->as_storage_buffer()),
+				    descriptor_binding(3, 2, mIndirectPxFillCountBuffer->as_storage_buffer())
+				})),
+
+				command::push_constants(tessPipePxFillSupersampledToBeUsed->layout(), patch_into_tess_push_constants{ mConstOuterTessLevel, mConstInnerTessLevel, 3 * MAX_INDIRECT_DISPATCHES }),
+				command::draw_vertices_indirect(mIndirectPxFillCountBuffer.as_reference(), 3 * sizeof(VkDrawIndirectCommand), sizeof(VkDrawIndirectCommand), 1u) // <-- Exactly ONE draw (but potentially a lot of instances), use the one at [1]
+
+			)),
+
+			command::render_pass(mRenderpass.as_reference(), mFramebuffer.as_reference(), command::gather(
+
+				// 3.1) Render tessellated patches with noAA
+                command::bind_pipeline(mSsResolvePipeline.as_reference()),
+				command::bind_descriptors(mSsResolvePipeline->layout(), mDescriptorCache->get_or_create_descriptor_sets({
+					descriptor_binding(0, 0, mSsResolveColorSampler),
+					descriptor_binding(0, 1, mSsResolveDepthSampler),
+					descriptor_binding(0, 2, mFramebufferSS->image_view_at(0)->as_sampled_image(layout::shader_read_only_optimal)),
+					descriptor_binding(0, 3, mFramebufferSS->image_view_at(1)->as_sampled_image(layout::shader_read_only_optimal))
+				})),
+				// Draw a a full-screen quad:
+				command::draw(6, 1, 0, 1),
+				
+				command::next_subpass(),
+
+				// 3.1) Render tessellated patches with noAA
+                command::bind_pipeline(tessPipePxFillNoaaToBeUsed.as_reference()),
+				command::bind_descriptors(tessPipePxFillNoaaToBeUsed->layout(), mDescriptorCache->get_or_create_descriptor_sets({
+					descriptor_binding(0, 0, mFrameDataBuffers[inFlightIndex]),
+			        descriptor_binding(0, 1, as_combined_image_samplers(mImageSamplers, layout::shader_read_only_optimal)),
+			        descriptor_binding(0, 2, mMaterialBuffer),
+					descriptor_binding(1, 0, mCombinedAttachmentView->as_storage_image(layout::general)),
+#if STATS_ENABLED
+					descriptor_binding(1, 1, mHeatMapImageView->as_storage_image(layout::general)),
+#endif
+			        descriptor_binding(2, 0, mCountersSsbo->as_storage_buffer()),
+				    descriptor_binding(3, 0, mObjectDataBuffer->as_storage_buffer()),
+					descriptor_binding(3, 1, mIndirectPxFillParamsBuffer->as_storage_buffer()),
+				    descriptor_binding(3, 2, mIndirectPxFillCountBuffer->as_storage_buffer())
+				})),
+					
+				command::push_constants(tessPipePxFillNoaaToBeUsed->layout(), patch_into_tess_push_constants{ mConstOuterTessLevel, mConstInnerTessLevel, 0 }),
+				command::draw_vertices_indirect(mIndirectPxFillCountBuffer.as_reference(), 0, sizeof(VkDrawIndirectCommand), 1u), // <-- Exactly ONE draw (but potentially a lot of instances), use the one at [0]
+				
+				
+
+				// 3.2) Render tessellated patches with MSAA
+                command::bind_pipeline(tessPipePxFillMultisampledToBeUsed.as_reference()),
+				command::bind_descriptors(tessPipePxFillMultisampledToBeUsed->layout(), mDescriptorCache->get_or_create_descriptor_sets({
+					descriptor_binding(0, 0, mFrameDataBuffers[inFlightIndex]),
+			        descriptor_binding(0, 1, as_combined_image_samplers(mImageSamplers, layout::shader_read_only_optimal)),
+			        descriptor_binding(0, 2, mMaterialBuffer),
+					descriptor_binding(1, 0, mCombinedAttachmentView->as_storage_image(layout::general)),
+#if STATS_ENABLED
+					descriptor_binding(1, 1, mHeatMapImageView->as_storage_image(layout::general)),
+#endif
+			        descriptor_binding(2, 0, mCountersSsbo->as_storage_buffer()),
+				    descriptor_binding(3, 0, mObjectDataBuffer->as_storage_buffer()),
+					descriptor_binding(3, 1, mIndirectPxFillParamsBuffer->as_storage_buffer()),
+				    descriptor_binding(3, 2, mIndirectPxFillCountBuffer->as_storage_buffer())
+				})),
+					
+				command::push_constants(tessPipePxFillMultisampledToBeUsed->layout(), patch_into_tess_push_constants{ mConstOuterTessLevel, mConstInnerTessLevel, 1 * MAX_INDIRECT_DISPATCHES }),
+				command::draw_vertices_indirect(mIndirectPxFillCountBuffer.as_reference(), sizeof(VkDrawIndirectCommand), sizeof(VkDrawIndirectCommand), 1u) // <-- Exactly ONE draw (but potentially a lot of instances), use the one at [1]
 
 			)),
 #if STATS_ENABLED
@@ -2195,12 +2249,15 @@ private: // v== Member variables ==v
 	avk::buffer mIndirectPxFillCountBuffer;
 
     avk::graphics_pipeline mVertexPipeline;
-    avk::graphics_pipeline mTessPipelinePxFill;
-    avk::graphics_pipeline mTessPipelinePxFillSpS;
-    avk::graphics_pipeline mTessPipelinePxFillSuSa;
-    avk::graphics_pipeline mTessPipelinePxFillWireframe;
-    avk::graphics_pipeline mTessPipelinePxFillWireframeSpS;
-    avk::graphics_pipeline mTessPipelinePxFillWireframeSuSa;
+    avk::graphics_pipeline mTessPipelinePxFillNoaa;
+    avk::graphics_pipeline mTessPipelinePxFillMultisampled;
+    avk::graphics_pipeline mTessPipelinePxFillSupersampled;
+    avk::graphics_pipeline mTessPipelinePxFillNoaaWireframe;
+    avk::graphics_pipeline mTessPipelinePxFillMultisampledWireframe;
+    avk::graphics_pipeline mTessPipelinePxFillSupersampledWireframe;
+	avk::graphics_pipeline mSsResolvePipeline;
+	avk::sampler mSsResolveColorSampler;
+	avk::sampler mSsResolveDepthSampler;
 	float mConstOuterTessLevel = 16.0;
 	float mConstInnerTessLevel = 16.0;
 
