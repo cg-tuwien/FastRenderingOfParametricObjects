@@ -184,5 +184,17 @@
     <Image Include="assets\po-palm-tree.png">
       <Filter>assets</Filter>
     </Image>
+    <Image Include="assets\checkerboard-pattern.jpg">
+      <Filter>assets</Filter>
+    </Image>
+    <Image Include="Auto-Vk-Toolkit\assets\3rd_party\textures\rough_cobblestones\brick_floor_tileable_Ambient_Occlusion.jpg">
+      <Filter>assets</Filter>
+    </Image>
+    <Image Include="Auto-Vk-Toolkit\assets\3rd_party\textures\rough_cobblestones\brick_floor_tileable_Base_Color.jpg">
+      <Filter>assets</Filter>
+    </Image>
+    <Image Include="Auto-Vk-Toolkit\assets\3rd_party\textures\rough_cobblestones\brick_floor_tileable_Normal.jpg">
+      <Filter>assets</Filter>
+    </Image>
   </ItemGroup>
 </Project>
