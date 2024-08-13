@@ -71,6 +71,7 @@
     </None>
   </ItemGroup>
   <ItemGroup>
+    <Image Include="assets\checkerboard-pattern.jpg" />
     <Image Include="assets\po-blue-curtain.png" />
     <Image Include="assets\po-fiber-curve-single.png" />
     <Image Include="assets\po-giant-worm.png" />
@@ -83,6 +84,9 @@
     <Image Include="assets\po-single-sh-glyph.png" />
     <Image Include="assets\po-sphere-patches.png" />
     <Image Include="assets\po-yarn-curve-single.png" />
+    <Image Include="Auto-Vk-Toolkit\assets\3rd_party\textures\rough_cobblestones\brick_floor_tileable_Ambient_Occlusion.jpg" />
+    <Image Include="Auto-Vk-Toolkit\assets\3rd_party\textures\rough_cobblestones\brick_floor_tileable_Base_Color.jpg" />
+    <Image Include="Auto-Vk-Toolkit\assets\3rd_party\textures\rough_cobblestones\brick_floor_tileable_Normal.jpg" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>15.0</VCProjectVersion>

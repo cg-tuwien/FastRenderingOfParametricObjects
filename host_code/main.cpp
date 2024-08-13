@@ -20,8 +20,6 @@
 #include "ImGuizmo.h"
 
 #define NUM_TIMESTAMP_QUERIES 5
-#define EXTRA_3D_MODEL "sponza_and_terrain"
-//#define EXTRA_3D_MODEL "SunTemple"
 
 // Sample count possible values:
 // vk::SampleCountFlagBits::e1
@@ -106,11 +104,11 @@ static std::array<parametric_object, 13> PredefinedParametricObjects {{
 	parametric_object{"Seashell 1"  , "assets/po-seashell1.png",          false, parametric_object_type::Seashell1,              glm::two_pi<float>() * 8.0f,/* -> */0.0f,   0.0f,/* -> */glm::two_pi<float>(), glm::mat4{ 1.0f }, 2},
 	parametric_object{"Seashell 2"  , "assets/po-seashell2.png",          false, parametric_object_type::Seashell2,              glm::two_pi<float>() * 8.0f,/* -> */0.0f,   0.0f,/* -> */glm::two_pi<float>(), glm::translate(glm::vec3{-4.5f, 7.0f, 0.0f }), 2},
 	parametric_object{"Seashell 3"  , "assets/po-seashell3.png",          false, parametric_object_type::Seashell3,              glm::two_pi<float>() * 8.0f,/* -> */0.0f,   0.0f,/* -> */glm::two_pi<float>(), glm::translate(glm::vec3{ 4.5f, 7.0f, 0.0f }), 2},
-	parametric_object{"Yarn Curve"  , "assets/po-yarn-curve-single.png",  false, parametric_object_type::YarnCurve,  1.0f, 1.0f, /* <-- yarn dimensions | #fibers --> */ 4.f, 1.f, glm::translate(glm::vec3{-3.35f, 0.08f, 5.32f}) * glm::scale(glm::vec3{ 0.005f }), 17},
-	parametric_object{"Fiber Curve" , "assets/po-fiber-curve-single.png", false, parametric_object_type::FiberCurve, 1.0f, 1.0f, /* <-- yarn dimensions | #fibers --> */ 4.f, 1.f, glm::translate(glm::vec3{-3.35f, 0.08f, 5.32f}) * glm::scale(glm::vec3{ 0.005f }), 17},
-	parametric_object{"Blue Curtain", "assets/po-blue-curtain.png",		  false, parametric_object_type::YarnCurve,  235.0f, 254.0f, /* <-- yarn dimensions | #fibers --> */ 4.f, 1.f, glm::translate(glm::vec3{-3.35f, 0.08f, 5.32f}) * glm::scale(glm::vec3{ 0.005f }), 17},
+	parametric_object{"Yarn Curve"  , "assets/po-yarn-curve-single.png",  false, parametric_object_type::YarnCurve,  1.0f, 1.0f, /* <-- yarn dimensions | #fibers --> */ 4.f, 1.f, glm::translate(glm::vec3{-3.35f, 0.08f, 5.32f}) * glm::scale(glm::vec3{ 0.005f }), 19},
+	parametric_object{"Fiber Curve" , "assets/po-fiber-curve-single.png", false, parametric_object_type::FiberCurve, 1.0f, 1.0f, /* <-- yarn dimensions | #fibers --> */ 4.f, 1.f, glm::translate(glm::vec3{-3.35f, 0.08f, 5.32f}) * glm::scale(glm::vec3{ 0.005f }), 19},
+	parametric_object{"Blue Curtain", "assets/po-blue-curtain.png",		  false, parametric_object_type::YarnCurve,  235.0f, 254.0f, /* <-- yarn dimensions | #fibers --> */ 4.f, 1.f, glm::translate(glm::vec3{-3.35f, 0.08f, 5.32f}) * glm::scale(glm::vec3{ 0.005f }), 19},
 	parametric_object{"Palm Tree"   , "assets/po-palm-tree.png",		  false, parametric_object_type::PalmTreeTrunk,          0.0f,   1.0f,            0.0f,  glm::two_pi<float>(), glm::translate(glm::vec3{ 0.f,  0.f, -4.f})},
-	parametric_object{"Giant Worm"  , "assets/po-giant-worm.png",		  false, parametric_object_type::PalmTreeTrunk,  235.0f, 254.0f, /* <-- yarn dimensions | #fibers --> */ 4.f, 1.f, glm::translate(glm::vec3{-3.35f, 0.08f, 5.32f}) * glm::scale(glm::vec3{ 0.005f }), 17},
+	parametric_object{"Giant Worm"  , "assets/po-giant-worm.png",		  false, parametric_object_type::PalmTreeTrunk,  235.0f, 254.0f, /* <-- yarn dimensions | #fibers --> */ 4.f, 1.f, glm::translate(glm::vec3{-3.35f, 0.08f, 5.32f}) * glm::scale(glm::vec3{ 0.005f }), 19},
 	parametric_object{"SH Glyph"    , "assets/po-single-sh-glyph.png",    false, parametric_object_type::SHGlyph,                0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>()},
 	parametric_object{"Brain Scan"  , "assets/po-sh-brain.png",           false, parametric_object_type::SHGlyph,                0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>()}
 }};
@@ -176,7 +174,30 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 		}
 	}
 
-	void load_models_and_materials()
+	void add_custom_materials(std::vector<avk::material_config>& aMaterials)
+	{
+		using namespace avk;
+
+		auto& checkerboardMat = aMaterials.emplace_back();
+		checkerboardMat.mDiffuseReflectivity = glm::vec4(1.0f);
+		checkerboardMat.mAmbientReflectivity = glm::vec4(1.0f);
+		checkerboardMat.mAlbedo = glm::vec4(1.0f);
+		checkerboardMat.mDiffuseTex = "assets/checkerboard-pattern.jpg";
+		checkerboardMat.mDiffuseTexBorderHandlingMode = {{ border_handling_mode::repeat, border_handling_mode::repeat }};
+		
+		auto& cobblestonesMat = aMaterials.emplace_back();
+		cobblestonesMat.mDiffuseReflectivity = glm::vec4(1.0f);
+		cobblestonesMat.mAmbientReflectivity = glm::vec4(1.0f);
+		cobblestonesMat.mAlbedo = glm::vec4(1.0f);
+		cobblestonesMat.mDiffuseTex = "assets/brick_floor_tileable_Base_Color.jpg";
+		cobblestonesMat.mAmbientTex = "assets/brick_floor_tileable_Ambient_Occlusion.jpg";
+		cobblestonesMat.mNormalsTex  = "assets/brick_floor_tileable_Normal.jpg";
+		cobblestonesMat.mDiffuseTexBorderHandlingMode = {{ border_handling_mode::repeat, border_handling_mode::repeat }};
+		cobblestonesMat.mAmbientTexBorderHandlingMode = {{ border_handling_mode::repeat, border_handling_mode::repeat }};
+		cobblestonesMat.mHeightTexBorderHandlingMode  = {{ border_handling_mode::repeat, border_handling_mode::repeat }};
+	}
+
+	void create_buffers()
 	{
 		using namespace avk;
 
@@ -208,68 +229,67 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 			storage_buffer_meta::create_from_size(            sizeof(glm::uvec4)) // 1 counter, that's it
 		);
 
-		std::vector<std::tuple<model, int32_t>> loadedModels;
+		std::vector<avk::material_config> initialMaterials;
+		add_custom_materials(initialMaterials);
 
-		for (const auto& [m, pxMeridian] : loadedModels) {
-			AVK_LOG_INFO(std::format("Loaded sphere model with {} vertices ({} thereof along its meridian) and {} triangles.", m->number_of_vertices_for_mesh(0), pxMeridian, m->number_of_indices_for_mesh(0) / 3));
+		// For all the different materials, transfer them in structs which are well
+		// suited for GPU-usage (proper alignment, and containing only the relevant data),
+		// also load all the referenced images from file and provide access to them
+		// via samplers; It all happens in `ak::convert_for_gpu_usage`:
+		auto [gpuMaterials, imageSamplers, matCommands] = convert_for_gpu_usage<material_gpu_data>(
+			initialMaterials, false, true,
+			image_usage::general_texture,
+			filter_mode::trilinear
+		);
+
+		mMaterialBuffer = context().create_buffer(
+			memory_usage::device, {},
+			storage_buffer_meta::create_from_size(100 * sizeof(material_gpu_data)) // Create enough space for 100 different materials
+		);
+
+		// Lifetime-handle possibly existing image samplers, then overwrite with new ones:
+		for (auto& existingImageSampler : mImageSamplers) {
+			context().main_window()->handle_lifetime(std::move(existingImageSampler));
+		}
+		mImageSamplers.clear();
+		mImageSamplers = std::move(imageSamplers);
+
+		mAdditionalSemaphoreDependency = context().record_and_submit_with_semaphore({
+			mVertexBuffersOffsetsSizesCountBuffer->fill(&mVertexBuffersOffsetsSizesCountBuffer, 0),
+			mVertexBuffersOffsetsSizesBuffer->fill(mVertexBuffersOffsetsSizes.data(), 0, 0, mVertexBuffersOffsetsSizes.size() * sizeof(mVertexBuffersOffsetsSizes[0])),
+			matCommands,
+		    mMaterialBuffer->fill(gpuMaterials.data(), 0)
+		}, *mQueue, stage::all_graphics);
+
+		// One for each concurrent frame
+		const auto concurrentFrames = context().main_window()->number_of_frames_in_flight();
+		for (int i = 0; i < concurrentFrames; ++i) {
+			mFrameDataBuffers.push_back(context().create_buffer(
+				memory_usage::host_coherent, {},
+				uniform_buffer_meta::create_from_data(frame_data_ubo{})
+			));
+		}
+	}
+
+	void load_sponza_and_terrain()
+	{
+		using namespace avk;
+
+		if (!mDrawCalls.empty()) {
+			LOG_WARNING("Sponza and Terrain already loaded");
 		}
 
-		std::vector<material_config> allMatConfigs; // <-- Gather the material config from all models to be loaded
+		std::vector<material_config> allMatConfigs; // <-- Gather all the materials to be used
+		// But don't forget the standard materials defined in code:
+		add_custom_materials(allMatConfigs);
+
 		std::vector<loaded_model_data> dataForDrawCall;
 
-		vk::PhysicalDeviceFeatures2 supportedExtFeatures;
-		auto meshShaderFeatures = vk::PhysicalDeviceMeshShaderFeaturesEXT{};
-		supportedExtFeatures.pNext = &meshShaderFeatures;
-		context().physical_device().getFeatures2(&supportedExtFeatures);
-
-		for (size_t i = 0; i < loadedModels.size(); ++i) {
-			auto& [curModel, pxMeridian] = loadedModels[i];
-
-			const auto meshIndicesInOrder = curModel->select_all_meshes();
-
-			auto distinctMaterials = curModel->distinct_material_configs();
-			const auto matOffset = allMatConfigs.size();
-			// add all the materials of the model
-			for (auto& pair : distinctMaterials) {
-				allMatConfigs.push_back(pair.first);
-			}
-
-			for (size_t mpos = 0; mpos < meshIndicesInOrder.size(); mpos++) {
-				auto meshIndex = meshIndicesInOrder[mpos];
-				std::string meshname = curModel->name_of_mesh(mpos);
-
-				auto& drawCallData = dataForDrawCall.emplace_back();
-
-				drawCallData.mMaterialIndex = static_cast<int32_t>(matOffset);
-				drawCallData.mPixelsOnMeridian = pxMeridian;
-				drawCallData.mModelMatrix = curModel->transformation_matrix_for_mesh(meshIndex);
-				// Find and assign the correct material in the allMatConfigs vector
-				for (auto pair : distinctMaterials) {
-					if (std::end(pair.second) != std::ranges::find(pair.second, meshIndex)) {
-						break;
-					}
-					drawCallData.mMaterialIndex++;
-				}
-
-				auto selection = make_model_references_and_mesh_indices_selection(curModel, meshIndex);
-				std::tie(drawCallData.mPositions, drawCallData.mIndices) = get_vertices_and_indices(selection);
-				drawCallData.mNormals = get_normals(selection);
-				drawCallData.mTexCoords = get_2d_texture_coordinates(selection, 0);
-			}
-		} // for (size_t i = 0; i < loadedModels.size(); ++i)
-
-#ifdef EXTRA_3D_MODEL
-		if (std::filesystem::exists("assets/" EXTRA_3D_MODEL ".fscene")) {
-			mExtra3DModelBeginIndex = dataForDrawCall.size();
+		if (std::filesystem::exists("assets/sponza_and_terrain.fscene")) {
 			glm::mat4 sceneTransform = glm::mat4(1.0f);
-			if constexpr (std::string("SunTemple") == EXTRA_3D_MODEL) {
-				sceneTransform = glm::translate(glm::vec3(0.0f, -4.0f, -15.0f));
-			}
-			if constexpr (std::string("sponza_and_terrain") == EXTRA_3D_MODEL) {
-				sceneTransform = glm::translate(glm::vec3(2.0f, 0.0f, 0.0f)) * glm::scale(glm::vec3{ 2.667f });
-			}
+			sceneTransform = glm::translate(glm::vec3(2.0f, 0.0f, 0.0f)) * glm::scale(glm::vec3{ 2.667f });
 
-			auto orca = orca_scene_t::load_from_file("assets/" EXTRA_3D_MODEL ".fscene");
+			auto orca = orca_scene_t::load_from_file("assets/sponza_and_terrain.fscene");
 			// Get all the different materials from the whole scene:
 		    auto distinctMaterialsOrca = orca->distinct_material_configs_for_all_models();
 			for (const auto& pair : distinctMaterialsOrca) {
@@ -296,12 +316,12 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 
 					        auto selection = make_model_references_and_mesh_indices_selection(curModel, meshIndex);
 					        std::tie(drawCallData.mPositions, drawCallData.mIndices) = get_vertices_and_indices(selection);
-							if constexpr (std::string("sponza_and_terrain") == EXTRA_3D_MODEL) {
-								// Excluding one blue curtain (of a total of three) by modifying the loaded indices before uploading them to a GPU buffer:
-								if (meshname == "sponza_326") {
-									drawCallData.mIndices.erase(std::begin(drawCallData.mIndices), std::begin(drawCallData.mIndices) + 3 * 4864);
-								}
+								
+							// Exclude one blue curtain (of a total of three) by modifying the loaded indices before uploading them to a GPU buffer:
+							if (meshname == "sponza_326") {
+								drawCallData.mIndices.erase(std::begin(drawCallData.mIndices), std::begin(drawCallData.mIndices) + 3 * 4864);
 							}
+
 					        drawCallData.mNormals = get_normals(selection);
 					        drawCallData.mTexCoords = get_2d_texture_coordinates(selection, 0);
 				        }
@@ -309,14 +329,12 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 			    }
 		    }
 		}
-#endif
 
-		// create all the buffers for our drawcall data
+		// Update all the buffers for our drawcall data:
 		add_draw_calls(dataForDrawCall);
-		//   ^ With all the offsets and sizes data gathered => transfer also that data into the respective buffers (see below at record_and_submit_with_fence).
 
 		mNumMaterials = static_cast<int>(allMatConfigs.size());
-		LOG_INFO_EM(std::format("Number of custom materials = {}", mNumMaterials));
+		LOG_INFO_EM(std::format("Number of materials = {}", mNumMaterials));
 
 		// For all the different materials, transfer them in structs which are well
 		// suited for GPU-usage (proper alignment, and containing only the relevant data),
@@ -333,23 +351,19 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 			storage_buffer_meta::create_from_data(gpuMaterials)
 		);
 
+		// Lifetime-handle possibly existing image samplers, then overwrite with new ones:
+		for (auto& existingImageSampler : mImageSamplers) {
+			context().main_window()->handle_lifetime(std::move(existingImageSampler));
+		}
+		mImageSamplers.clear();
 		mImageSamplers = std::move(imageSamplers);
 
-		context().record_and_submit_with_fence({
+		mAdditionalSemaphoreDependency = context().record_and_submit_with_semaphore({
 			mVertexBuffersOffsetsSizesCountBuffer->fill(&mVertexBuffersOffsetsSizesCountBuffer, 0),
 			mVertexBuffersOffsetsSizesBuffer->fill(mVertexBuffersOffsetsSizes.data(), 0, 0, mVertexBuffersOffsetsSizes.size() * sizeof(mVertexBuffersOffsetsSizes[0])),
 			matCommands,
 		    mMaterialBuffer->fill(gpuMaterials.data(), 0)
-		}, *mQueue)->wait_until_signalled();
-
-		// One for each concurrent frame
-		const auto concurrentFrames = context().main_window()->number_of_frames_in_flight();
-		for (int i = 0; i < concurrentFrames; ++i) {
-			mFrameDataBuffers.push_back(context().create_buffer(
-				memory_usage::host_coherent, {},
-				uniform_buffer_meta::create_from_data(frame_data_ubo{})
-			));
-		}
+		}, *mQueue, stage::all_graphics);
     }
 
 	/* // PC ... push constants type */
@@ -732,6 +746,11 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 				if (bool changed = ImGui::Checkbox("Draw", &enabled)) {
 					po.set_enabled(enabled);
 					updateObjects = true;
+
+					if (po.name() == "Blue Curtain") {
+						// Gotta ensure that Sponza is loaded:
+						load_sponza_and_terrain();
+					}
 				}
 				ImGui::SameLine();
 				bool modifying = po.is_modifying();
@@ -854,8 +873,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 		// Create a descriptor cache that helps us to conveniently create descriptor sets:
 		mDescriptorCache = context().create_descriptor_cache();
 
-		// Don't really need those for our parametric adventures, but we'll see:
-		load_models_and_materials();
+		create_buffers();
 
 		// Define formats for the framebuffer attachments:
         constexpr auto attachmentFormats = make_array<vk::Format>(vk::Format::eB8G8R8A8Unorm, vk::Format::eD32Sfloat);
@@ -1112,7 +1130,10 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 					return;
 				}
 
+				auto numDrawCallsBefore = mDrawCalls.size();
 				draw_parametric_objects_ui(imguiManager);
+				auto numDrawCallsAfter  = mDrawCalls.size();
+				bool rasterPipesNeedRecreation = numDrawCallsBefore != numDrawCallsAfter;
 
 				ImGui::Begin("Info & Settings");
 			    const auto imGuiWindowWidth = ImGui::GetWindowWidth();
@@ -1157,12 +1178,10 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 				ImGui::TextColored(ImVec4(0.5, 0.5, 0.5, 1.0), "Heat map write disabled project-wide too (just fyi).");
 #endif
 
-#ifdef EXTRA_3D_MODEL
-				if (mExtra3DModelBeginIndex >= 0) {
+				if (!mDrawCalls.empty()) {
 				    ImGui::Separator();
-				    ImGui::Checkbox("Render " EXTRA_3D_MODEL, &mRenderExtra3DModel);
+				    ImGui::Checkbox("Render Sponza + Terrain", &mRenderExtra3DModel);
 				}
-#endif
 
 				ImGui::Separator();
 				bool quakeCamEnabled = mQuakeCam.is_enabled();
@@ -1192,14 +1211,6 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 				}
 				ImGui::Separator();
 
-				//ImGui::Separator();
-				//if (mUseNvPipeline.has_value()) {
-				//	int choice = mUseNvPipeline.value() ? 1 : 0;
-				//	ImGui::Combo("Pipeline", &choice, "VK_EXT_mesh_shader\0VK_NV_mesh_shader\0");
-				//	mUseNvPipeline = (choice == 1);
-				//	ImGui::Separator();
-				//}
-
 				// Some parameters to pass to the GPU:
                 ImGui::TextColored(ImVec4(0.f, .6f, .8f, 1.f), "Pipeline Config:");
                 ImGui::TextColored(ImVec4(0.f, .6f, .8f, 1.f), "PxFill shader config params (besides ^ screen threshold)");
@@ -1211,8 +1222,8 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 					ImGui::PopItemWidth();
 					ImGui::Unindent();
 				ImGui::Checkbox("Frustum Culling ON", &mFrustumCullingOn);
-				bool rasterPipesNeedRecreation = ImGui::Checkbox("Backface Culling ON", &mBackfaceCullingOn);
-				rasterPipesNeedRecreation =      ImGui::Checkbox("Disable Color Attachment Output" , &mDisableColorAttachmentOut) || rasterPipesNeedRecreation;
+				rasterPipesNeedRecreation = ImGui::Checkbox("Backface Culling ON", &mBackfaceCullingOn) || rasterPipesNeedRecreation;
+				rasterPipesNeedRecreation = ImGui::Checkbox("Disable Color Attachment Output" , &mDisableColorAttachmentOut) || rasterPipesNeedRecreation;
 
 				ImGui::Text("[F6] ... toggle wireframe mode (currently %s)", mWireframeModeOn ? "ON" : "OFF");
 
@@ -1880,35 +1891,34 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 //				command::push_constants(tessPipePxFillSSToBeUsed->layout(), patch_into_tess_push_constants{ mConstOuterTessLevel, mConstInnerTessLevel, 1 * MAX_INDIRECT_DISPATCHES }),
 //				command::draw_vertices_indirect(mIndirectPxFillCountBuffer.as_reference(), sizeof(VkDrawIndirectCommand), sizeof(VkDrawIndirectCommand), 1u), // <-- Exactly ONE draw (but potentially a lot of instances), use the one at [1]
 
-//				// 3.3) Render extra 3D models into the same framebuffer (with multi-sampling):
-//				command::bind_pipeline(mVertexPipeline.as_reference()),
-//		        command::bind_descriptors(mVertexPipeline->layout(), mDescriptorCache->get_or_create_descriptor_sets({
-//			        descriptor_binding(0, 0, mFrameDataBuffers[inFlightIndex]),
-//                    descriptor_binding(0, 1, as_combined_image_samplers(mImageSamplers, layout::shader_read_only_optimal)),
-//                    descriptor_binding(0, 2, mMaterialBuffer),
-//			        descriptor_binding(1, 0, mCombinedAttachmentView->as_storage_image(layout::general)),
-//#if STATS_ENABLED
-//			        descriptor_binding(1, 1, mHeatMapImageView->as_storage_image(layout::general)),
-//#endif
-//                    descriptor_binding(2, 0, mCountersSsbo->as_storage_buffer())
-//		        })),
-//				command::many_n_times(static_cast<int>(mDrawCalls.size()-mExtra3DModelBeginIndex), [this](int i) {
-//					i += mExtra3DModelBeginIndex;
-//				    return command::gather(
-//				        command::push_constants(mVertexPipeline->layout(), vertex_pipe_push_constants{ 
-//						    mDrawCalls[i].mModelMatrix,
-//						    mDrawCalls[i].mMaterialIndex
-//					    }),
-//		                command::draw_indexed(
-//					        // Bind and use the index buffer:
-//                            std::forward_as_tuple(mIndexBuffer.as_reference(), size_t{mDrawCalls[i].mIndexBufferOffset}, mDrawCalls[i].mNumElements),
-//					        // Bind the vertex input buffers in the right order (corresponding to the layout specifiers in the vertex shader)
-//					        std::forward_as_tuple(mPositionsBuffer.as_reference(), size_t{mDrawCalls[i].mPositionsBufferOffset}), 
-//						    std::forward_as_tuple(mTexCoordsBuffer.as_reference(), size_t{mDrawCalls[i].mTexCoordsBufferOffset}),
-//						    std::forward_as_tuple(mNormalsBuffer.as_reference()  , size_t{mDrawCalls[i].mNormalsBufferOffset})
-//				        )
-//				    );
-//		        } )
+				// 3.3) Render extra 3D models into the same framebuffer (with multi-sampling):
+				command::bind_pipeline(mVertexPipeline.as_reference()),
+		        command::bind_descriptors(mVertexPipeline->layout(), mDescriptorCache->get_or_create_descriptor_sets({
+			        descriptor_binding(0, 0, mFrameDataBuffers[inFlightIndex]),
+                    descriptor_binding(0, 1, as_combined_image_samplers(mImageSamplers, layout::shader_read_only_optimal)),
+                    descriptor_binding(0, 2, mMaterialBuffer),
+			        descriptor_binding(1, 0, mCombinedAttachmentView->as_storage_image(layout::general)),
+#if STATS_ENABLED
+			        descriptor_binding(1, 1, mHeatMapImageView->as_storage_image(layout::general)),
+#endif
+                    descriptor_binding(2, 0, mCountersSsbo->as_storage_buffer())
+		        })),
+				command::many_n_times(static_cast<int>(mDrawCalls.size()), [this](int i) {
+				    return command::gather(
+				        command::push_constants(mVertexPipeline->layout(), vertex_pipe_push_constants{ 
+						    mDrawCalls[i].mModelMatrix,
+						    mDrawCalls[i].mMaterialIndex
+					    }),
+		                command::draw_indexed(
+					        // Bind and use the index buffer:
+                            std::forward_as_tuple(mIndexBuffer.as_reference(), size_t{mDrawCalls[i].mIndexBufferOffset}, mDrawCalls[i].mNumElements),
+					        // Bind the vertex input buffers in the right order (corresponding to the layout specifiers in the vertex shader)
+					        std::forward_as_tuple(mPositionsBuffer.as_reference(), size_t{mDrawCalls[i].mPositionsBufferOffset}), 
+						    std::forward_as_tuple(mTexCoordsBuffer.as_reference(), size_t{mDrawCalls[i].mTexCoordsBufferOffset}),
+						    std::forward_as_tuple(mNormalsBuffer.as_reference()  , size_t{mDrawCalls[i].mNormalsBufferOffset})
+				        )
+				    );
+		        } )
 
 			)),
 #if STATS_ENABLED
@@ -2080,14 +2090,24 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 		);
 
 		// Now, with all the commands recorded => submit all the work to the GPU:
-		context().record(gatheredCommands)
+		auto batch = context().record(gatheredCommands)
 			.into_command_buffer(cmdBfr)
 			.then_submit_to(*mQueue)
 			// Do not start to render before the image has become available:
 			.waiting_for(imageAvailableSemaphore >> stage::color_attachment_output)
-			.submit();
+			.store_for_now();
+
+		if (mAdditionalSemaphoreDependency.has_value()) {
+			batch.waiting_for(mAdditionalSemaphoreDependency.value() >> stage::all_graphics);
+		}
+
+		batch.submit();
 		
 		mainWnd->handle_lifetime(std::move(cmdBfr));
+		if (mAdditionalSemaphoreDependency.has_value()) {
+			mainWnd->handle_lifetime(std::move(mAdditionalSemaphoreDependency.value()));
+			mAdditionalSemaphoreDependency.reset();
+		}
 
 		std::chrono::steady_clock::time_point renderEnd = std::chrono::steady_clock::now();
 		auto renderMs = static_cast<double>(std::chrono::duration_cast<std::chrono::milliseconds>(renderEnd - renderBegin).count());
@@ -2232,7 +2252,6 @@ private: // v== Member variables ==v
 	std::array<float, 2> mPxFillParamStretch {{ 0.0f, 0.0f }};
 
 	int mNumMaterials = 1;
-	int mExtra3DModelBeginIndex = -1;
 	bool mRenderExtra3DModel = true;
 	double mRenderDurationMs = 1;
 
@@ -2250,6 +2269,7 @@ private: // v== Member variables ==v
 	bool mDisableColorAttachmentOut = false;
 
 	std::unordered_map<std::string, avk::image_sampler> mPreviewImageSamplers;
+	std::optional<avk::semaphore> mAdditionalSemaphoreDependency;
 
 }; // vk_parametric_curves_app
 
@@ -2283,7 +2303,7 @@ int main() // <== Starting point ==
 		auto app = vk_parametric_curves_app(singleQueue);
 		// Create another element for drawing the UI with ImGui
 		auto ui = avk::imgui_manager(singleQueue);
-		ui.set_custom_font("assets/JetBrainsMono-Regular.ttf");
+		//ui.set_custom_font("assets/JetBrainsMono-Regular.ttf");
 
 		auto image64ext = vk::PhysicalDeviceShaderImageAtomicInt64FeaturesEXT{}
 			.setShaderImageInt64Atomics(VK_TRUE);
