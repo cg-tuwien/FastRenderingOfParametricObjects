@@ -563,19 +563,23 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
         auto resolution    = context().main_window()->resolution();
 		auto colorFormatMS = std::make_tuple(aAttachmentFormats[0], SAMPLE_COUNT);
 		auto depthFormatMS = std::make_tuple(aAttachmentFormats[1], SAMPLE_COUNT);
-        auto  colorAttachment    = context().create_image(resolution.x, resolution.y, aAttachmentFormats[0], 1, memory_usage::device,
+        auto  colorAttachment     = context().create_image(resolution.x, resolution.y, aAttachmentFormats[0], 1, memory_usage::device,
                                                           image_usage::color_attachment | image_usage::input_attachment | image_usage::sampled | image_usage::tiling_optimal | image_usage::transfer_source);
-		auto  colorAttachmentMS  = context().create_image(resolution.x, resolution.y, colorFormatMS, 1, memory_usage::device,
+		auto  colorAttachmentMS   = context().create_image(resolution.x, resolution.y, colorFormatMS, 1, memory_usage::device,
                                                           image_usage::color_attachment | image_usage::input_attachment | image_usage::sampled | image_usage::tiling_optimal | image_usage::transfer_source);
-        auto  depthAttachment    = context().create_image(resolution.x, resolution.y, aAttachmentFormats[1], 1, memory_usage::device,
+        auto  depthAttachment     = context().create_image(resolution.x, resolution.y, aAttachmentFormats[1], 1, memory_usage::device,
                                                           image_usage::depth_stencil_attachment | image_usage::input_attachment | image_usage::sampled | image_usage::tiling_optimal | image_usage::transfer_source);
         auto  depthAttachmentMS   = context().create_image(resolution.x, resolution.y, depthFormatMS, 1, memory_usage::device,
                                                           image_usage::depth_stencil_attachment | image_usage::input_attachment | image_usage::sampled | image_usage::tiling_optimal | image_usage::transfer_source);
-        auto  combinedAttachment = context().create_image(resolution.x, resolution.y, vk::Format::eR64Uint, 1, memory_usage::device, image_usage::shader_storage);
+        auto  combinedAttachment  = context().create_image(resolution.x, resolution.y, vk::Format::eR64Uint, 1, memory_usage::device, image_usage::shader_storage);
 
-		auto  colorAttachmentSS  = context().create_image(resolution.x * SSAA_FACTOR.x, resolution.y * SSAA_FACTOR.y, aAttachmentFormats[0], 1, memory_usage::device,
+		auto  colorAttachmentSS   = context().create_image(resolution.x * SSAA_FACTOR.x, resolution.y * SSAA_FACTOR.y, aAttachmentFormats[0], 1, memory_usage::device,
                                                           image_usage::color_attachment | image_usage::input_attachment | image_usage::sampled | image_usage::tiling_optimal | image_usage::transfer_source);
         auto  depthAttachmentSS   = context().create_image(resolution.x * SSAA_FACTOR.x, resolution.y * SSAA_FACTOR.y, aAttachmentFormats[1], 1, memory_usage::device,
+                                                          image_usage::depth_stencil_attachment | image_usage::input_attachment | image_usage::sampled | image_usage::tiling_optimal | image_usage::transfer_source);
+		auto  colorAttachmentSSMS = context().create_image(resolution.x * SSAA_FACTOR.x, resolution.y * SSAA_FACTOR.y, colorFormatMS, 1, memory_usage::device,
+                                                          image_usage::color_attachment | image_usage::input_attachment | image_usage::sampled | image_usage::tiling_optimal | image_usage::transfer_source);
+        auto  depthAttachmentSSMS = context().create_image(resolution.x * SSAA_FACTOR.x, resolution.y * SSAA_FACTOR.y, depthFormatMS, 1, memory_usage::device,
                                                           image_usage::depth_stencil_attachment | image_usage::input_attachment | image_usage::sampled | image_usage::tiling_optimal | image_usage::transfer_source);
 
 #if STATS_ENABLED
@@ -598,9 +602,11 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
         mColorAttachmentView       = context().create_image_view(std::move(colorAttachment));
 		auto colorAttachmentViewMS = context().create_image_view(std::move(colorAttachmentMS));
 		auto colorAttachmentViewSS = context().create_image_view(std::move(colorAttachmentSS));
+		auto colorAttachmentViewSSMS= context().create_image_view(std::move(colorAttachmentSSMS));
         mDepthAttachmentView       = context().create_image_view(std::move(depthAttachment));
         auto depthAttachmentViewMS = context().create_image_view(std::move(depthAttachmentMS));
         auto depthAttachmentViewSS = context().create_image_view(std::move(depthAttachmentSS));
+        auto depthAttachmentViewSSMS= context().create_image_view(std::move(depthAttachmentSSMS));
         mCombinedAttachmentView    = context().create_image_view(std::move(combinedAttachment));
 #if STATS_ENABLED
 		mHeatMapImageView          = context().create_image_view(std::move(heatMapImage));
@@ -634,8 +640,10 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 		));
 
         mRenderpassSS = context().create_renderpass({// Define attachments and sub pass usages:                          vvv  Note: All the draw calls are in the same (first) subpass: SS, noAA, simple-stupid vertex pipe (because... why not?!)
-                attachment::declare(aAttachmentFormats[0], on_load::clear.from_previous_layout(layout::undefined), usage::color(0)     , on_store::store.in_layout(layout::shader_read_only_optimal)),
-                attachment::declare(aAttachmentFormats[1], on_load::clear.from_previous_layout(layout::undefined), usage::depth_stencil, on_store::store.in_layout(layout::shader_read_only_optimal))
+                attachment::declare(aAttachmentFormats[0], on_load::clear.from_previous_layout(layout::undefined), usage::unused                              , on_store::store.in_layout(layout::shader_read_only_optimal)),
+                attachment::declare(aAttachmentFormats[1], on_load::clear.from_previous_layout(layout::undefined), usage::unused                              , on_store::store.in_layout(layout::shader_read_only_optimal)),
+                attachment::declare(colorFormatMS        , on_load::clear.from_previous_layout(layout::undefined), usage::color(0)      + usage::resolve_to(0), on_store::dont_care),
+                attachment::declare(depthFormatMS        , on_load::clear.from_previous_layout(layout::undefined), usage::depth_stencil + usage::resolve_to(1), on_store::dont_care)
             }, {
 				subpass_dependency{subpass::external >> subpass::index(0),
 					stage::none    >>   stage::all_graphics,
@@ -649,7 +657,9 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 
         mFramebufferSS = context().create_framebuffer(mRenderpassSS, make_vector(
 			colorAttachmentViewSS,
-			depthAttachmentViewSS
+			depthAttachmentViewSS,
+			colorAttachmentViewSSMS,
+			depthAttachmentViewSSMS
 		));
     }
 
@@ -2101,13 +2111,13 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 
 
 
-			// That worked:
+			// //That worked:
 			//sync::image_memory_barrier(context().main_window()->current_backbuffer()->image_at(0),  // Window's back buffer's color attachment
 			//		                    stage::none          >>   stage::blit,
 			//		                    access::none         >>   access::transfer_write)
 			//	.with_layout_transition(layout::undefined   >>   layout::transfer_dst),             // Don't care about the previous layout
 
-			//blit_image(mFramebuffer->image_at(0), layout::transfer_src, context().main_window()->current_backbuffer()->image_at(0), layout::transfer_dst, 
+			//blit_image(mFramebufferSS->image_at(0), layout::transfer_src, context().main_window()->current_backbuffer()->image_at(0), layout::transfer_dst, 
 			//			vk::ImageAspectFlagBits::eColor, vk::Filter::eLinear),
 
 			//sync::image_memory_barrier(context().main_window()->current_backbuffer()->image_at(0),  // Window's back buffer's color attachment
