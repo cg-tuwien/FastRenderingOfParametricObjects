@@ -8,6 +8,7 @@ layout(set = 0, binding = 0) uniform FrameData
     mat4    mViewMatrix;
     mat4    mViewProjMatrix;
     mat4    mInverseProjMatrix;
+	mat4    mCameraTransform;
     // xy = resoolution, z = bfc on/off
     uvec4   mResolutionAndCulling;
     // Debug sliders:

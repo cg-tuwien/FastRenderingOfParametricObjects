@@ -109,8 +109,8 @@ static std::array<parametric_object, 13> PredefinedParametricObjects {{
 	parametric_object{"Blue Curtain", "assets/po-blue-curtain.png",		  false, parametric_object_type::YarnCurve,  235.0f, 254.0f, /* <-- yarn dimensions | #fibers --> */ 4.f, 1.f, glm::translate(glm::vec3{-3.35f, 0.08f, 5.32f}) * glm::scale(glm::vec3{ 0.005f }), 19},
 	parametric_object{"Palm Tree"   , "assets/po-palm-tree.png",		  false, parametric_object_type::PalmTreeTrunk,          0.0f,   1.0f,            0.0f,  glm::two_pi<float>(), glm::translate(glm::vec3{ 0.f,  0.f, -4.f})},
 	parametric_object{"Giant Worm"  , "assets/po-giant-worm.png",		  false, parametric_object_type::PalmTreeTrunk,  235.0f, 254.0f, /* <-- yarn dimensions | #fibers --> */ 4.f, 1.f, glm::translate(glm::vec3{-3.35f, 0.08f, 5.32f}) * glm::scale(glm::vec3{ 0.005f }), 19},
-	parametric_object{"SH Glyph"    , "assets/po-single-sh-glyph.png",    false, parametric_object_type::SHGlyph,                0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>()},
-	parametric_object{"Brain Scan"  , "assets/po-sh-brain.png",           false, parametric_object_type::SHGlyph,                0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>()}
+	parametric_object{"SH Glyph"    , "assets/po-single-sh-glyph.png",    false, parametric_object_type::SHGlyph,                0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>(), glm::mat4{ 1.0f }, -2},
+	parametric_object{"Brain Scan"  , "assets/po-sh-brain.png",           false, parametric_object_type::SHGlyph,                0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>(), glm::mat4{ 1.0f }, -2}
 }};
 
 class vk_parametric_curves_app : public avk::invokee
@@ -887,9 +887,12 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 			poId = 0;
 			for (auto& po : mParametricObjects) {
 				ImGui::TableNextColumn();
-				auto matIndex = po.material_index();
-				if (ImGui::SliderInt("Material Index", &matIndex, -1, mNumMaterials - 1)) {
-					po.set_material_index(matIndex);
+				constexpr auto predefMats = 3;
+				auto matIndex = po.material_index() + predefMats;
+				if (ImGui::SliderInt("Material Index", &matIndex, 0, mNumMaterials + predefMats - 1)) {
+					const auto newActualMatIndex = matIndex - predefMats;
+					LOG_INFO(std::format("Set {}'s (actual) material index to: {}", po.name(), newActualMatIndex));
+					po.set_material_index(newActualMatIndex);
 					updateObjects = true;
 				}
 			}
@@ -1744,11 +1747,13 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
             uboData.mViewMatrix        = mQuakeCam.view_matrix();
             uboData.mViewProjMatrix    = mQuakeCam.projection_and_view_matrix();
 			uboData.mInverseProjMatrix = glm::inverse(mQuakeCam.projection_matrix());
+			uboData.mCameraTransform   = mQuakeCam.global_transformation_matrix();
 		}
         else {
             uboData.mViewMatrix        = mOrbitCam.view_matrix();
             uboData.mViewProjMatrix    = mOrbitCam.projection_and_view_matrix();
 			uboData.mInverseProjMatrix = glm::inverse(mOrbitCam.projection_matrix());
+			uboData.mCameraTransform   = mQuakeCam.global_transformation_matrix();
         }
         uboData.mResolutionAndCulling                      = glm::uvec4(resolution, mBackfaceCullingOn ? 1u : 0u, 0u);
         uboData.mDebugSliders                              = mDebugSliders;

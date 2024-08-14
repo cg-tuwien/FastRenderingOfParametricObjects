@@ -262,7 +262,7 @@ void main()
 						dfdy /= (vpcNeighbor.xy - vpcPing.xy);
 
 #if SHARED_MEM_LOCAL_RASTER
-//						uint64_t data = getUint64ForFramebuffer(vpcPing.z, shade(matIndex, myColor, wsPing, n, vec2(u, v), dfdx, dfdy));
+//						uint64_t data = getUint64ForFramebuffer(vpcPing.z, shade(matIndex, myColor, wsPing.xyz, n, vec2(u, v), dfdx, dfdy));
 						ivec2 localFbCoords = ivec2(mix(minScreenCoords, vpcPing.xy, ubo.mDebugSliders[0])) - minScreenCoords;
 						if (localFbCoords.x >= 0 && localFbCoords.x < LOCAL_FB_X && localFbCoords.y >= 0 && localFbCoords.y < LOCAL_FB_Y) {
 //							LocalFramebuffer[localFbCoords.x][localFbCoords.y] = data;
@@ -270,7 +270,7 @@ void main()
 						}
 #else
 						float depth = vpcPing.z;
-						vec3  color = shade(matIndex, myColor, getParamShadingUserParams(u, v, curveIndex, userData, wsPing), n, getParamTexCoords(u, v, curveIndex, userData, wsPing), dfdx, dfdy);
+						vec3  color = shade(matIndex, myColor, getParamShadingUserParams(u, v, curveIndex, userData, wsPing), wsPing.xyz, n, getParamTexCoords(u, v, curveIndex, userData, wsPing), dfdx, dfdy);
 #if SUPERSAMPLING
 						writeSupersampled(ivec2(vpcPing.xy), depth, vec4(color, 1.0));
 #else 
@@ -302,12 +302,15 @@ void main()
 			if (data.mNormal != vec3(0.0)) { // Such a normal means: No data written
 				vec2 params = data.mParams;
 				vec3 n = data.mNormal;
-//				vec2 paramsDiff = ; // TODO: Other indcies maybe?!
+//				vec2 paramsDiff = ; // TODO: Other indicies maybe?!
 				vec2 dfdx = LocalFramebuffer[(x & 0x1) == 0 ? x+1 : x-1][y].mParams - params;
 				vec2 dfdy = LocalFramebuffer[x][(y & 0x1) == 0 ? y+1 : y-1].mParams - params;
 				float depth = data.mDepth;
 				vec3 myColor = groupcolors[pxFillId % MAX_COLORS];
-				uint64_t data = getUint64ForFramebuffer(depth, shade(matIndex, myColor, getParamShadingUserParams(params.x, params.y, curveIndex, userData, vec3(0.0) /* terrain broken */), n, getParamTexCoords(params.x, params.y, curveIndex, userData, wsPing), dfdx, dfdy));
+
+				vec4 posWS = tM * paramToWS(u, v, curveIndex, userData)
+
+				uint64_t data = getUint64ForFramebuffer(depth, shade(matIndex, myColor, getParamShadingUserParams(params.x, params.y, curveIndex, userData, posWS), posWS.xyz, n, getParamTexCoords(params.x, params.y, curveIndex, userData, wsPing), dfdx, dfdy));
 				writeToCombinedAttachment(globalFbCoords, data);
 			}
 		}

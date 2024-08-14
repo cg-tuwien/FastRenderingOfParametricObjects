@@ -35,6 +35,7 @@ struct frame_data_ubo
     glm::mat4            mViewMatrix;
     glm::mat4            mViewProjMatrix;
     glm::mat4            mInverseProjMatrix;
+	glm::mat4            mCameraTransform;
     // xy = resoolution, z = bfc on/off
     glm::uvec4           mResolutionAndCulling;
     // Debug sliders:

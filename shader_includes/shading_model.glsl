@@ -90,9 +90,9 @@ vec3 gltf_dielectric_brdf(vec3 incoming, vec3 outgoing, vec3 normal, float rough
     return mix(diffuse, vec3(specular), fresnel);
 }
 
-vec3 shade(int matIndex, vec3 albedo, vec3 shadingUserParams, vec3 normalWS, vec2 texCoords SHADE_ADDITIONAL_PARAMS)
+vec3 shade(int matIndex, vec3 albedo, vec3 shadingUserParams, vec3 positionWS, vec3 normalWS, vec2 texCoords SHADE_ADDITIONAL_PARAMS)
 {
-    if (matIndex < -1 || matIndex > 10000) {
+    if (matIndex < -3 || matIndex > 10000) {
 		return linear_rgb_to_srgb(vec3(1.0, 0.0, 1.0));
     }
 
@@ -124,6 +124,40 @@ vec3 shade(int matIndex, vec3 albedo, vec3 shadingUserParams, vec3 normalWS, vec
 
     } // ========== DEBUG VISUALIZATION END ============
 
+    if (-2 == matIndex) { // ========== SH GLYPH MATERIAL BEGIN ============
+        vec3 color = vec3(1.0);
+        //vec3 intersection = v_in.positionWS_untranslated; 
+        vec3 intersection = positionWS; // TODO: Apply step function to get rid of translation
+        vec3 normal = normalize(normalWS);
+        vec3 outgoing = normalize(ubo.mCameraTransform[3].xyz - positionWS);
+        if (dot(normal, outgoing) < 0.0) {
+            normal *= -1.0;
+        }
+        vec3 base_color = srgb_to_linear_rgb(abs(normalize(intersection)));
+        float tmp = base_color.y;
+        base_color.y = base_color.z;
+        base_color.z = tmp;
+        const vec3 incoming = normalize(vec3(1.23, 7.89, 4.56));
+        float ambient = 0.04;
+        float exposure = 4.0;
+        vec3 brdf = gltf_dielectric_brdf(incoming, outgoing, normal, 0.45, base_color);
+        color = exposure * (brdf * max(0.0, dot(incoming, normal)) + base_color * ambient);
+        return linear_rgb_to_srgb(tonemap(color));
+
+    } // ========== SH GLYPH MATERIAL END ============
+
+    if (-3 == matIndex) { // ========== NICE AND BLUE MATERIAL BEGIN ============
+        vec3 outgoing = normalize(normalWS);
+        vec3 base_color = srgb_to_linear_rgb(vec3(0.2, 0.5, 1.0));
+        const vec3 incoming = normalize(vec3(1.23, 7.89, 4.56));
+        float ambient = 0.04;
+        float exposure = 4.0;
+        vec3 brdf = gltf_dielectric_brdf(incoming, outgoing, normalWS, 0.45, base_color);
+        vec3 color = exposure * (brdf * max(0.0, dot(incoming, normalWS)) + base_color * ambient);
+        return linear_rgb_to_srgb(tonemap(color));
+
+    } // ========== NICE AND BLUE END ============
+
     if (0 == matIndex) { // ========== CHECKERBOARD BEGIN ============
 		vec3 checker = SAMPLE(textures[materialsBuffer.materials[matIndex].mDiffuseTexIndex], texCoords  SAMPLE_ADDITIONAL_PARAMS ).rgb;
 		const vec3 lightDir = normalize(vec3(0.5, 1.0, 0.5));
@@ -145,21 +179,6 @@ vec3 shade(int matIndex, vec3 albedo, vec3 shadingUserParams, vec3 normalWS, vec
 
 		return linear_rgb_to_srgb(terrainColor * nDotL);
 	} // ========== TERRAIN MAT END ============
-
-    if (2 == matIndex) { // ========== SEASHELL MAT BEGIN ============
-		//texCoords *= vec2(0.555, 0.222);
-		//vec3 tex1 = SAMPLE(textures[materialsBuffer.materials[matIndex].mDiffuseTexIndex], texCoords       SAMPLE_ADDITIONAL_PARAMS ).rgb;
-		//vec3 tex2 = SAMPLE(textures[materialsBuffer.materials[matIndex].mHeightTexIndex ], texCoords       SAMPLE_ADDITIONAL_PARAMS ).rgb;
-
-		//float vHeight = ubo.mDebugSliders[1] * shadingUserParams.y;
-		//vec3 seashellColor = mix(tex1, tex2, clamp(vHeight, 0.0, 1.0));
-        vec3 seashellColor = vec3(0.7);
-
-		const vec3 lightDir = normalize(vec3(0.5, 1.0, 0.5));
-		float nDotL = max(0.25, dot(normalWS, lightDir));
-
-		return linear_rgb_to_srgb(seashellColor * nDotL);
-	} // ========== SEASHELL MAT END ============
 
 	{ // ========== STANDARD MAT BEGIN ============
 		vec2 diffTexTiling  = materialsBuffer.materials[matIndex].mDiffuseTexOffsetTiling.zw;
