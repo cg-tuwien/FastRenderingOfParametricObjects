@@ -90,7 +90,7 @@ vec3 gltf_dielectric_brdf(vec3 incoming, vec3 outgoing, vec3 normal, float rough
     return mix(diffuse, vec3(specular), fresnel);
 }
 
-vec3 shade(int matIndex, vec3 albedo, vec3 shadingUserParams, vec3 positionWS, vec3 normalWS, vec2 texCoords SHADE_ADDITIONAL_PARAMS)
+vec3 shade(int matIndex, vec3 albedo, vec3 shadingUserParams, vec3 normalWS, vec2 texCoords SHADE_ADDITIONAL_PARAMS)
 {
     if (matIndex < -3 || matIndex > 10000) {
 		return linear_rgb_to_srgb(vec3(1.0, 0.0, 1.0));
@@ -127,17 +127,16 @@ vec3 shade(int matIndex, vec3 albedo, vec3 shadingUserParams, vec3 positionWS, v
     if (-2 == matIndex) { // ========== SH GLYPH MATERIAL BEGIN ============
         vec3 color = vec3(1.0);
         //vec3 intersection = v_in.positionWS_untranslated; 
-        vec3 intersection = positionWS; // TODO: Apply step function to get rid of translation
+        vec3 posWS = shadingUserParams;
+
+        vec3 intersection = posWS; // TODO: Apply step function to get rid of translation
         vec3 normal = normalize(normalWS);
-        vec3 outgoing = normalize(ubo.mCameraTransform[3].xyz - positionWS);
+        vec3 outgoing = normalize(ubo.mCameraTransform[3].xyz - intersection);
         if (dot(normal, outgoing) < 0.0) {
             normal *= -1.0;
         }
         vec3 base_color = srgb_to_linear_rgb(abs(normalize(intersection)));
-        float tmp = base_color.y;
-        base_color.y = base_color.z;
-        base_color.z = tmp;
-        const vec3 incoming = normalize(vec3(1.23, 7.89, 4.56));
+        const vec3 incoming = -normalize(vec3(1.23, 7.89, 4.56));
         float ambient = 0.04;
         float exposure = 4.0;
         vec3 brdf = gltf_dielectric_brdf(incoming, outgoing, normal, 0.45, base_color);

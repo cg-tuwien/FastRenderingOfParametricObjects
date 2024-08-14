@@ -104,9 +104,9 @@ static std::array<parametric_object, 13> PredefinedParametricObjects {{
 	parametric_object{"Seashell 1"  , "assets/po-seashell1.png",          false, parametric_object_type::Seashell1,              glm::two_pi<float>() * 8.0f,/* -> */0.0f,   0.0f,/* -> */glm::two_pi<float>(), glm::mat4{ 1.0f }, 2},
 	parametric_object{"Seashell 2"  , "assets/po-seashell2.png",          false, parametric_object_type::Seashell2,              glm::two_pi<float>() * 8.0f,/* -> */0.0f,   0.0f,/* -> */glm::two_pi<float>(), glm::translate(glm::vec3{-4.5f, 7.0f, 0.0f }), 2},
 	parametric_object{"Seashell 3"  , "assets/po-seashell3.png",          false, parametric_object_type::Seashell3,              glm::two_pi<float>() * 8.0f,/* -> */0.0f,   0.0f,/* -> */glm::two_pi<float>(), glm::translate(glm::vec3{ 4.5f, 7.0f, 0.0f }), 2},
-	parametric_object{"Yarn Curve"  , "assets/po-yarn-curve-single.png",  false, parametric_object_type::SingleYarnCurve,  1.0f, 1.0f, /* <-- yarn dimensions | #fibers --> */ 4.f, 1.f, glm::translate(glm::vec3{-3.35f, 0.08f, 5.32f}) * glm::scale(glm::vec3{ 0.005f }), 19},
-	parametric_object{"Fiber Curve" , "assets/po-fiber-curve-single.png", false, parametric_object_type::SingleFiberCurve, 1.0f, 1.0f, /* <-- yarn dimensions | #fibers --> */ 4.f, 1.f, glm::translate(glm::vec3{-3.35f, 0.08f, 5.32f}) * glm::scale(glm::vec3{ 0.005f }), 19},
-	parametric_object{"Blue Curtain", "assets/po-blue-curtain.png",		  false, parametric_object_type::CurtainYarnCurves,  235.0f, 254.0f, /* <-- yarn dimensions | #fibers --> */ 4.f, 1.f, glm::translate(glm::vec3{-3.35f, 0.08f, 5.32f}) * glm::scale(glm::vec3{ 0.005f }), 19},
+	parametric_object{"Yarn Curve"  , "assets/po-yarn-curve-single.png",  false, parametric_object_type::SingleYarnCurve,        1.0f, 1.0f,     /* <-- yarn dimensions | n/a yarn -> */ 0.f, /* thickness --> */ 0.8f, glm::translate(glm::vec3{-0.3f, 0.0f, 0.0f}) * glm::scale(glm::vec3{ 0.3f }), -3},
+	parametric_object{"Fiber Curve" , "assets/po-fiber-curve-single.png", false, parametric_object_type::SingleFiberCurve,       1.0f, 1.0f,     /* <-- yarn dimensions | #fibers --> */ 6.f, /* thickness --> */ 0.3f, glm::translate(glm::vec3{-0.5f, 0.0f, 0.0f}) * glm::scale(glm::vec3{ 0.3f }), -3},
+	parametric_object{"Blue Curtain", "assets/po-blue-curtain.png",		  false, parametric_object_type::CurtainYarnCurves,      235.0f, 254.0f, /* <-- yarn dimensions | #fibers --> */ 6.f, /* thickness --> */ 0.8f, glm::translate(glm::vec3{-3.35f, 0.08f, 5.32f}) * glm::scale(glm::vec3{ 0.005f }), 8},
 	parametric_object{"Palm Tree"   , "assets/po-palm-tree.png",		  false, parametric_object_type::PalmTreeTrunk,          0.0f,   1.0f,            0.0f,  glm::two_pi<float>(), glm::translate(glm::vec3{ 0.f,  0.f, -4.f})},
 	parametric_object{"Giant Worm"  , "assets/po-giant-worm.png",		  false, parametric_object_type::PalmTreeTrunk,  235.0f, 254.0f, /* <-- yarn dimensions | #fibers --> */ 4.f, 1.f, glm::translate(glm::vec3{-3.35f, 0.08f, 5.32f}) * glm::scale(glm::vec3{ 0.005f }), 19},
 	parametric_object{"SH Glyph"    , "assets/po-single-sh-glyph.png",    false, parametric_object_type::SHGlyph,                0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>(), glm::mat4{ 1.0f }, -2},
@@ -889,12 +889,14 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 				ImGui::TableNextColumn();
 				constexpr auto predefMats = 3;
 				auto matIndex = po.material_index() + predefMats;
+				ImGui::PushID(poId++);
 				if (ImGui::SliderInt("Material Index", &matIndex, 0, mNumMaterials + predefMats - 1)) {
 					const auto newActualMatIndex = matIndex - predefMats;
 					LOG_INFO(std::format("Set {}'s (actual) material index to: {}", po.name(), newActualMatIndex));
 					po.set_material_index(newActualMatIndex);
 					updateObjects = true;
 				}
+				ImGui::PopID();
 			}
 			ImGui::EndTable();
 		}
@@ -1833,9 +1835,9 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 		auto initCommands = get_init_commands(firstPing, finalPong);
 
 		// Now render everything:
-		graphics_pipeline& tessPipePxFillNoaaToBeUsed         = mWireframeModeOn ? mTessPipelinePxFillNoaaWireframe : mTessPipelinePxFillNoaa;
-		graphics_pipeline& tessPipePxFillMultisampledToBeUsed = mWireframeModeOn ? mTessPipelinePxFillMultisampledWireframe : mTessPipelinePxFillMultisampled;
-		graphics_pipeline& tessPipePxFillSupersampledToBeUsed = mWireframeModeOn ? mTessPipelinePxFillSupersampledWireframe : mTessPipelinePxFillSupersampled;
+		graphics_pipeline& tessPipePxFillNoaaToBeUsed           = mWireframeModeOn ? mTessPipelinePxFillNoaaWireframe : mTessPipelinePxFillNoaa;
+		graphics_pipeline& tessPipePxFillMultisampledToBeUsed   = mWireframeModeOn ? mTessPipelinePxFillMultisampledWireframe : mTessPipelinePxFillMultisampled;
+		graphics_pipeline& tessPipePxFillSupersampledToBeUsed   = mWireframeModeOn ? mTessPipelinePxFillSupersampledWireframe : mTessPipelinePxFillSupersampled;
 		auto gatheredCommands = command::gather(
 #if STATS_ENABLED
 			    commandsBeginStats,
@@ -1884,34 +1886,39 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 			// 3) Render patches:
 			command::render_pass(mRenderpassSS.as_reference(), mFramebufferSS.as_reference(), command::gather(
 
-								// 3.3) Render extra 3D models into the same framebuffer (with multi-sampling):
-				command::bind_pipeline(mVertexPipeline.as_reference()),
-		        command::bind_descriptors(mVertexPipeline->layout(), mDescriptorCache->get_or_create_descriptor_sets({
-			        descriptor_binding(0, 0, mFrameDataBuffers[inFlightIndex]),
-                    descriptor_binding(0, 1, as_combined_image_samplers(mImageSamplers, layout::shader_read_only_optimal)),
-                    descriptor_binding(0, 2, mMaterialBuffer),
-			        descriptor_binding(1, 0, mCombinedAttachmentView->as_storage_image(layout::general)),
-#if STATS_ENABLED
-			        descriptor_binding(1, 1, mHeatMapImageView->as_storage_image(layout::general)),
-#endif
-                    descriptor_binding(2, 0, mCountersSsbo->as_storage_buffer())
-		        })),
-				command::many_n_times(static_cast<int>(mDrawCalls.size()), [this](int i) {
-				    return command::gather(
-				        command::push_constants(mVertexPipeline->layout(), vertex_pipe_push_constants{ 
-						    mDrawCalls[i].mModelMatrix,
-						    mDrawCalls[i].mMaterialIndex
-					    }),
-		                command::draw_indexed(
-					        // Bind and use the index buffer:
-                            std::forward_as_tuple(mIndexBuffer.as_reference(), size_t{mDrawCalls[i].mIndexBufferOffset}, mDrawCalls[i].mNumElements),
-					        // Bind the vertex input buffers in the right order (corresponding to the layout specifiers in the vertex shader)
-					        std::forward_as_tuple(mPositionsBuffer.as_reference(), size_t{mDrawCalls[i].mPositionsBufferOffset}), 
-						    std::forward_as_tuple(mTexCoordsBuffer.as_reference(), size_t{mDrawCalls[i].mTexCoordsBufferOffset}),
-						    std::forward_as_tuple(mNormalsBuffer.as_reference()  , size_t{mDrawCalls[i].mNormalsBufferOffset})
-				        )
-				    );
-		        } ),
+				// 3.3) Render extra 3D models into the same framebuffer (with multi-sampling):
+				command::conditional(
+					[this]() { return mRenderExtra3DModel; },
+					[this, inFlightIndex]() { return command::gather(
+						command::bind_pipeline(mVertexPipeline.as_reference()),
+						command::bind_descriptors(mVertexPipeline->layout(), mDescriptorCache->get_or_create_descriptor_sets({
+							descriptor_binding(0, 0, mFrameDataBuffers[inFlightIndex]),
+							descriptor_binding(0, 1, as_combined_image_samplers(mImageSamplers, layout::shader_read_only_optimal)),
+							descriptor_binding(0, 2, mMaterialBuffer),
+							descriptor_binding(1, 0, mCombinedAttachmentView->as_storage_image(layout::general)),
+		#if STATS_ENABLED
+							descriptor_binding(1, 1, mHeatMapImageView->as_storage_image(layout::general)),
+		#endif
+							descriptor_binding(2, 0, mCountersSsbo->as_storage_buffer())
+						})),
+						command::many_n_times(static_cast<int>(mDrawCalls.size()), [this](int i) {
+							return command::gather(
+								command::push_constants(mVertexPipeline->layout(), vertex_pipe_push_constants{ 
+									mDrawCalls[i].mModelMatrix,
+									mDrawCalls[i].mMaterialIndex
+								}),
+								command::draw_indexed(
+									// Bind and use the index buffer:
+									std::forward_as_tuple(mIndexBuffer.as_reference(), size_t{mDrawCalls[i].mIndexBufferOffset}, mDrawCalls[i].mNumElements),
+									// Bind the vertex input buffers in the right order (corresponding to the layout specifiers in the vertex shader)
+									std::forward_as_tuple(mPositionsBuffer.as_reference(), size_t{mDrawCalls[i].mPositionsBufferOffset}), 
+									std::forward_as_tuple(mTexCoordsBuffer.as_reference(), size_t{mDrawCalls[i].mTexCoordsBufferOffset}),
+									std::forward_as_tuple(mNormalsBuffer.as_reference()  , size_t{mDrawCalls[i].mNormalsBufferOffset})
+								)
+							);
+						} )
+					); }
+				),
 
 // 3.2) Render tessellated patches with SS
                 command::bind_pipeline(tessPipePxFillSupersampledToBeUsed.as_reference()),
@@ -2227,7 +2234,7 @@ private: // v== Member variables ==v
     int                        mCurveIndex      = 1;
 	// Debug stuff:
 	glm::vec4                  mDebugSliders    = {0.f, 0.f, 0.f, 0.f};
-	glm::ivec4                 mDebugSlidersi   = {8, 0, 0, 0};
+	glm::ivec4                 mDebugSlidersi   = {12, 12, 12, 12};
 
 #if STATS_ENABLED
     avk::query_pool mTimestampPool;

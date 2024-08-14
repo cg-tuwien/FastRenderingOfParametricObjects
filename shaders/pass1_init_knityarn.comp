@@ -67,12 +67,12 @@ void main()
 	vec2 paramsTo   = paramsFrom + rangePerEvalBucket;
 
 	// out:
-	if (curveIndex == 14 || curveIndex == 15) { // Yarn Curve
+	if (curveIndex == 7 || curveIndex == 9) { // Yarn Curve
 		const uint insertIdx = atomicAdd(uPatchLodCount.mDispatchCounts[0].x, 1); // start with the first, a.k.a. "firstPing"
 		uPatchLodPing.mElements[insertIdx].mParams           = vec4(paramsFrom[0], paramsTo[0], paramsFrom[1], paramsTo[1]);
 		uPatchLodPing.mElements[insertIdx].mObjectIdUserData = uvec4(pushConstants.mObjectId, loopsRows.y, 0, floatBitsToUint(threadRadius));
 	}
-	else if (curveIndex == 16 || curveIndex == 17) { // Fiber Curve
+	else if (curveIndex == 8 || curveIndex == 10) { // Fiber Curve
 		const uint insertIdx = atomicAdd(uPatchLodCount.mDispatchCounts[0].x, numFibers); // start with the first, a.k.a. "firstPing"
 		for (uint fiberId = 0; fiberId < numFibers; ++fiberId) {
 			uPatchLodPing.mElements[insertIdx + fiberId].mParams           = vec4(paramsFrom[0], paramsTo[0], paramsFrom[1], paramsTo[1]);

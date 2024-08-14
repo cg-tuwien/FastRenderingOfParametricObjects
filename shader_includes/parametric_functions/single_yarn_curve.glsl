@@ -3,7 +3,7 @@
 // +--------------------+
 vec3 get_yarn_curve(float u, float v, uvec3 userData)
 {
-	const float threadRadius = 1.0;
+	const float threadRadius = uintBitsToFloat(userData[2]);
 
 	const float rowOffset = 5.835;
 	const float loopRoundness = 1.354;

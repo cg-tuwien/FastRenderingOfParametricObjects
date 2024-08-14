@@ -2432,9 +2432,5 @@ vec3 get_sh_glyph(float u, float v)
 	}
 
 	vec3 glyph = to_sphere(u, v, f);
-    //glyph.x *= -1.0;
-    //glyph.y *= -1.0;
-    
-
-    return glyph;
+    return rotate_x(glyph, -90);
 }

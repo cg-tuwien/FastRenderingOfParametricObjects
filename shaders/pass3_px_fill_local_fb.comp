@@ -390,7 +390,6 @@ void main()
 								uint64_t data = getUint64ForFramebuffer(
 													vpcPing.z, shade(matIndex, myColor, 
 																	getParamShadingUserParams(u, v, curveIndex, userData, wsPing.xyz),
-																	wsPing.xyz,
 																	n, 
 																	getParamTexCoords(u, v, curveIndex, userData, wsPing.xyz), 
 																	dfdx, dfdy

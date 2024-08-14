@@ -7,13 +7,11 @@
 vec2 getParamTexCoords(float u, float v, int curveIndex, uvec3 userData, vec3 posWS) {
     vec2 texCoords = vec2(u, v);
     switch (curveIndex) {
-            // +--------------------+
-            // | Yarn Curves        |
-            // +--------------------+
-	    case 14: 
-	    case 15: 
-	    case 16: 
-	    case 17: 
+        // +--------------------+
+        // | Curtains:          |
+        // +--------------------+
+	    case 9: 
+	    case 10: 
             texCoords = vec2(3.55 - posWS.x / 7.38, posWS.y / 7.4);
             break;
     }
@@ -24,30 +22,20 @@ vec2 getParamTexCoords(float u, float v, int curveIndex, uvec3 userData, vec3 po
 vec3 getParamShadingUserParams(float u, float v, int curveIndex, uvec3 userData, vec3 posWS) {
     vec3 shadingUserParams = vec3(0.0);
     switch (curveIndex) {
-        case 4:
-            // +-------------------------------------------------+
-            // |   Terrain:                                      |
-            // +-------------------------------------------------+
+        // +-------------------------------------------------+
+        // |   SH Glyphs                                     |
+        // +-------------------------------------------------+
+        case 5:
+	    case 6: 
             shadingUserParams = posWS;
             break;
-        case 18:
-        case 19:
-        case 20:
-    
+        // +-------------------------------------------------+
+        // |   Seashells                                     |
+        // +-------------------------------------------------+
+        case 11:
+        case 12:
+        case 13:
             shadingUserParams.y = smoothstep(TWO_PI, TWO_PI + TWO_PI, u);
-
-            // TODO: 
-            //// Add nodule along the ellipse:
-            //float eper   = (TWO_PI / numNodE);
-            //float eshift = theta - nodOffsetE;
-            //float ern    = eshift / eper - round(eshift / eper);
-            //float enh    = exp(-pow(nodWidthE / numNodE, spikynessE) * ern * ern) * nodHeightE / 20.f;
-
-            //// Add nodule along the spiral:
-            //float sper   = (TWO_PI / numNodS);
-            //float sshift = ellipsePos - nodOffsetS;
-            //float srn    = sshift / sper - round(sshift / sper);
-            //float snh    = exp(-pow(nodWidthS / numNodS, spikynessS) * srn * srn) * nodHeightS / 20.f;
             break;
     }
     return shadingUserParams;
