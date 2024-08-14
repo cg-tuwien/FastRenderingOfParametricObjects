@@ -20,14 +20,14 @@
     <Filter Include="shader_includes\util">
       <UniqueIdentifier>{f834110d-1fb9-44c5-bf62-1b9d79082a8c}</UniqueIdentifier>
     </Filter>
-    <Filter Include="shader_includes\param">
-      <UniqueIdentifier>{f198a94d-488e-43d8-b4c6-7f874add684c}</UniqueIdentifier>
-    </Filter>
     <Filter Include="shaders\standalone-tess">
       <UniqueIdentifier>{a6ed45ff-01d7-423b-8aa2-a9a5a52c3a93}</UniqueIdentifier>
     </Filter>
     <Filter Include="shaders\px-fill-tess">
       <UniqueIdentifier>{277f38a7-585c-47df-8f8d-d60d193e8066}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="shader_includes\parametric_functions">
+      <UniqueIdentifier>{f198a94d-488e-43d8-b4c6-7f874add684c}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
@@ -42,9 +42,6 @@
     </None>
     <None Include="shaders\simple.vert">
       <Filter>shaders</Filter>
-    </None>
-    <None Include="shader_includes\param\shape_functions.glsl">
-      <Filter>shader_includes\param</Filter>
     </None>
     <None Include="shader_includes\util\glsl_helpers.glsl">
       <Filter>shader_includes\util</Filter>
@@ -120,6 +117,39 @@
     </None>
     <None Include="shaders\ss_resolve.vert">
       <Filter>shaders</Filter>
+    </None>
+    <None Include="shader_includes\parametric_functions\shape_functions.glsl">
+      <Filter>shader_includes\parametric_functions</Filter>
+    </None>
+    <None Include="shader_includes\parametric_functions\plane.glsl">
+      <Filter>shader_includes\parametric_functions</Filter>
+    </None>
+    <None Include="shader_includes\parametric_functions\curtain_fiber_curve.glsl">
+      <Filter>shader_includes\parametric_functions</Filter>
+    </None>
+    <None Include="shader_includes\parametric_functions\curtain_yarn_curve.glsl">
+      <Filter>shader_includes\parametric_functions</Filter>
+    </None>
+    <None Include="shader_includes\parametric_functions\johis_heart.glsl">
+      <Filter>shader_includes\parametric_functions</Filter>
+    </None>
+    <None Include="shader_includes\parametric_functions\palm_tree_trunk.glsl">
+      <Filter>shader_includes\parametric_functions</Filter>
+    </None>
+    <None Include="shader_includes\parametric_functions\seashells.glsl">
+      <Filter>shader_includes\parametric_functions</Filter>
+    </None>
+    <None Include="shader_includes\parametric_functions\sh_glyph.glsl">
+      <Filter>shader_includes\parametric_functions</Filter>
+    </None>
+    <None Include="shader_includes\parametric_functions\single_fiber_curve.glsl">
+      <Filter>shader_includes\parametric_functions</Filter>
+    </None>
+    <None Include="shader_includes\parametric_functions\single_yarn_curve.glsl">
+      <Filter>shader_includes\parametric_functions</Filter>
+    </None>
+    <None Include="shader_includes\parametric_functions\spiky_heart.glsl">
+      <Filter>shader_includes\parametric_functions</Filter>
     </None>
   </ItemGroup>
   <ItemGroup>

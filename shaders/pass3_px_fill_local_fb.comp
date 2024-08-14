@@ -61,7 +61,7 @@ layout(set = 3, binding = 1, r32ui) uniform restrict uimage2D   uHeatmapImage;
 layout(set = 4, binding = 0) buffer TilePatchesBuffer { uint mPatchIndices[]; } uTilePatches;
 #endif
 
-#include "../shader_includes/param/shape_functions.glsl"
+#include "../shader_includes/parametric_functions/shape_functions.glsl"
 #include "../shader_includes/parametric_curve_helpers.glsl"
 #include "../shader_includes/combined_attachment_shared.glsl"
 // Gotta define some defines before including shading_model.glsl

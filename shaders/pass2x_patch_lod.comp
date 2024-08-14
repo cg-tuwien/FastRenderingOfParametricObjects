@@ -57,7 +57,7 @@ layout(set = 3, binding = 0) buffer PatchLodPing { px_fill_data mElements[]; } u
 layout(set = 3, binding = 1) buffer PatchLodPong { px_fill_data mElements[]; } uPatchLodPong; 
 layout(set = 3, binding = 2) buffer PatchLodCount { uvec4 mDispatchCounts[]; } uPatchLodCount; 
 
-#include "../shader_includes/param/shape_functions.glsl"
+#include "../shader_includes/parametric_functions/shape_functions.glsl"
 #include "../shader_includes/parametric_curve_helpers.glsl"
 
 #if DRAW_PATCH_EVAL_DEBUG_VIS

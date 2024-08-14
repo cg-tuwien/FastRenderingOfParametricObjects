@@ -26,7 +26,7 @@ layout(set = 3, binding = 0) buffer ObjectData   { object_data mElements[]; }  u
 layout(set = 3, binding = 1) buffer PxFillParams { px_fill_data mElements[]; } uPxFillParams; 
 layout(set = 3, binding = 2) buffer PxFillCount  { VkDrawIndirectCommand mDrawParams[]; } uPxFillCounts;
 
-#include "../../shader_includes/param/shape_functions.glsl"
+#include "../../shader_includes/parametric_functions/shape_functions.glsl"
 
 // Varying input from vertex shader:
 layout (location = 0) in PerVertexPayload

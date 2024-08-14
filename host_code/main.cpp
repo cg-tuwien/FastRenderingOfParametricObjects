@@ -104,13 +104,13 @@ static std::array<parametric_object, 13> PredefinedParametricObjects {{
 	parametric_object{"Seashell 1"  , "assets/po-seashell1.png",          false, parametric_object_type::Seashell1,              glm::two_pi<float>() * 8.0f,/* -> */0.0f,   0.0f,/* -> */glm::two_pi<float>(), glm::mat4{ 1.0f }, 2},
 	parametric_object{"Seashell 2"  , "assets/po-seashell2.png",          false, parametric_object_type::Seashell2,              glm::two_pi<float>() * 8.0f,/* -> */0.0f,   0.0f,/* -> */glm::two_pi<float>(), glm::translate(glm::vec3{-4.5f, 7.0f, 0.0f }), 2},
 	parametric_object{"Seashell 3"  , "assets/po-seashell3.png",          false, parametric_object_type::Seashell3,              glm::two_pi<float>() * 8.0f,/* -> */0.0f,   0.0f,/* -> */glm::two_pi<float>(), glm::translate(glm::vec3{ 4.5f, 7.0f, 0.0f }), 2},
-	parametric_object{"Yarn Curve"  , "assets/po-yarn-curve-single.png",  false, parametric_object_type::YarnCurve,  1.0f, 1.0f, /* <-- yarn dimensions | #fibers --> */ 4.f, 1.f, glm::translate(glm::vec3{-3.35f, 0.08f, 5.32f}) * glm::scale(glm::vec3{ 0.005f }), 19},
-	parametric_object{"Fiber Curve" , "assets/po-fiber-curve-single.png", false, parametric_object_type::FiberCurve, 1.0f, 1.0f, /* <-- yarn dimensions | #fibers --> */ 4.f, 1.f, glm::translate(glm::vec3{-3.35f, 0.08f, 5.32f}) * glm::scale(glm::vec3{ 0.005f }), 19},
-	parametric_object{"Blue Curtain", "assets/po-blue-curtain.png",		  false, parametric_object_type::YarnCurve,  235.0f, 254.0f, /* <-- yarn dimensions | #fibers --> */ 4.f, 1.f, glm::translate(glm::vec3{-3.35f, 0.08f, 5.32f}) * glm::scale(glm::vec3{ 0.005f }), 19},
+	parametric_object{"Yarn Curve"  , "assets/po-yarn-curve-single.png",  false, parametric_object_type::SingleYarnCurve,  1.0f, 1.0f, /* <-- yarn dimensions | #fibers --> */ 4.f, 1.f, glm::translate(glm::vec3{-3.35f, 0.08f, 5.32f}) * glm::scale(glm::vec3{ 0.005f }), 19},
+	parametric_object{"Fiber Curve" , "assets/po-fiber-curve-single.png", false, parametric_object_type::SingleFiberCurve, 1.0f, 1.0f, /* <-- yarn dimensions | #fibers --> */ 4.f, 1.f, glm::translate(glm::vec3{-3.35f, 0.08f, 5.32f}) * glm::scale(glm::vec3{ 0.005f }), 19},
+	parametric_object{"Blue Curtain", "assets/po-blue-curtain.png",		  false, parametric_object_type::CurtainYarnCurves,  235.0f, 254.0f, /* <-- yarn dimensions | #fibers --> */ 4.f, 1.f, glm::translate(glm::vec3{-3.35f, 0.08f, 5.32f}) * glm::scale(glm::vec3{ 0.005f }), 19},
 	parametric_object{"Palm Tree"   , "assets/po-palm-tree.png",		  false, parametric_object_type::PalmTreeTrunk,          0.0f,   1.0f,            0.0f,  glm::two_pi<float>(), glm::translate(glm::vec3{ 0.f,  0.f, -4.f})},
 	parametric_object{"Giant Worm"  , "assets/po-giant-worm.png",		  false, parametric_object_type::PalmTreeTrunk,  235.0f, 254.0f, /* <-- yarn dimensions | #fibers --> */ 4.f, 1.f, glm::translate(glm::vec3{-3.35f, 0.08f, 5.32f}) * glm::scale(glm::vec3{ 0.005f }), 19},
 	parametric_object{"SH Glyph"    , "assets/po-single-sh-glyph.png",    false, parametric_object_type::SHGlyph,                0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>(), glm::mat4{ 1.0f }, -2},
-	parametric_object{"Brain Scan"  , "assets/po-sh-brain.png",           false, parametric_object_type::SHGlyph,                0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>(), glm::mat4{ 1.0f }, -2}
+	parametric_object{"Brain Scan"  , "assets/po-sh-brain.png",           false, parametric_object_type::SHBrain,                0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>(), glm::mat4{ 1.0f }, -2}
 }};
 
 class vk_parametric_curves_app : public avk::invokee
@@ -640,10 +640,10 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 		));
 
         mRenderpassSS = context().create_renderpass({// Define attachments and sub pass usages:                          vvv  Note: All the draw calls are in the same (first) subpass: SS, noAA, simple-stupid vertex pipe (because... why not?!)
-                attachment::declare(aAttachmentFormats[0], on_load::clear.from_previous_layout(layout::undefined), usage::unused                              , on_store::store.in_layout(layout::shader_read_only_optimal)),
-                attachment::declare(aAttachmentFormats[1], on_load::clear.from_previous_layout(layout::undefined), usage::unused                              , on_store::store.in_layout(layout::shader_read_only_optimal)),
-                attachment::declare(colorFormatMS        , on_load::clear.from_previous_layout(layout::undefined), usage::color(0)      + usage::resolve_to(0), on_store::dont_care),
-                attachment::declare(depthFormatMS        , on_load::clear.from_previous_layout(layout::undefined), usage::depth_stencil + usage::resolve_to(1), on_store::dont_care)
+                attachment::declare(aAttachmentFormats[0], on_load::clear.from_previous_layout(layout::undefined), usage::unused                                                , on_store::store.in_layout(layout::shader_read_only_optimal)),
+                attachment::declare(aAttachmentFormats[1], on_load::clear.from_previous_layout(layout::undefined), usage::unused                                                , on_store::store.in_layout(layout::shader_read_only_optimal)),
+                attachment::declare(colorFormatMS        , on_load::clear.from_previous_layout(layout::undefined), usage::color(0)      + usage::resolve_to(0)                                                          , on_store::dont_care),
+                attachment::declare(depthFormatMS        , on_load::clear.from_previous_layout(layout::undefined), usage::depth_stencil + usage::resolve_to(1).set_depth_resolve_mode(vk::ResolveModeFlagBits::eAverage), on_store::dont_care)
             }, {
 				subpass_dependency{subpass::external >> subpass::index(0),
 					stage::none    >>   stage::all_graphics,
@@ -665,10 +665,10 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 
 	bool is_knit_yarn(parametric_object_type pot)
 	{
-		return pot == parametric_object_type::YarnCurve
-			|| pot == parametric_object_type::YarnCurveAnimated
-			|| pot == parametric_object_type::FiberCurve
-			|| pot == parametric_object_type::FiberCurveAnimated;
+		return pot == parametric_object_type::SingleYarnCurve
+			|| pot == parametric_object_type::SingleFiberCurve
+			|| pot == parametric_object_type::CurtainYarnCurves
+			|| pot == parametric_object_type::CurtainFiberCurves;
 	}
 
 	void fill_object_data_buffer()

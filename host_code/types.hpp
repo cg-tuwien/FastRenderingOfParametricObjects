@@ -57,22 +57,15 @@ enum struct parametric_object_type : int32_t
     Plane = 0,
     Sphere,
     PalmTreeTrunk,
-    Water,
-    Terrain,
-    SHBasisFunction,
-    FunkyPlane,
-    ExtraFunkyPlane,
-    JuliasParametricHeart,
     JohisHeart,
-    Spherehog,
     SpikyHeart,
     SHGlyph,
-    MichiBall, // 13
-    YarnCurve, // 14
-    YarnCurveAnimated,
-    FiberCurve,
-    FiberCurveAnimated,
-    Seashell1, // 18
+    SHBrain,
+    SingleYarnCurve,
+    SingleFiberCurve,
+    CurtainYarnCurves,
+    CurtainFiberCurves,
+    Seashell1,
     Seashell2,
     Seashell3
 };
@@ -88,7 +81,7 @@ enum struct rendering_method : int
 
 // ATTENTION: Whenever you add a new enum item  ^^^  here, also add it to the string  vvv  here!
 static const char* PARAMETRIC_OBJECT_TYPE_UI_STRING
-	= "Plane\0Sphere\0PalmTreeTrunk\0Water\0Terrain\0SHBasisFunction (change via debug sliders (int))\0FunkyPlane\0ExtraFunkyPlane\0JuliasParametricHeart\0JohisHeart\0Spherehog\0SpikyHeart\0SH Glyph\0Michi Ball\0Yarn Curve\0Yarn Curve (animated)\0Fiber Curve\0Fiber Curve (animated)\0Seashell 1\0Seashell 2\0Seashell 3\0";
+	= "Plane\0Sphere\0Palm Tree Trunk\0JohisHeart\0Spiky Heart\0SH Glyph\0SH Brain Dataset\0Single Yarn Curve\0Single Fiber Curve\0Curtain Yarn Curves\0Curtain Fiber Curves\0Seashell 1\0Seashell 2\0Seashell 3\0";
 
 // Data about one parametric object:
 class parametric_object

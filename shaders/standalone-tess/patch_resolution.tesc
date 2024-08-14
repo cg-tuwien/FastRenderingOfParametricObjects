@@ -24,7 +24,7 @@ layout (vertices=4) out;
 layout(set = 2, binding = 0) buffer SsboCounters { uint mCounters[4]; } uCounters;
 layout(set = 3, binding = 0) buffer ObjectData   { object_data mElements[]; }  uObjectData;
 
-#include "../../shader_includes/param/shape_functions.glsl"
+#include "../../shader_includes/parametric_functions/shape_functions.glsl"
 #include "../../shader_includes/parametric_curve_helpers.glsl"
 
 layout(push_constant) uniform PushConstants
