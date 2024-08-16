@@ -23,6 +23,7 @@ layout(set = 1, binding = 0, r64ui) uniform restrict u64image2D uCombinedAttachm
 layout(set = 1, binding = 1, r32ui) uniform restrict uimage2D   uHeatmapImage;
 #endif
 layout(set = 2, binding = 0) buffer SsboCounters { uint mCounters[4]; } uCounters;
+//layout(set = 4, binding = 0) buffer BigDataset { dataset_sh_coeffs mEntries[]; } uBigDataset; 
 
 #include "../shader_includes/combined_attachment_shared.glsl"
 // Gotta define some defines before including shading_model.glsl

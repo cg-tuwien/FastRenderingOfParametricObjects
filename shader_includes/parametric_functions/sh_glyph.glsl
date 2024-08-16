@@ -2383,6 +2383,15 @@ void eval_sh_grad_12(out float out_shs[91], out vec3 out_grads[91], vec3 point) 
     out_grads[90][2] = 0.0;
 }
 
+vec3 get_translation(uvec2 datasetDims, uint glyphId)
+{
+    uint y = glyphId / datasetDims.x;
+    uint x = glyphId - (y * datasetDims.x);
+    const float f = SH_BRAIN_ELEMENT_OFFSET;
+    vec3 translation = vec3(x * f, 0.0, y * f) - vec3(float(datasetDims.x) * 0.5 * f, 0.0, float(datasetDims.y) * 0.5 * f);
+    return translation;
+}
+
 // +-------------------------------------------------+
 // |   SH Glyph:                                     |
 // |                                                 |
@@ -2393,10 +2402,15 @@ void eval_sh_grad_12(out float out_shs[91], out vec3 out_grads[91], vec3 point) 
 // |   u = [0, PI)                                   |
 // |   v = [0, TWO_PI)                               |
 // +-------------------------------------------------+
-vec3 get_sh_glyph(float u, float v)
+vec3 get_sh_glyph(float u, float v, uvec3 userData)
 {
 	float out_shs[91];
 	int sh_count = 0;
+
+    uvec2 datasetDims = userData.xy;
+    uint  glyphId     = userData.z;
+    
+    bool isBigDataset = (datasetDims.x * datasetDims.y) > 1;
 	
 	switch (ubo.mDebugSlidersi[0])
 	{
@@ -2427,10 +2441,23 @@ vec3 get_sh_glyph(float u, float v)
 	}
 	
 	float f = 0.0;
-	for (int i = 0; i < sh_count; i++) {
-		f += out_shs[i] * SH_COEFFS[i];
-	}
+    if (isBigDataset) {
+        dataset_sh_coeffs coeffs = uBigDataset.mEntries[glyphId];
+        for (int i = 0; i < sh_count; i++) {
+            f += out_shs[i] * coeffs.mCoeffs[i];
+        }
+        f *= SH_BRAIN_ELEMENT_SCALE;
+    }
+    else {
+        for (int i = 0; i < sh_count; i++) {
+            f += out_shs[i] * SH_COEFFS[i];
+        }
+    }
 
 	vec3 glyph = to_sphere(u, v, f);
-    return rotate_x(glyph, -90);
+    glyph = rotate_x(glyph, -90);
+    if (isBigDataset) {
+        glyph += get_translation(datasetDims, glyphId);
+    }
+    return glyph;
 }

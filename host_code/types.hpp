@@ -87,13 +87,13 @@ static const char* PARAMETRIC_OBJECT_TYPE_UI_STRING
 class parametric_object
 {
 public:
-    parametric_object(const char* aName, const char* aPreviewImagePath, bool isEnabled, parametric_object_type objType, float uFrom, float uTo, float vFrom, float vTo, glm::mat4 aTransformationMatrix = glm::mat4{ 1.0f }, int32_t aMaterialIndex = -1)
+    parametric_object(const char* aName, const char* aPreviewImagePath, bool isEnabled, parametric_object_type objType, float uFrom, float uTo, float vFrom, float vTo, glm::uvec2 numElements = glm::uvec2{ 1u, 1u }, glm::mat4 aTransformationMatrix = glm::mat4{ 1.0f }, int32_t aMaterialIndex = -1)
         : mName{ aName }
         , mPreviewImagePath{ aPreviewImagePath }
         , mEnabled{ isEnabled }
         , mModifying{ false }
         , mParams{uFrom, uTo, vFrom, vTo}
-        , mEvalDims{1, 1, 0, 0}
+        , mEvalDims{1, 1, numElements[0], numElements[1]} 
         , mParamObjType { objType }
         , mTransformationMatrix{ aTransformationMatrix }
         , mMaterialIndex{ aMaterialIndex }
@@ -117,6 +117,7 @@ public:
     auto      how_to_render() const { return mRenderingMethod; }
     bool      multi_sampling_on() const { return mMultiSampled; }
     bool      super_sampling_on() const { return mSuperSampled; }
+    glm::uvec2 num_elements() const { return glm::uvec2(mEvalDims[2], mEvalDims[3]); }
 
     void set_enabled(bool yesOrNo) { mEnabled = yesOrNo; }
     void set_modifying(bool yesOrNo) { mModifying = yesOrNo; }
@@ -130,6 +131,7 @@ public:
     void set_how_to_render(rendering_method renderMeth) { mRenderingMethod = renderMeth; }
     void set_multi_sampling(bool onOrOff) { mMultiSampled = onOrOff; }
     void set_super_sampling(bool onOrOff) { mSuperSampled = onOrOff; }
+    void set_num_elements(uint32_t x, uint32_t y) { mEvalDims[2] = x; mEvalDims[3] = y; }
 
 private:
     const char* mName;

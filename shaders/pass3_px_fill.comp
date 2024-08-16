@@ -51,6 +51,7 @@ layout(set = 3, binding = 0, r64ui) uniform restrict volatile u64image2D uCombin
 #if STATS_ENABLED
 layout(set = 3, binding = 1, r32ui) uniform restrict uimage2D   uHeatmapImage;
 #endif
+layout(set = 4, binding = 0) buffer BigDataset { dataset_sh_coeffs mEntries[]; } uBigDataset; 
 
 #include "../shader_includes/parametric_functions/shape_functions.glsl"
 #include "../shader_includes/parametric_curve_helpers.glsl"

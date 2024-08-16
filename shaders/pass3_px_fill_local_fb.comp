@@ -57,8 +57,9 @@ layout(set = 3, binding = 0, r64ui) uniform restrict volatile u64image2D uCombin
 #if STATS_ENABLED
 layout(set = 3, binding = 1, r32ui) uniform restrict uimage2D   uHeatmapImage;
 #endif
+layout(set = 4, binding = 0) buffer BigDataset { dataset_sh_coeffs mEntries[]; } uBigDataset; 
 #if PX_FILL_LOCAL_FB && SEPARATE_PATCH_TILE_ASSIGNMENT_PASS
-layout(set = 4, binding = 0) buffer TilePatchesBuffer { uint mPatchIndices[]; } uTilePatches;
+layout(set = 5, binding = 0) buffer TilePatchesBuffer { uint mPatchIndices[]; } uTilePatches;
 #endif
 
 #include "../shader_includes/parametric_functions/shape_functions.glsl"

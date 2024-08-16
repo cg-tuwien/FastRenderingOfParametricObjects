@@ -32,7 +32,6 @@ layout(set = 3, binding = 0) buffer PatchLodPing { px_fill_data mElements[]; } u
 layout(set = 3, binding = 2) buffer PatchLodCount { uvec4 mDispatchCounts[]; } uPatchLodCount; 
 
 #include "../shader_includes/parametric_functions/shape_functions.glsl"
-#include "../shader_includes/parametric_curve_helpers.glsl"
 
 // +------------------------------------------------------------------------------+
 // |   PushConstants                                                              |
@@ -76,7 +75,7 @@ void main()
 		const uint insertIdx = atomicAdd(uPatchLodCount.mDispatchCounts[0].x, numFibers); // start with the first, a.k.a. "firstPing"
 		for (uint fiberId = 0; fiberId < numFibers; ++fiberId) {
 			uPatchLodPing.mElements[insertIdx + fiberId].mParams           = vec4(paramsFrom[0], paramsTo[0], paramsFrom[1], paramsTo[1]);
-			uPatchLodPing.mElements[insertIdx + fiberId].mObjectIdUserData = uvec4(pushConstants.mObjectId, loopsRows.y, fiberId, floatBitsToUint(threadRadius));
+			uPatchLodPing.mElements[insertIdx + fiberId].mObjectIdUserData = uvec4(pushConstants.mObjectId, loopsRows.y, fiberId, floatBitsToUint(threadRadius)); // Pack additional knit yarn data into UserData
 		}
 	}
 }

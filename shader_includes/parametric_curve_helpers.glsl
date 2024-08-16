@@ -89,10 +89,10 @@ vec4 paramToWS(float u, float v, int curveIndex, uvec3 userData)
             object = get_spiky_heart(u, v);
             break;
         case 5:
-            object = get_sh_glyph(u, v);
+            object = get_sh_glyph(u, v, userData);
             break;
         case 6:
-            object = get_sh_glyph(u, v);
+            object = get_sh_glyph(u, v, userData);
             break;
 	    case 7: 
             object = get_yarn_curve(u, v, userData);

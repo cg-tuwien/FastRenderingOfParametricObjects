@@ -20,9 +20,6 @@
     <Filter Include="shader_includes\util">
       <UniqueIdentifier>{f834110d-1fb9-44c5-bf62-1b9d79082a8c}</UniqueIdentifier>
     </Filter>
-    <Filter Include="shaders\standalone-tess">
-      <UniqueIdentifier>{a6ed45ff-01d7-423b-8aa2-a9a5a52c3a93}</UniqueIdentifier>
-    </Filter>
     <Filter Include="shaders\px-fill-tess">
       <UniqueIdentifier>{277f38a7-585c-47df-8f8d-d60d193e8066}</UniqueIdentifier>
     </Filter>
@@ -78,15 +75,6 @@
     </None>
     <None Include="shaders\pass2x_patch_lod.comp">
       <Filter>shaders</Filter>
-    </None>
-    <None Include="shaders\standalone-tess\patch_eval.tese">
-      <Filter>shaders\standalone-tess</Filter>
-    </None>
-    <None Include="shaders\standalone-tess\patch_init.vert">
-      <Filter>shaders\standalone-tess</Filter>
-    </None>
-    <None Include="shaders\standalone-tess\patch_resolution.tesc">
-      <Filter>shaders\standalone-tess</Filter>
     </None>
     <None Include="shaders\px-fill-tess\patch_go.tese">
       <Filter>shaders\px-fill-tess</Filter>
@@ -151,6 +139,9 @@
     <None Include="shader_includes\parametric_functions\spiky_heart.glsl">
       <Filter>shader_includes\parametric_functions</Filter>
     </None>
+    <None Include="shaders\pass1_init_shbrain.comp">
+      <Filter>shaders</Filter>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="precompiled_headers\cg_stdafx.cpp">
@@ -160,6 +151,9 @@
       <Filter>host_code</Filter>
     </ClCompile>
     <ClCompile Include="host_code\ImGuizmo.cpp">
+      <Filter>host_code</Filter>
+    </ClCompile>
+    <ClCompile Include="host_code\big_dataset.cpp">
       <Filter>host_code</Filter>
     </ClCompile>
   </ItemGroup>
@@ -180,6 +174,9 @@
       <Filter>shader_includes</Filter>
     </ClInclude>
     <ClInclude Include="host_code\ImGuizmo.h">
+      <Filter>host_code</Filter>
+    </ClInclude>
+    <ClInclude Include="host_code\big_dataset.hpp">
       <Filter>host_code</Filter>
     </ClInclude>
   </ItemGroup>

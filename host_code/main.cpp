@@ -18,6 +18,7 @@
 #include "../shader_includes/host_device_shared.h"
 #include <random>
 #include "ImGuizmo.h"
+#include "big_dataset.hpp"
 
 #define NUM_TIMESTAMP_QUERIES 5
 
@@ -98,19 +99,19 @@
 //#define TEST_TARGET_IMAGE              0
 
 static std::array<parametric_object, 13> PredefinedParametricObjects {{
-	parametric_object{"Sphere"      , "assets/po-sphere-patches.png",     false, parametric_object_type::Sphere,                 0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>(), glm::translate(glm::vec3{ 0.f,  0.f,  0.f})},
-	parametric_object{"Johi's Heart", "assets/po-johis-heart.png",        false, parametric_object_type::JohisHeart,              0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>(), glm::translate(glm::vec3{ 0.f,  0.f, -2.f})},
+	parametric_object{"Sphere"      , "assets/po-sphere-patches.png",     false, parametric_object_type::Sphere,                 0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>() , glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{ 0.f,  0.f,  0.f})},
+	parametric_object{"Johi's Heart", "assets/po-johis-heart.png",        false, parametric_object_type::JohisHeart,              0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>(), glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{ 0.f,  0.f, -2.f})},
 	parametric_object{"Plane" ,       "assets/po-johis-heart.png",        true,  parametric_object_type::Plane,                  1.0f,   0.0f,            0.0f,  1.0f},
-	parametric_object{"Seashell 1"  , "assets/po-seashell1.png",          false, parametric_object_type::Seashell1,              glm::two_pi<float>() * 8.0f,/* -> */0.0f,   0.0f,/* -> */glm::two_pi<float>(), glm::mat4{ 1.0f }, 2},
-	parametric_object{"Seashell 2"  , "assets/po-seashell2.png",          false, parametric_object_type::Seashell2,              glm::two_pi<float>() * 8.0f,/* -> */0.0f,   0.0f,/* -> */glm::two_pi<float>(), glm::translate(glm::vec3{-4.5f, 7.0f, 0.0f }), 2},
-	parametric_object{"Seashell 3"  , "assets/po-seashell3.png",          false, parametric_object_type::Seashell3,              glm::two_pi<float>() * 8.0f,/* -> */0.0f,   0.0f,/* -> */glm::two_pi<float>(), glm::translate(glm::vec3{ 4.5f, 7.0f, 0.0f }), 2},
-	parametric_object{"Yarn Curve"  , "assets/po-yarn-curve-single.png",  false, parametric_object_type::SingleYarnCurve,        1.0f, 1.0f,     /* <-- yarn dimensions | n/a yarn -> */ 0.f, /* thickness --> */ 0.8f, glm::translate(glm::vec3{-0.3f, 0.0f, 0.0f}) * glm::scale(glm::vec3{ 0.3f }), -3},
-	parametric_object{"Fiber Curve" , "assets/po-fiber-curve-single.png", false, parametric_object_type::SingleFiberCurve,       1.0f, 1.0f,     /* <-- yarn dimensions | #fibers --> */ 6.f, /* thickness --> */ 0.3f, glm::translate(glm::vec3{-0.5f, 0.0f, 0.0f}) * glm::scale(glm::vec3{ 0.3f }), -3},
-	parametric_object{"Blue Curtain", "assets/po-blue-curtain.png",		  false, parametric_object_type::CurtainYarnCurves,      235.0f, 254.0f, /* <-- yarn dimensions | #fibers --> */ 6.f, /* thickness --> */ 0.8f, glm::translate(glm::vec3{-3.35f, 0.08f, 5.32f}) * glm::scale(glm::vec3{ 0.005f }), 8},
-	parametric_object{"Palm Tree"   , "assets/po-palm-tree.png",		  false, parametric_object_type::PalmTreeTrunk,          0.0f,   1.0f,            0.0f,  glm::two_pi<float>(), glm::translate(glm::vec3{ 0.f,  0.f, -4.f})},
-	parametric_object{"Giant Worm"  , "assets/po-giant-worm.png",		  false, parametric_object_type::PalmTreeTrunk,  235.0f, 254.0f, /* <-- yarn dimensions | #fibers --> */ 4.f, 1.f, glm::translate(glm::vec3{-3.35f, 0.08f, 5.32f}) * glm::scale(glm::vec3{ 0.005f }), 19},
-	parametric_object{"SH Glyph"    , "assets/po-single-sh-glyph.png",    false, parametric_object_type::SHGlyph,                0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>(), glm::mat4{ 1.0f }, -2},
-	parametric_object{"Brain Scan"  , "assets/po-sh-brain.png",           false, parametric_object_type::SHBrain,                0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>(), glm::mat4{ 1.0f }, -2}
+	parametric_object{"Seashell 1"  , "assets/po-seashell1.png",          false, parametric_object_type::Seashell1,              glm::two_pi<float>() * 8.0f,/* -> */0.0f,   0.0f,/* -> */glm::two_pi<float>(), glm::uvec2{ 1u, 1u }, glm::mat4{ 1.0f }, 2},
+	parametric_object{"Seashell 2"  , "assets/po-seashell2.png",          false, parametric_object_type::Seashell2,              glm::two_pi<float>() * 8.0f,/* -> */0.0f,   0.0f,/* -> */glm::two_pi<float>(), glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{-4.5f, 7.0f, 0.0f }), 2},
+	parametric_object{"Seashell 3"  , "assets/po-seashell3.png",          false, parametric_object_type::Seashell3,              glm::two_pi<float>() * 8.0f,/* -> */0.0f,   0.0f,/* -> */glm::two_pi<float>(), glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{ 4.5f, 7.0f, 0.0f }), 2},
+	parametric_object{"Yarn Curve"  , "assets/po-yarn-curve-single.png",  false, parametric_object_type::SingleYarnCurve,        1.0f, 1.0f,     /* <-- yarn dimensions | n/a yarn -> */ 0.f, /* thickness --> */ 0.8f, glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{-0.3f, 0.0f, 0.0f}) * glm::scale(glm::vec3{ 0.3f }), -3},
+	parametric_object{"Fiber Curve" , "assets/po-fiber-curve-single.png", false, parametric_object_type::SingleFiberCurve,       1.0f, 1.0f,     /* <-- yarn dimensions | #fibers --> */ 6.f, /* thickness --> */ 0.3f, glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{-0.5f, 0.0f, 0.0f}) * glm::scale(glm::vec3{ 0.3f }), -3},
+	parametric_object{"Blue Curtain", "assets/po-blue-curtain.png",		  false, parametric_object_type::CurtainYarnCurves,      235.0f, 254.0f, /* <-- yarn dimensions | #fibers --> */ 6.f, /* thickness --> */ 0.8f, glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{-3.35f, 0.08f, 5.32f}) * glm::scale(glm::vec3{ 0.005f }), 8},
+	parametric_object{"Palm Tree"   , "assets/po-palm-tree.png",		  false, parametric_object_type::PalmTreeTrunk,          0.0f,   1.0f,            0.0f,  glm::two_pi<float>(), glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{ 0.f,  0.f, -4.f})},
+	parametric_object{"Giant Worm"  , "assets/po-giant-worm.png",		  false, parametric_object_type::PalmTreeTrunk,  235.0f, 254.0f, /* <-- yarn dimensions | #fibers --> */ 4.f, 1.f, glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{-3.35f, 0.08f, 5.32f}) * glm::scale(glm::vec3{ 0.005f }), 19},
+	parametric_object{"SH Glyph"    , "assets/po-single-sh-glyph.png",    false, parametric_object_type::SHGlyph,                0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>(),     glm::uvec2{ 1u, 1u }, glm::mat4{ 1.0f }, -2},
+	parametric_object{"Brain Scan"  , "assets/po-sh-brain.png",           false, parametric_object_type::SHBrain,                0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>(), glm::uvec2{ SH_BRAIN_DATA_SIZE_X, SH_BRAIN_DATA_SIZE_Y }, glm::mat4{ 1.0f }, -2}
 }};
 
 class vk_parametric_curves_app : public avk::invokee
@@ -364,6 +365,23 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 		}, *mQueue)->wait_until_signalled();
     }
 
+	void load_sh_brain_dataset()
+	{
+		using namespace avk;
+
+		auto datasetData = get_big_sh_dataset(SH_BRAIN_DATA_SIZE_X, SH_BRAIN_DATA_SIZE_Y);
+		LOG_WARNING_EM(std::format("Loaded big dataset with {} elements ({}x{})", datasetData.size(), SH_BRAIN_DATA_SIZE_X, SH_BRAIN_DATA_SIZE_Y));
+		assert(datasetData.size() == SH_BRAIN_DATA_SIZE_X * SH_BRAIN_DATA_SIZE_Y);
+		mDatasetSize = datasetData.size();
+		mBigDataset = context().create_buffer(
+			memory_usage::device, {},
+			storage_buffer_meta::create_from_data(datasetData)
+		);
+		context().record_and_submit_with_fence({
+			mBigDataset->fill(datasetData.data(), 0)
+		}, *mQueue)->wait_until_signalled();
+	}
+
 	/* // PC ... push constants type */
 	// Ts ... optional addtional bindings
 	template </*typename PC,*/ typename... Ts>
@@ -408,16 +426,26 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 		);
         mUpdater->on(shader_files_changed_event(mInitKnitYarnComputePipe.as_reference())).update(mInitKnitYarnComputePipe);
 
+		mInitShBrainComputePipe = create_compute_pipe_for_parametric(
+			"shaders/pass1_init_shbrain.comp",
+			descriptor_binding(3, 0, mPatchLodBufferPing->as_storage_buffer()), // Attention: Only ping will be used in pass 1
+			descriptor_binding(3, 1, mPatchLodBufferPong->as_storage_buffer()), //            We don't need pong here.
+			descriptor_binding(3, 2, mPatchLodCountBuffer->as_storage_buffer()),
+			push_constant_binding_data{ shader_type::all, 0, sizeof(uint32_t) }
+		);
+        mUpdater->on(shader_files_changed_event(mInitShBrainComputePipe.as_reference())).update(mInitShBrainComputePipe);
+
 		mPatchLodComputePipe = create_compute_pipe_for_parametric(
 			"shaders/pass2x_patch_lod.comp",
 			// Ping-pong buffers:
 			descriptor_binding(3, 0, mPatchLodBufferPing->as_storage_buffer()), // Attention: These...
 			descriptor_binding(3, 1, mPatchLodBufferPong->as_storage_buffer()), //            ...two will be swapped for consecutive dispatch calls at pass2x-level.
 			descriptor_binding(3, 2, mPatchLodCountBuffer->as_storage_buffer()),
+			descriptor_binding(4, 0, mBigDataset->as_storage_buffer()),
 #if DRAW_PATCH_EVAL_DEBUG_VIS
-            descriptor_binding(4, 0, mCombinedAttachmentView->as_storage_image(layout::general)),
+            descriptor_binding(5, 0, mCombinedAttachmentView->as_storage_image(layout::general)),
 #if STATS_ENABLED
-            descriptor_binding(4, 1, mHeatMapImageView->as_storage_image(layout::general)),
+            descriptor_binding(5, 1, mHeatMapImageView->as_storage_image(layout::general)),
 #endif
 #endif
 			push_constant_binding_data{ shader_type::all, 0, sizeof(pass2x_push_constants) }
@@ -437,8 +465,9 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 #if STATS_ENABLED
             descriptor_binding(3, 1, mHeatMapImageView->as_storage_image(layout::general)),
 #endif
+			descriptor_binding(4, 0, mBigDataset->as_storage_buffer()),
 #if PX_FILL_LOCAL_FB && SEPARATE_PATCH_TILE_ASSIGNMENT_PASS
-			descriptor_binding(4, 0, mTilePatchesBuffer->as_storage_buffer()),
+			descriptor_binding(5, 0, mTilePatchesBuffer->as_storage_buffer()),
 #endif
 			push_constant_binding_data{ shader_type::all, 0, sizeof(pass3_push_constants) }
 		);
@@ -552,6 +581,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 				descriptor_binding(3, 0, mObjectDataBuffer->as_storage_buffer()),
 				descriptor_binding(3, 1, mIndirectPxFillParamsBuffer->as_storage_buffer()),
 				descriptor_binding(3, 2, mIndirectPxFillCountBuffer->as_storage_buffer()),
+				descriptor_binding(4, 0, mBigDataset->as_storage_buffer()),
 			    // All possible other bindings:
 				std::move(args)...
 		);
@@ -671,6 +701,11 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 			|| pot == parametric_object_type::CurtainFiberCurves;
 	}
 
+	bool is_sh_brain(parametric_object_type pot)
+	{
+		return pot == parametric_object_type::SHBrain;
+	}
+
 	void fill_object_data_buffer()
 	{
 		using namespace avk;
@@ -678,6 +713,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 		mObjectData.resize(MAX_OBJECTS, object_data{});
 		mKnitYarnObjectDataIndices.clear();
 		std::vector<object_data> knitYarnSavedForLater;
+		std::vector<object_data> shBrainSavedForLater;
 
 		uint32_t i = 0; 
 	    for (const auto& po : mParametricObjects) {
@@ -689,6 +725,11 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
             tmp.mParams = po.uv_param_ranges();
 			tmp.mCurveIndex = po.curve_index();
 			tmp.mDetailEvalDims = po.eval_dims();
+			if (tmp.mDetailEvalDims.x > 8 || tmp.mDetailEvalDims.y > 4) {
+				LOG_WARNING(std::format("Eval dimensions higher than 8x4 are not supported (due to to pass1_init_patches.comp's implementation). The dimensions specified for {} are {}x{}.", po.name(), tmp.mDetailEvalDims[0], tmp.mDetailEvalDims[1]));
+				tmp.mDetailEvalDims.x = std::clamp(tmp.mDetailEvalDims.x, 1u, 8u);
+				tmp.mDetailEvalDims.x = std::clamp(tmp.mDetailEvalDims.x, 1u, 4u);
+			}
             tmp.mTransformationMatrix = po.transformation_matrix();
 			tmp.mMaterialIndex = po.material_index();
 			tmp.mUseAdaptiveDetail = mAdaptivePxFill ? 1 : 0;
@@ -704,12 +745,15 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 				tmp.mLodAndRenderSettings.z *= 0.5f;
 			}
 
-			if (!is_knit_yarn(po.param_obj_type())) {
-				mObjectData[i] = tmp;
-				++i;
+			if (is_knit_yarn(po.param_obj_type())) {
+				knitYarnSavedForLater.push_back(tmp);
+			}
+			else if (is_sh_brain(po.param_obj_type())) {
+				shBrainSavedForLater.push_back(tmp);
 			}
 			else {
-				knitYarnSavedForLater.push_back(tmp);
+				mObjectData[i] = tmp;
+				++i;
 			}
         }
 
@@ -720,6 +764,16 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 			mKnitYarnObjectDataIndices.push_back(i);
 			++i;
 		}
+
+		mNumEnabledKnitYarnObjects = i - mNumEnabledObjects;
+
+		for (const auto& shb : shBrainSavedForLater) {
+			mObjectData[i] = shb;
+			mShBrainObjectDataIndices.push_back(i);
+			++i;
+		}
+
+		mNumEnabledShBrainObjets = i - mNumEnabledKnitYarnObjects;
 
 		// Submit:
 		const auto currentFrameId = context().main_window()->current_frame();
@@ -918,6 +972,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 
 		create_buffers();
 		load_sponza_and_terrain();
+		load_sh_brain_dataset();
 
 		// Define formats for the framebuffer attachments:
         constexpr auto attachmentFormats = make_array<vk::Format>(vk::Format::eB8G8R8A8Unorm, vk::Format::eD32Sfloat);
@@ -1134,8 +1189,8 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 		mOrbitCam.set_translation(camPos);
 		mOrbitCam.look_at(glm::vec3{0.0f});
 		mOrbitCam.set_pivot_distance(glm::length(mOrbitCam.translation()));
-		mOrbitCam.set_perspective_projection(glm::radians(45.0f), context().main_window()->aspect_ratio(), 0.15f, 100.0f);
-		mQuakeCam.set_perspective_projection(glm::radians(45.0f), context().main_window()->aspect_ratio(), 0.15f, 100.0f);
+		mOrbitCam.set_perspective_projection(glm::radians(45.0f), context().main_window()->aspect_ratio(), 1.0f, 60000.0f);
+		mQuakeCam.set_perspective_projection(glm::radians(45.0f), context().main_window()->aspect_ratio(), 1.0f, 60000.0f);
 		current_composition()->add_element(mOrbitCam);
 		current_composition()->add_element(mQuakeCam);
 		mQuakeCam.disable();
@@ -1653,11 +1708,12 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
                 command::bind_descriptors(mPatchLodComputePipe->layout(), mDescriptorCache->get_or_create_descriptor_sets({
 	                descriptor_binding(3, 0, (*ping)->as_storage_buffer()),
 	                descriptor_binding(3, 1, (*pong)->as_storage_buffer()),
-	                descriptor_binding(3, 2, mPatchLodCountBuffer->as_storage_buffer())
+	                descriptor_binding(3, 2, mPatchLodCountBuffer->as_storage_buffer()),
+					descriptor_binding(4, 0, mBigDataset->as_storage_buffer())
 #if DRAW_PATCH_EVAL_DEBUG_VIS
-					, descriptor_binding(4, 0, mCombinedAttachmentView->as_storage_image(layout::general))
+					, descriptor_binding(5, 0, mCombinedAttachmentView->as_storage_image(layout::general))
 #if STATS_ENABLED
-					, descriptor_binding(4, 1, mHeatMapImageView->as_storage_image(layout::general))
+					, descriptor_binding(5, 1, mHeatMapImageView->as_storage_image(layout::general))
 #endif
 #endif
                 })),
@@ -1728,7 +1784,31 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 						1u
 					)
     			);
+			}),
+
+			// Initialize brain scan SH glyphs (they need special treatment):
+			command::many_for_each(mShBrainObjectDataIndices, [&, this] (auto shBrainIndex) {
+				return command::gather(
+					command::bind_pipeline(mInitShBrainComputePipe.as_reference()),
+					command::bind_descriptors(mInitShBrainComputePipe->layout(), mDescriptorCache->get_or_create_descriptor_sets({
+						descriptor_binding(0, 0, mFrameDataBuffers[inFlightIndex]), 
+						descriptor_binding(1, 0, mCountersSsbo->as_storage_buffer()),
+						descriptor_binding(2, 0, mObjectDataBuffer->as_storage_buffer()),
+						descriptor_binding(2, 1, mIndirectPxFillParamsBuffer->as_storage_buffer()),
+						descriptor_binding(2, 2, mIndirectPxFillCountBuffer->as_storage_buffer()),
+						descriptor_binding(3, 0, (*firstPing)->as_storage_buffer()),
+						descriptor_binding(3, 1, (*finalPong)->as_storage_buffer()),
+						descriptor_binding(3, 2, mPatchLodCountBuffer->as_storage_buffer())
+					})),
+					command::push_constants(mInitShBrainComputePipe->layout(), uint32_t{ shBrainIndex }),
+					command::dispatch( 
+						mObjectData[shBrainIndex].mDetailEvalDims[2] * mObjectData[shBrainIndex].mDetailEvalDims[3], 
+						1u, 
+						1u
+					)
+    			);
 			})
+
 		);
 	}
 
@@ -1933,7 +2013,8 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 			        descriptor_binding(2, 0, mCountersSsbo->as_storage_buffer()),
 				    descriptor_binding(3, 0, mObjectDataBuffer->as_storage_buffer()),
 					descriptor_binding(3, 1, mIndirectPxFillParamsBuffer->as_storage_buffer()),
-				    descriptor_binding(3, 2, mIndirectPxFillCountBuffer->as_storage_buffer())
+				    descriptor_binding(3, 2, mIndirectPxFillCountBuffer->as_storage_buffer()),
+					descriptor_binding(4, 0, mBigDataset->as_storage_buffer())
 				})),
 
 				command::push_constants(tessPipePxFillSupersampledToBeUsed->layout(), patch_into_tess_push_constants{ mConstOuterTessLevel, mConstInnerTessLevel, 3 * MAX_INDIRECT_DISPATCHES }),
@@ -1969,7 +2050,8 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 			        descriptor_binding(2, 0, mCountersSsbo->as_storage_buffer()),
 				    descriptor_binding(3, 0, mObjectDataBuffer->as_storage_buffer()),
 					descriptor_binding(3, 1, mIndirectPxFillParamsBuffer->as_storage_buffer()),
-				    descriptor_binding(3, 2, mIndirectPxFillCountBuffer->as_storage_buffer())
+				    descriptor_binding(3, 2, mIndirectPxFillCountBuffer->as_storage_buffer()),
+					descriptor_binding(4, 0, mBigDataset->as_storage_buffer())
 				})),
 					
 				command::push_constants(tessPipePxFillNoaaToBeUsed->layout(), patch_into_tess_push_constants{ mConstOuterTessLevel, mConstInnerTessLevel, 0 }),
@@ -1990,7 +2072,8 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 			        descriptor_binding(2, 0, mCountersSsbo->as_storage_buffer()),
 				    descriptor_binding(3, 0, mObjectDataBuffer->as_storage_buffer()),
 					descriptor_binding(3, 1, mIndirectPxFillParamsBuffer->as_storage_buffer()),
-				    descriptor_binding(3, 2, mIndirectPxFillCountBuffer->as_storage_buffer())
+				    descriptor_binding(3, 2, mIndirectPxFillCountBuffer->as_storage_buffer()),
+					descriptor_binding(4, 0, mBigDataset->as_storage_buffer())
 				})),
 					
 				command::push_constants(tessPipePxFillMultisampledToBeUsed->layout(), patch_into_tess_push_constants{ mConstOuterTessLevel, mConstInnerTessLevel, 1 * MAX_INDIRECT_DISPATCHES }),
@@ -2073,8 +2156,9 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 #if STATS_ENABLED
                     , descriptor_binding(3, 1, mHeatMapImageView->as_storage_image(layout::general))
 #endif
+					, descriptor_binding(4, 0, mBigDataset->as_storage_buffer())
 #if PX_FILL_LOCAL_FB && SEPARATE_PATCH_TILE_ASSIGNMENT_PASS
-					, descriptor_binding(4, 0, mTilePatchesBuffer->as_storage_buffer())
+					, descriptor_binding(5, 0, mTilePatchesBuffer->as_storage_buffer())
 #endif
 				})),
 
@@ -2203,6 +2287,7 @@ private: // v== Member variables ==v
 
 	avk::compute_pipeline mInitPatchesComputePipe;
 	avk::compute_pipeline mInitKnitYarnComputePipe;
+	avk::compute_pipeline mInitShBrainComputePipe;
 	avk::compute_pipeline mPatchLodComputePipe;
 	avk::compute_pipeline mPxFillComputePipe;
 #if PX_FILL_LOCAL_FB && SEPARATE_PATCH_TILE_ASSIGNMENT_PASS
@@ -2219,7 +2304,10 @@ private: // v== Member variables ==v
 	std::vector<bool> mParametricObjectsVisibilitiesSaved;
 	std::vector<object_data> mObjectData;
 	uint32_t mNumEnabledObjects;
+	uint32_t mNumEnabledKnitYarnObjects;
+	uint32_t mNumEnabledShBrainObjets;
 	std::vector<uint32_t> mKnitYarnObjectDataIndices;
+	std::vector<uint32_t> mShBrainObjectDataIndices;
 
 	// UI-controllable parameters:
     //std::optional<bool> mUseNvPipeline     = {};
@@ -2350,12 +2438,15 @@ private: // v== Member variables ==v
 	std::unordered_map<std::string, avk::image_sampler> mPreviewImageSamplers;
 	std::optional<avk::semaphore> mAdditionalSemaphoreDependency;
 
+	avk::buffer mBigDataset;
+	uint32_t mDatasetSize = 0;
+
 }; // vk_parametric_curves_app
 
 
 int main() // <== Starting point ==
 {
-		float clearDepth = 1.0;
+	float clearDepth = 1.0;
 	glm::vec4  clearColor = glm::vec4(0.0);
 	uint64_t depthEncoded = depth_to_ui64(clearDepth);
 	uint64_t colorEncoded = color_to_ui64(clearColor);

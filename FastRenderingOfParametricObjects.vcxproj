@@ -15,6 +15,7 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="host_code\big_dataset.cpp" />
     <ClCompile Include="host_code\ImGuizmo.cpp" />
     <ClCompile Include="host_code\main.cpp" />
     <ClCompile Include="precompiled_headers\cg_stdafx.cpp">
@@ -24,6 +25,7 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="host_code\big_dataset.hpp" />
     <ClInclude Include="host_code\helpers.hpp" />
     <ClInclude Include="host_code\ImGuizmo.h" />
     <ClInclude Include="host_code\types.hpp" />
@@ -43,6 +45,7 @@
     <None Include="shaders\copy_to_combined_attachment.comp" />
     <None Include="shaders\pass1_init_knityarn.comp" />
     <None Include="shaders\pass1_init_patches.comp" />
+    <None Include="shaders\pass1_init_shbrain.comp" />
     <None Include="shaders\pass2x_patch_lod.comp" />
     <None Include="shaders\pass3pre_select_tile_patches.comp" />
     <None Include="shaders\pass3_px_fill.comp" />
@@ -54,9 +57,6 @@
     <None Include="shaders\simple.vert" />
     <None Include="shaders\ss_resolve.frag" />
     <None Include="shaders\ss_resolve.vert" />
-    <None Include="shaders\standalone-tess\patch_eval.tese" />
-    <None Include="shaders\standalone-tess\patch_init.vert" />
-    <None Include="shaders\standalone-tess\patch_resolution.tesc" />
     <None Include="shader_includes\combined_attachment_shared.glsl" />
     <None Include="shader_includes\common_ubo.glsl" />
     <None Include="shader_includes\material_handling.glsl" />

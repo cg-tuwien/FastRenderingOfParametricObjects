@@ -129,6 +129,10 @@ vec3 shade(int matIndex, vec3 albedo, vec3 shadingUserParams, vec3 normalWS, vec
         //vec3 intersection = v_in.positionWS_untranslated; 
         vec3 posWS = shadingUserParams;
 
+        // Shade as if it was located in the center:
+        vec3 bucket = floor((posWS + vec3(SH_BRAIN_ELEMENT_OFFSET * 0.5))  / vec3(SH_BRAIN_ELEMENT_OFFSET));
+        posWS -= bucket * vec3(SH_BRAIN_ELEMENT_OFFSET);
+
         vec3 intersection = posWS; // TODO: Apply step function to get rid of translation
         vec3 normal = normalize(normalWS);
         vec3 outgoing = normalize(ubo.mCameraTransform[3].xyz - intersection);

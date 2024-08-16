@@ -25,6 +25,7 @@ layout(set = 2, binding = 0) buffer SsboCounters { uint mCounters[4]; } uCounter
 layout(set = 3, binding = 0) buffer ObjectData   { object_data mElements[]; }  uObjectData;
 layout(set = 3, binding = 1) buffer PxFillParams { px_fill_data mElements[]; } uPxFillParams; 
 layout(set = 3, binding = 2) buffer PxFillCount  { VkDrawIndirectCommand mDrawParams[]; } uPxFillCounts;
+layout(set = 4, binding = 0) buffer BigDataset { dataset_sh_coeffs mEntries[]; } uBigDataset; 
 
 #include "../../shader_includes/parametric_functions/shape_functions.glsl"
 

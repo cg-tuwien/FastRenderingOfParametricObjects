@@ -61,3 +61,9 @@
 
 // Draws points and lines, visualizing how pass2x evaluates the split decisions
 #define DRAW_PATCH_EVAL_DEBUG_VIS 0
+
+// Data size of the big brain dataset to be loaded (note that only even numbers will be properly shaded (sorry!), i.e., e.g.: 10x10, 100x100, or the maximum of 140x140)
+#define SH_BRAIN_DATA_SIZE_X      140
+#define SH_BRAIN_DATA_SIZE_Y      140
+#define SH_BRAIN_ELEMENT_SCALE      0.5
+#define SH_BRAIN_ELEMENT_OFFSET    15.0

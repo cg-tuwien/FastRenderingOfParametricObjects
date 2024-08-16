@@ -56,14 +56,15 @@ layout(set = 2, binding = 2) buffer PxFillCount  { VkDrawIndirectCommand mDrawPa
 layout(set = 3, binding = 0) buffer PatchLodPing { px_fill_data mElements[]; } uPatchLodPing; 
 layout(set = 3, binding = 1) buffer PatchLodPong { px_fill_data mElements[]; } uPatchLodPong; 
 layout(set = 3, binding = 2) buffer PatchLodCount { uvec4 mDispatchCounts[]; } uPatchLodCount; 
+layout(set = 4, binding = 0) buffer BigDataset { dataset_sh_coeffs mEntries[]; } uBigDataset; 
 
 #include "../shader_includes/parametric_functions/shape_functions.glsl"
 #include "../shader_includes/parametric_curve_helpers.glsl"
 
 #if DRAW_PATCH_EVAL_DEBUG_VIS
-layout(set = 4, binding = 0, r64ui) uniform restrict volatile u64image2D uCombinedAttachment;
+layout(set = 5, binding = 0, r64ui) uniform restrict volatile u64image2D uCombinedAttachment;
 #if STATS_ENABLED
-layout(set = 4, binding = 1, r32ui) uniform restrict uimage2D uHeatmapImage;
+layout(set = 5, binding = 1, r32ui) uniform restrict uimage2D uHeatmapImage;
 #endif
 #include "../shader_includes/combined_attachment_shared.glsl"
 

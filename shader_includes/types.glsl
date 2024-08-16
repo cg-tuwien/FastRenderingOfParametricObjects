@@ -85,3 +85,8 @@ struct vertex_buffers_offsets_sizes
     uint mIndicesOffset;
     uint mIndicesSize;
 };
+
+struct dataset_sh_coeffs
+{
+    float mCoeffs[92];
+};
