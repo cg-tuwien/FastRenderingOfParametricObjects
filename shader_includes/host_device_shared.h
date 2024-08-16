@@ -26,7 +26,7 @@
 #define MAX_INDICES					134217728
 
 // Whether statistics are enabled at all
-#define STATS_ENABLED               0
+#define STATS_ENABLED               1
 
 // Enable/disable local rasterization into shared memory in px fill shaders:
 #define SHARED_MEM_LOCAL_RASTER     0
@@ -65,5 +65,4 @@
 // Data size of the big brain dataset to be loaded (note that only even numbers will be properly shaded (sorry!), i.e., e.g.: 10x10, 100x100, or the maximum of 140x140)
 #define SH_BRAIN_DATA_SIZE_X      140
 #define SH_BRAIN_DATA_SIZE_Y      140
-#define SH_BRAIN_ELEMENT_SCALE      0.5
-#define SH_BRAIN_ELEMENT_OFFSET    15.0
+#define SH_BRAIN_ELEMENT_OFFSET    25.0

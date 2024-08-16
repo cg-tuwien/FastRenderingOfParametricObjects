@@ -2446,7 +2446,6 @@ vec3 get_sh_glyph(float u, float v, uvec3 userData)
         for (int i = 0; i < sh_count; i++) {
             f += out_shs[i] * coeffs.mCoeffs[i];
         }
-        f *= SH_BRAIN_ELEMENT_SCALE;
     }
     else {
         for (int i = 0; i < sh_count; i++) {

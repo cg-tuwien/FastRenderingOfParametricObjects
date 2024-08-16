@@ -282,6 +282,7 @@ void main()
 	const vec4  lodAndRenderSettings = uObjectData.mElements[objectId].mLodAndRenderSettings;
 	const float t_u                  = lodAndRenderSettings.z;
 	const float t_v                  = t_u; // same same
+//	debugPrintfEXT("t_u=%f, t_v=%f", t_u, t_v);
 
 	// Do we have to split? Or are we already good to go (to px fill)?
 

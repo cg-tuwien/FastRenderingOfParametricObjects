@@ -20,7 +20,9 @@
 #include "ImGuizmo.h"
 #include "big_dataset.hpp"
 
-#define NUM_TIMESTAMP_QUERIES 5
+#define NUM_TIMESTAMP_QUERIES 8
+
+#define NUM_DIFFERENT_RENDER_VARIANTS 4
 
 // Sample count possible values:
 // vk::SampleCountFlagBits::e1
@@ -30,7 +32,7 @@
 // vk::SampleCountFlagBits::e16
 // vk::SampleCountFlagBits::e32
 // vk::SampleCountFlagBits::e64
-#define SAMPLE_COUNT vk::SampleCountFlagBits::e4
+#define SAMPLE_COUNT vk::SampleCountFlagBits::e8
 
 #define SSAA_ENABLED 1
 #define SSAA_FACTOR  glm::uvec2(2, 2)
@@ -712,6 +714,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 
 		mObjectData.resize(MAX_OBJECTS, object_data{});
 		mKnitYarnObjectDataIndices.clear();
+		mShBrainObjectDataIndices.clear();
 		std::vector<object_data> knitYarnSavedForLater;
 		std::vector<object_data> shBrainSavedForLater;
 
@@ -765,7 +768,8 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 			++i;
 		}
 
-		mNumEnabledKnitYarnObjects = i - mNumEnabledObjects;
+		const auto numEnabledKnitYarnsIndex = i;
+		mNumEnabledKnitYarnObjects = numEnabledKnitYarnsIndex - mNumEnabledObjects;
 
 		for (const auto& shb : shBrainSavedForLater) {
 			mObjectData[i] = shb;
@@ -773,7 +777,8 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 			++i;
 		}
 
-		mNumEnabledShBrainObjets = i - mNumEnabledKnitYarnObjects;
+		const auto numEnabledShBrainsIndex = i;
+		mNumEnabledShBrainObjects = numEnabledShBrainsIndex - numEnabledKnitYarnsIndex;
 
 		// Submit:
 		const auto currentFrameId = context().main_window()->current_frame();
@@ -1044,11 +1049,10 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 		);
 #endif
 
-		constexpr float numDifferentRenderVariants = 4;
 		// Create buffers for the indirect draw calls of the parametric pipelines:
         mIndirectPxFillParamsBuffer = context().create_buffer(
 			memory_usage::device, {}, 
-			storage_buffer_meta::create_from_size(numDifferentRenderVariants * MAX_INDIRECT_DISPATCHES * sizeof(px_fill_data))
+			storage_buffer_meta::create_from_size(NUM_DIFFERENT_RENDER_VARIANTS * MAX_INDIRECT_DISPATCHES * sizeof(px_fill_data))
 		);
 		// ATTENTION: We're going to use the COUNT buffer for both, the compute-based pixel fill method, and also for
 		//            the "patch into tessellation" method. For the latter, we need a full VkDrawIndirectCommand structure,
@@ -1060,9 +1064,9 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 #else 
 			{},
 #endif
-			// NOTE: We're creating numDifferentRenderVariants-many such  vvv  entries, because: [0] = Tess. noAA, [1] = Tess. SS, [2] = point rendered
-			indirect_buffer_meta::create_from_num_elements(numDifferentRenderVariants, sizeof(VkDrawIndirectCommand)),
-			storage_buffer_meta::create_from_size(                                     sizeof(VkDrawIndirectCommand))
+			// NOTE: We're creating NUM_DIFFERENT_RENDER_VARIANTS-many such  vvv  entries, because: [0] = Tess. noAA, [1] = Tess. SS, [2] = point rendered
+			indirect_buffer_meta::create_from_num_elements(NUM_DIFFERENT_RENDER_VARIANTS, sizeof(VkDrawIndirectCommand)),
+			storage_buffer_meta::create_from_size(                                        sizeof(VkDrawIndirectCommand))
 		);
 
 		// PARAMETRIC PIPES:
@@ -1229,11 +1233,13 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 					auto props = context().physical_device().getProperties();
 					return static_cast<double>(props.limits.timestampPeriod);
 				}),
-				lastFrameDurationMs = 0.0,
 				lastClearDuration = 0.0,
-				lastPatchLodDuration = 0.0,
+				lastInitDuration = 0.0,
+				lastLodStageDuration = 0.0,
+				last3dModelDuration = 0.0,
+				lastTessRenderDuration = 0.0,
+				lastPointRenderDuration = 0.0,
 				lastPatchToTileDuration = 0.0,
-				lastRenderduration = 0.0,
 				lastBeginToRenderEndDuration = 0.0
 			]() mutable {
 				if (mMeasurementInProgress) {
@@ -1258,18 +1264,22 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 
 #if STATS_ENABLED
 				// Timestamps are gathered regardless of pipeline stats:
-			    lastFrameDurationMs =          glm::mix(lastFrameDurationMs         , mLastFrameDuration             * 1e-6 * timestampPeriod, 0.05);
-				lastClearDuration =            glm::mix(lastClearDuration           , mLastClearDuration             * 1e-6 * timestampPeriod, 0.05);
-				lastPatchLodDuration =         glm::mix(lastPatchLodDuration        , mLastPatchLodDuration          * 1e-6 * timestampPeriod, 0.05);
-				lastPatchToTileDuration =      glm::mix(lastPatchToTileDuration     , mLastPatchToTileDuration       * 1e-6 * timestampPeriod, 0.05);
-				lastRenderduration =           glm::mix(lastRenderduration          , mLastRenderDuration            * 1e-6 * timestampPeriod, 0.05);
 				lastBeginToRenderEndDuration = glm::mix(lastBeginToRenderEndDuration, mLastBeginToParametricDuration * 1e-6 * timestampPeriod, 0.05);
-				ImGui::TextColored(ImVec4(.8f, .1f, .6f, 1.f), "Total frame time       : %.3lf ms (timer queries)", lastFrameDurationMs);
-				ImGui::TextColored(ImVec4(.8f, .1f, .6f, 1.f), "Clearing took          : %.3lf ms (timer queries)", lastClearDuration);
-				ImGui::TextColored(ImVec4(.8f, .1f, .6f, 1.f), "Patch LOD step took    : %.3lf ms (timer queries)", lastPatchLodDuration);
-				ImGui::TextColored(ImVec4(.8f, .1f, .6f, 1.f), "Patch->tile step took  : %.3lf ms (timer queries)", lastPatchToTileDuration);
-				ImGui::TextColored(ImVec4(.8f, .1f, .6f, 1.f), "Rendering took         : %.3lf ms (timer queries)", lastRenderduration);
-				ImGui::TextColored(ImVec4(.8f, .1f, .6f, 1.f), "Frame begin->render end: %.3lf ms (timer queries)", lastBeginToRenderEndDuration);
+				lastClearDuration =            glm::mix(lastClearDuration           , mLastClearDuration             * 1e-6 * timestampPeriod, 0.05);
+				lastInitDuration =             glm::mix(lastInitDuration            , mLastInitDuration              * 1e-6 * timestampPeriod, 0.05);
+				lastLodStageDuration =         glm::mix(lastLodStageDuration        , mLastLodStageDuration          * 1e-6 * timestampPeriod, 0.05);
+				last3dModelDuration =          glm::mix(last3dModelDuration         , mLast3dModelsRenderDuration    * 1e-6 * timestampPeriod, 0.05);
+				lastTessRenderDuration =       glm::mix(lastTessRenderDuration      , mLastTessRenderDuration        * 1e-6 * timestampPeriod, 0.05);
+				lastPointRenderDuration =      glm::mix(lastPointRenderDuration     , mLastPointRenderDuration       * 1e-6 * timestampPeriod, 0.05);
+				lastPatchToTileDuration =      glm::mix(lastPatchToTileDuration     , mLastPatchToTileDuration       * 1e-6 * timestampPeriod, 0.05);
+				ImGui::TextColored(ImVec4(.8f, .1f, .6f, 1.f), "Total frame time       : %.3lf ms (timer queries)", lastBeginToRenderEndDuration);
+				ImGui::TextColored(ImVec4(.8f, .1f, .6f, 1.f), "Clearing               : %.3lf ms (timer queries)", lastClearDuration);
+				ImGui::TextColored(ImVec4(.8f, .1f, .6f, 1.f), "Initialization stage   : %.3lf ms (timer queries)", lastInitDuration);
+				ImGui::TextColored(ImVec4(.8f, .1f, .6f, 1.f), "LOD stage              : %.3lf ms (timer queries)", lastLodStageDuration);
+				ImGui::TextColored(ImVec4(.8f, .1f, .6f, 1.f), "Rendering Sponza       : %.3lf ms (timer queries)", last3dModelDuration);
+				ImGui::TextColored(ImVec4(.8f, .1f, .6f, 1.f), "Tess.-based rendering  : %.3lf ms (timer queries)", lastTessRenderDuration);
+				ImGui::TextColored(ImVec4(.8f, .1f, .6f, 1.f), "Point-based rendering  : %.3lf ms (timer queries)", lastPointRenderDuration);
+				ImGui::TextColored(ImVec4(.8f, .1f, .6f, 1.f), "  -> thereof tile sel. : %.3lf ms (timer queries)", lastPatchToTileDuration);
 
 				// ... pipeline statistics only if the option is ticked:
 			    if (ImGui::Checkbox("Gather pipeline stats.", &mGatherPipelineStats)) {
@@ -1395,6 +1405,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 					ImGui::Text(std::format("{:12L} pixel fill patches spawned[0]", mNumPxFillPatchesCreated[0]).c_str());
 					ImGui::Text(std::format("{:12L} pixel fill patches spawned[1]", mNumPxFillPatchesCreated[1]).c_str());
 					ImGui::Text(std::format("{:12L} pixel fill patches spawned[2]", mNumPxFillPatchesCreated[2]).c_str());
+					ImGui::Text(std::format("{:12L} pixel fill patches spawned[3]", mNumPxFillPatchesCreated[3]).c_str());
 					ImGui::End();
 				}
 
@@ -1640,8 +1651,8 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 					std::get<float>(mMeasurementFrameCounters[curIdx]) = glm::length(glm::vec3{ mOrbitCam.translation().x, 0.0f, mOrbitCam.translation().z });
 				}
 #if TEST_GATHER_TIMER_QUERIES && STATS_ENABLED
-				std::get<2>(mMeasurementFrameCounters[curIdx]) += mLastBeginToParametricDuration - mLastClearDuration;
-				std::get<3>(mMeasurementFrameCounters[curIdx]) += mLastPatchLodDuration;
+				//std::get<2>(mMeasurementFrameCounters[curIdx]) += mLastBeginToParametricDuration - mLastClearDuration; // <----- TODO after timer queries rework
+				//std::get<3>(mMeasurementFrameCounters[curIdx]) += mLastPatchLodDuration;                               // <----- TODO after timer queries rework
 #else
 				std::get<2>(mMeasurementFrameCounters[curIdx]) += mCounterValues[1];
 				//                                                       TODO: Is that   vvv   the right way to handle [0], [1] and [2]?? 
@@ -1866,12 +1877,15 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 			auto timers = mTimestampPool->get_results<uint64_t, NUM_TIMESTAMP_QUERIES>(
 				firstQueryIndex, NUM_TIMESTAMP_QUERIES, vk::QueryResultFlagBits::eWait // => ensure that the results are available
 			);
+
 			mLastClearDuration = timers[1] - timers[0];
-			mLastPatchLodDuration = timers[2] - timers[1];
-			mLastPatchToTileDuration = timers[3] - timers[2];
-			mLastRenderDuration = timers[4] - timers[3];
-			mLastBeginToParametricDuration = timers[4] - timers[0];
-			mLastTimestamp = timers[3];
+			mLastInitDuration = timers[2] - timers[1];
+			mLastLodStageDuration = timers[3] - timers[2];
+			mLast3dModelsRenderDuration = timers[4] - timers[3];
+			mLastTessRenderDuration = timers[5] - timers[4];
+			mLastPatchToTileDuration = timers[6] - timers[5];
+			mLastPointRenderDuration = timers[6] - timers[5]; // Over two timestamp queries
+			mLastBeginToParametricDuration = timers[6] - timers[0];
 
 			if (mGatherPipelineStats) {
                 mPipelineStats = mPipelineStatsPool->get_results<uint64_t, 3>(inFlightIndex, 1, vk::QueryResultFlagBits::e64);
@@ -1880,7 +1894,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 
 		// Read the counter values:
 		if (mGatherPipelineStats) {
-			std::array<VkDrawIndirectCommand, 3> pxFillCountBufferContents;
+			std::array<VkDrawIndirectCommand, NUM_DIFFERENT_RENDER_VARIANTS> pxFillCountBufferContents;
 			std::array<glm::uvec4, MAX_PATCH_SUBDIV_STEPS> patchLodCountBufferContents;
 			context().record_and_submit_with_fence({
 				mCountersSsbo->read_into(mCounterValues.data(), 0),
@@ -1890,6 +1904,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 			mNumPxFillPatchesCreated[0] = pxFillCountBufferContents[0].instanceCount;
 			mNumPxFillPatchesCreated[1] = pxFillCountBufferContents[1].instanceCount;
 			mNumPxFillPatchesCreated[2] = pxFillCountBufferContents[2].instanceCount;
+			mNumPxFillPatchesCreated[3] = pxFillCountBufferContents[3].instanceCount;
 			for (int i = 0; i < patchLodCountBufferContents.size(); ++i) {
 			    mPatchesCreatedPerLevel[i] = patchLodCountBufferContents[i].x;
 			}
@@ -1953,14 +1968,16 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 			initCommands,
 
 			sync::global_memory_barrier(stage::compute_shader + access::memory_write >> stage::compute_shader + access::memory_read),
+#if STATS_ENABLED
+			mTimestampPool->write_timestamp(firstQueryIndex + 2, stage::compute_shader), // measure after init
+#endif
 				
 			// 2) LOD Stage:
             lodStageCommands,
 		
             sync::global_memory_barrier(stage::compute_shader + access::memory_write >> stage::all_graphics + access::memory_read),
 #if STATS_ENABLED
-			mTimestampPool->write_timestamp(firstQueryIndex + 2, stage::compute_shader),
-			mTimestampPool->write_timestamp(firstQueryIndex + 3, stage::compute_shader),
+			mTimestampPool->write_timestamp(firstQueryIndex + 3, stage::compute_shader), // measure after LOD stage
 #endif
 
 			// 3) Render patches:
@@ -1976,9 +1993,9 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 							descriptor_binding(0, 1, as_combined_image_samplers(mImageSamplers, layout::shader_read_only_optimal)),
 							descriptor_binding(0, 2, mMaterialBuffer),
 							descriptor_binding(1, 0, mCombinedAttachmentView->as_storage_image(layout::general)),
-		#if STATS_ENABLED
+#if STATS_ENABLED
 							descriptor_binding(1, 1, mHeatMapImageView->as_storage_image(layout::general)),
-		#endif
+#endif
 							descriptor_binding(2, 0, mCountersSsbo->as_storage_buffer())
 						})),
 						command::many_n_times(static_cast<int>(mDrawCalls.size()), [this](int i) {
@@ -1999,6 +2016,10 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 						} )
 					); }
 				),
+
+#if STATS_ENABLED
+				mTimestampPool->write_timestamp(firstQueryIndex + 4, stage::color_attachment_output), // measure after rendering sponza
+#endif
 
 // 3.2) Render tessellated patches with SS
                 command::bind_pipeline(tessPipePxFillSupersampledToBeUsed.as_reference()),
@@ -2037,7 +2058,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 				
 				command::next_subpass(),
 
-				// 3.1) Render tessellated patches with noAA
+				// 3.1) Render tessellated patches with 8xMS with sample shading (i.e., actually 8xSS)
                 command::bind_pipeline(tessPipePxFillNoaaToBeUsed.as_reference()),
 				command::bind_descriptors(tessPipePxFillNoaaToBeUsed->layout(), mDescriptorCache->get_or_create_descriptor_sets({
 					descriptor_binding(0, 0, mFrameDataBuffers[inFlightIndex]),
@@ -2080,8 +2101,9 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 				command::draw_vertices_indirect(mIndirectPxFillCountBuffer.as_reference(), sizeof(VkDrawIndirectCommand), sizeof(VkDrawIndirectCommand), 1u) // <-- Exactly ONE draw (but potentially a lot of instances), use the one at [1]
 
 			)),
+
 #if STATS_ENABLED
-			mTimestampPool->write_timestamp(firstQueryIndex + 4, stage::fragment_shader),
+			mTimestampPool->write_timestamp(firstQueryIndex + 5, stage::color_attachment_output), // measure after rendering with tessellation
 #endif
 			// 3.4) Color attachment has been resolved into non-super sampled image
 			// 3.5) TODO: Copy resolved (color + depth) --into--> combined attachment 
@@ -2099,16 +2121,6 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 			sync::global_memory_barrier(stage::compute_shader + access::memory_write >> stage::compute_shader + access::memory_read),
 
 			// 3.6) Perform point rendering into combined attachment 
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -2139,7 +2151,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 				sync::global_memory_barrier(stage::compute_shader + access::memory_write >> stage::compute_shader + access::memory_read),
 #endif
 #if STATS_ENABLED
-				mTimestampPool->write_timestamp(firstQueryIndex + 3, stage::compute_shader),
+				mTimestampPool->write_timestamp(firstQueryIndex + 6, stage::compute_shader), // measure after patch to tile step
 #endif
 
 				// 3rd pass compute shader: px fill PER DRAW PACKAGE
@@ -2171,24 +2183,13 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 
 #if PX_FILL_LOCAL_FB
 				command::dispatch((resolution.x + PX_FILL_LOCAL_FB_TILE_SIZE_X - 1) / PX_FILL_LOCAL_FB_TILE_SIZE_X, (resolution.y + PX_FILL_LOCAL_FB_TILE_SIZE_Y - 1) / PX_FILL_LOCAL_FB_TILE_SIZE_Y, 1),
-				//command::dispatch(25, 25, 1)
 #else
 				command::dispatch_indirect(mIndirectPxFillCountBuffer, sizeof(VkDrawIndirectCommand::vertexCount)), // => in order to use the instanceCount!
 #endif
 
 #if STATS_ENABLED
-				mTimestampPool->write_timestamp(firstQueryIndex + 4, stage::compute_shader),
+			mTimestampPool->write_timestamp(firstQueryIndex + 7, stage::compute_shader), // measure after point rendering
 #endif
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -2305,7 +2306,7 @@ private: // v== Member variables ==v
 	std::vector<object_data> mObjectData;
 	uint32_t mNumEnabledObjects;
 	uint32_t mNumEnabledKnitYarnObjects;
-	uint32_t mNumEnabledShBrainObjets;
+	uint32_t mNumEnabledShBrainObjects;
 	std::vector<uint32_t> mKnitYarnObjectDataIndices;
 	std::vector<uint32_t> mShBrainObjectDataIndices;
 
@@ -2326,11 +2327,13 @@ private: // v== Member variables ==v
 
 #if STATS_ENABLED
     avk::query_pool mTimestampPool;
-	uint64_t mLastTimestamp = 0;
 	uint64_t mLastClearDuration = 0;
-	uint64_t mLastPatchLodDuration = 0;
+	uint64_t mLastInitDuration = 0;
+	uint64_t mLastLodStageDuration = 0;
+	uint64_t mLast3dModelsRenderDuration = 0;
+	uint64_t mLastTessRenderDuration = 0;
 	uint64_t mLastPatchToTileDuration = 0;
-	uint64_t mLastRenderDuration = 0;
+	uint64_t mLastPointRenderDuration = 0;
 	uint64_t mLastBeginToParametricDuration = 0;
 	uint64_t mLastFrameDuration = 0;
 
@@ -2395,12 +2398,12 @@ private: // v== Member variables ==v
 	avk::buffer mCountersSsbo;
 	std::array<uint32_t, 4> mCounterValues;
 	std::array<uint32_t, MAX_PATCH_SUBDIV_STEPS> mPatchesCreatedPerLevel;
-	std::array<uint32_t, 3> mNumPxFillPatchesCreated;
+	std::array<uint32_t, NUM_DIFFERENT_RENDER_VARIANTS> mNumPxFillPatchesCreated;
 
 	// Other, global settings, stored in common UBO:
     bool m2ndPassEnabled = false;
     bool mAdaptivePxFill = false;
-    bool mUseMaxPatchResolutionDuringPxFill = false;
+    bool mUseMaxPatchResolutionDuringPxFill = true;
 
 	// Buffers for vertex pipelines:
 	avk::buffer mPositionsBuffer;
