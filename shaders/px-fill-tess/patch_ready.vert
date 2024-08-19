@@ -49,16 +49,26 @@ void main()
 //	if (pushConstants.mPxFillParamsBufferOffset != 0)
 //        debugPrintfEXT("%u", pxFillId);
 	vert_out.mPxFillId = pxFillId;
-	
+
+	const uint objectId  = uPxFillParams.mElements[pxFillId].mObjectIdUserData[0];
+	const vec2 epsilons  = uObjectData.mElements[objectId].mLodAndRenderSettings.xy;
+//	const float EPSILON = 0.005; // Epsilon prevents gaps 
+//	const float EPSILON = -0.01;   // Epsilon prevents gaps 
+
 	// in: 
-	const vec2 paramsFrom = vec2(
+	vec2 paramsFrom = vec2(
 		uPxFillParams.mElements[pxFillId].mParams[0],
 		uPxFillParams.mElements[pxFillId].mParams[2]
 	);
-	const vec2 paramsTo = vec2(
+
+	vec2 paramsTo = vec2(
 		uPxFillParams.mElements[pxFillId].mParams[1],
 		uPxFillParams.mElements[pxFillId].mParams[3]
 	);
+
+	paramsFrom -= vec2(epsilons[0] * (paramsTo.x - paramsFrom.x));
+	paramsTo   += vec2(epsilons[1] * (paramsTo.y - paramsFrom.y));
+	
 	const uint vertexSubId = gl_VertexIndex - 1; // Gotta subtract 1 (see clear_r64_image.comp)
 
 	switch (vertexSubId)

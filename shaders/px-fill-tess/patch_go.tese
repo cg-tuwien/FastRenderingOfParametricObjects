@@ -45,7 +45,7 @@ layout (location = 0) out PerVertexData
 	vec3 positionWS;
 	vec3 normalWS;
 	vec2 texCoords;
-    vec3 shadingUserParams;
+    vec4 shadingUserParams;
 	flat int matIndex;
 	flat vec3 color;
 } eval_out;
@@ -121,7 +121,7 @@ void main()
 	vec3 rawNormalWS           = calculateNormalWS(posWS.xyz, posWS_u.xyz, posWS_v.xyz, curveIndex, userData);
     eval_out.normalWS          = normalize(rawNormalWS); // Note: Not accounting for non-uniform scale
     eval_out.texCoords         = getParamTexCoords(myParams[0], myParams[1], curveIndex, userData, posWS.xyz);
-    eval_out.shadingUserParams = getParamShadingUserParams(myParams[0], myParams[1], curveIndex, userData, posWS.xyz);
+    eval_out.shadingUserParams = getParamShadingUserParams(myParams[0], myParams[1], curveIndex, userData, posWS.xyz, objectId);
     eval_out.matIndex          = matIndex;
 	eval_out.color             = vertexColors[(gl_PrimitiveID + uint(gl_TessCoord.x * 997.0) + uint(gl_TessCoord.y * 131.0)) % MAX_COLORS];
 	gl_Position = posCS;

@@ -68,20 +68,20 @@ void main()
         patch_out.mUserData  = userData;
 
         if (ubo.mUseMaxPatchResolutionDuringPxFill) {
-            const float absoluteMin =  4.0;
+            const float absoluteMin =  8.0;
             const float absoluteMax = 64.0;
             const vec2 screenDists = uPxFillParams.mElements[pxFillId].mScreenDists.xy;
             const float threshold  = uObjectData.mElements[objectId].mLodAndRenderSettings.z;
+            const float outerTess = pushConstants.mConstOuterSubdivLevel;
+            const float innerTess = pushConstants.mConstInnerSubdivLevel;
 
-            const float factorU = screenDists.x / threshold;
-            gl_TessLevelOuter[1] = clamp(pushConstants.mConstOuterSubdivLevel * factorU, absoluteMin, absoluteMax);
-            gl_TessLevelOuter[3] = clamp(pushConstants.mConstOuterSubdivLevel * factorU, absoluteMin, absoluteMax);
-            gl_TessLevelInner[0] = clamp(pushConstants.mConstInnerSubdivLevel * factorU, absoluteMin, absoluteMax);
+            gl_TessLevelOuter[1] = clamp(outerTess * screenDists.x / min(threshold, outerTess), absoluteMin, absoluteMax);
+            gl_TessLevelOuter[3] = clamp(outerTess * screenDists.x / min(threshold, outerTess), absoluteMin, absoluteMax);
+            gl_TessLevelInner[0] = clamp(innerTess * screenDists.x / min(threshold, innerTess), absoluteMin, absoluteMax);
 
-            const float factorV = screenDists.y / threshold;
-            gl_TessLevelOuter[0] = clamp(pushConstants.mConstOuterSubdivLevel * factorV, absoluteMin, absoluteMax);
-            gl_TessLevelOuter[2] = clamp(pushConstants.mConstOuterSubdivLevel * factorV, absoluteMin, absoluteMax);
-            gl_TessLevelInner[1] = clamp(pushConstants.mConstInnerSubdivLevel * factorV, absoluteMin, absoluteMax);
+            gl_TessLevelOuter[0] = clamp(outerTess * screenDists.y / min(threshold, outerTess), absoluteMin, absoluteMax);
+            gl_TessLevelOuter[2] = clamp(outerTess * screenDists.y / min(threshold, outerTess), absoluteMin, absoluteMax);
+            gl_TessLevelInner[1] = clamp(innerTess * screenDists.y / min(threshold, innerTess), absoluteMin, absoluteMax);
         }
         else {
             gl_TessLevelOuter[0] = pushConstants.mConstOuterSubdivLevel;

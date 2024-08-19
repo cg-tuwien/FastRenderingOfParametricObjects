@@ -20,7 +20,7 @@
 #include "ImGuizmo.h"
 #include "big_dataset.hpp"
 
-#define NUM_TIMESTAMP_QUERIES 8
+#define NUM_TIMESTAMP_QUERIES 10
 
 #define NUM_DIFFERENT_RENDER_VARIANTS 4
 
@@ -743,7 +743,12 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 			if (po.how_to_render() == rendering_method::tessellated_rasterized && po.super_sampling_on()) {
 				tmp.mPxFillSetIndex = 3; // handle Tess. Supersampling
 			}
-			tmp.mLodAndRenderSettings = { 1.0f, 1.0f, 84.0f, 1.0f }; // TODO: super sampling properly!
+
+			tmp.mLodAndRenderSettings = { 
+				po.parameters_epsilon()[0], po.parameters_epsilon()[1],
+				po.screen_distance_threshold(),
+				po.sampling_factor()
+			};
 			if (po.super_sampling_on() || po.multi_sampling_on()) {
 				tmp.mLodAndRenderSettings.z *= 0.5f;
 			}
@@ -960,6 +965,73 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 			ImGui::EndTable();
 		}
 		ImGui::End();
+
+		for (auto& po : mParametricObjects) {
+			bool modifying = po.is_modifying();
+			if (modifying) {
+				ImGui::Begin("Mod. Parameters", nullptr, ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoMove);
+				ImGui::SetWindowPos(ImVec2(wndWdth - 300, 302), ImGuiCond_Once);
+				ImGui::SetWindowSize(ImVec2(300, 200), ImGuiCond_Once);
+
+                auto curveIndex = po.curve_index();
+                if (ImGui::Combo("Curve Type", &curveIndex, PARAMETRIC_OBJECT_TYPE_UI_STRING)) {
+                    po.set_curve_index(curveIndex);
+                    updateObjects = true;
+                }
+                auto uParams = po.u_param_range();
+                if (ImGui::DragFloat2("Param u from..to", &uParams[0], 0.1f)) {
+                    po.set_u_param_range(uParams);
+                    updateObjects = true;
+                }
+                auto vParams = po.v_param_range();
+                if (ImGui::DragFloat2("Param v from..to", &vParams[0], 0.1f)) {
+                    po.set_v_param_range(vParams);
+                    updateObjects = true;
+                }
+                auto evalDims = glm::ivec4{po.eval_dims()};
+                if (ImGui::SliderInt2("Eval. dimensions", &evalDims[0], 1, 16)) {
+                    po.set_eval_dims(evalDims);
+                    updateObjects = true;
+                }
+
+				auto t = po.screen_distance_threshold();
+				if (ImGui::SliderFloat("Screen Distance Threshold", &t, 10.0f, 500.0f)) {
+					po.set_screen_distance_threshold(t);
+					updateObjects = true;
+				}
+
+				auto eps = po.parameters_epsilon();
+				if (ImGui::DragFloat2("Parameters Epsilons", &eps[0], 0.001f)) {
+					po.set_parameters_epsilon(eps);
+					updateObjects = true;
+				}
+
+				auto f = po.sampling_factor();
+				if (ImGui::DragFloat("Sampling Factor", &f, 0.01f)) {
+					po.set_sampling_factor(f);
+					updateObjects = true;
+				}
+
+				auto [transl, rot, scale] = avk::transforms_from_matrix(po.transformation_matrix());
+                if (ImGui::DragFloat3("Translation", &transl[0], 0.01f)) {
+                    po.set_transformation_matrix(avk::matrix_from_transforms(transl, rot, scale));
+                    updateObjects = true;
+                }
+				auto euler = glm::eulerAngles(rot);
+                if (ImGui::DragFloat4("Rotation", &euler[0], 0.01f)) {
+					rot = glm::quat(euler);
+                    po.set_transformation_matrix(avk::matrix_from_transforms(transl, rot, scale));
+                    updateObjects = true;
+                }
+                if (ImGui::DragFloat3("Scale", &scale[0], 0.01f)) {
+                    po.set_transformation_matrix(avk::matrix_from_transforms(transl, rot, scale));
+                    updateObjects = true;
+                }
+
+				ImGui::End();
+			}
+		}
+
 		if (updateObjects) {
 			fill_object_data_buffer();
 		}
@@ -1237,7 +1309,10 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 				lastInitDuration = 0.0,
 				lastLodStageDuration = 0.0,
 				last3dModelDuration = 0.0,
-				lastTessRenderDuration = 0.0,
+				lastTess4xSSand8xMSRenderDuration = 0.0,
+				lastTessNoaaRenderDuration = 0.0,
+				lastTess8xSSRenderDuration = 0.0,
+				lastTotalTessRenderDuration = 0.0,
 				lastPointRenderDuration = 0.0,
 				lastPatchToTileDuration = 0.0,
 				lastBeginToRenderEndDuration = 0.0
@@ -1269,17 +1344,23 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 				lastInitDuration =             glm::mix(lastInitDuration            , mLastInitDuration              * 1e-6 * timestampPeriod, 0.05);
 				lastLodStageDuration =         glm::mix(lastLodStageDuration        , mLastLodStageDuration          * 1e-6 * timestampPeriod, 0.05);
 				last3dModelDuration =          glm::mix(last3dModelDuration         , mLast3dModelsRenderDuration    * 1e-6 * timestampPeriod, 0.05);
-				lastTessRenderDuration =       glm::mix(lastTessRenderDuration      , mLastTessRenderDuration        * 1e-6 * timestampPeriod, 0.05);
+				lastTess4xSSand8xMSRenderDuration =       glm::mix(lastTess4xSSand8xMSRenderDuration      , mLastTess4xSSand8xMSRenderDuration  * 1e-6 * timestampPeriod, 0.05);
+				lastTessNoaaRenderDuration =       glm::mix(lastTessNoaaRenderDuration      , mLastTessNoaaRenderDuration    * 1e-6 * timestampPeriod, 0.05);
+				lastTess8xSSRenderDuration =       glm::mix(lastTess8xSSRenderDuration      , mLastTess8xSSRenderDuration    * 1e-6 * timestampPeriod, 0.05);
+				lastTotalTessRenderDuration =       glm::mix(lastTotalTessRenderDuration      , mLastTotalTessRenderDuration   * 1e-6 * timestampPeriod, 0.05);
 				lastPointRenderDuration =      glm::mix(lastPointRenderDuration     , mLastPointRenderDuration       * 1e-6 * timestampPeriod, 0.05);
 				lastPatchToTileDuration =      glm::mix(lastPatchToTileDuration     , mLastPatchToTileDuration       * 1e-6 * timestampPeriod, 0.05);
-				ImGui::TextColored(ImVec4(.8f, .1f, .6f, 1.f), "Total frame time       : %.3lf ms (timer queries)", lastBeginToRenderEndDuration);
-				ImGui::TextColored(ImVec4(.8f, .1f, .6f, 1.f), "Clearing               : %.3lf ms (timer queries)", lastClearDuration);
-				ImGui::TextColored(ImVec4(.8f, .1f, .6f, 1.f), "Initialization stage   : %.3lf ms (timer queries)", lastInitDuration);
-				ImGui::TextColored(ImVec4(.8f, .1f, .6f, 1.f), "LOD stage              : %.3lf ms (timer queries)", lastLodStageDuration);
-				ImGui::TextColored(ImVec4(.8f, .1f, .6f, 1.f), "Rendering Sponza       : %.3lf ms (timer queries)", last3dModelDuration);
-				ImGui::TextColored(ImVec4(.8f, .1f, .6f, 1.f), "Tess.-based rendering  : %.3lf ms (timer queries)", lastTessRenderDuration);
-				ImGui::TextColored(ImVec4(.8f, .1f, .6f, 1.f), "Point-based rendering  : %.3lf ms (timer queries)", lastPointRenderDuration);
-				ImGui::TextColored(ImVec4(.8f, .1f, .6f, 1.f), "  -> thereof tile sel. : %.3lf ms (timer queries)", lastPatchToTileDuration);
+				ImGui::TextColored(ImVec4(.8f, .1f, .6f, 1.f), "Total frame time        : %.3lf ms (timer queries)", lastBeginToRenderEndDuration);
+				ImGui::TextColored(ImVec4(.8f, .1f, .6f, 1.f), "Clearing                : %.3lf ms (timer queries)", lastClearDuration);
+				ImGui::TextColored(ImVec4(.8f, .1f, .6f, 1.f), "Initialization stage    : %.3lf ms (timer queries)", lastInitDuration);
+				ImGui::TextColored(ImVec4(.8f, .1f, .6f, 1.f), "LOD stage               : %.3lf ms (timer queries)", lastLodStageDuration);
+				ImGui::TextColored(ImVec4(.8f, .1f, .6f, 1.f), "Rendering Sponza        : %.3lf ms (timer queries)", last3dModelDuration);
+				ImGui::TextColored(ImVec4(.8f, .1f, .6f, 1.f), "Tess. 4xSS+8xMS         : %.3lf ms (timer queries)", lastTess4xSSand8xMSRenderDuration);
+				ImGui::TextColored(ImVec4(.8f, .1f, .6f, 1.f), "Tess. noAA              : %.3lf ms (timer queries)", lastTessNoaaRenderDuration);
+				ImGui::TextColored(ImVec4(.8f, .1f, .6f, 1.f), "Tess. 8xSS (sample shd.): %.3lf ms (timer queries)", lastTess8xSSRenderDuration);
+				ImGui::TextColored(ImVec4(.8f, .1f, .6f, 1.f), "Tess.-based TOTAL       : %.3lf ms (timer queries)", lastTotalTessRenderDuration);
+				ImGui::TextColored(ImVec4(.8f, .1f, .6f, 1.f), "Point-based rendering   : %.3lf ms (timer queries)", lastPointRenderDuration);
+				ImGui::TextColored(ImVec4(.8f, .1f, .6f, 1.f), "  -> thereof tile sel.  : %.3lf ms (timer queries)", lastPatchToTileDuration);
 
 				// ... pipeline statistics only if the option is ticked:
 			    if (ImGui::Checkbox("Gather pipeline stats.", &mGatherPipelineStats)) {
@@ -1882,7 +1963,10 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 			mLastInitDuration = timers[2] - timers[1];
 			mLastLodStageDuration = timers[3] - timers[2];
 			mLast3dModelsRenderDuration = timers[4] - timers[3];
-			mLastTessRenderDuration = timers[5] - timers[4];
+			mLastTess4xSSand8xMSRenderDuration = timers[5] - timers[4];
+			mLastTessNoaaRenderDuration = timers[6] - timers[5];
+			mLastTess8xSSRenderDuration = timers[7] - timers[6];
+			mLastTotalTessRenderDuration = timers[7] - timers[4];
 			mLastPatchToTileDuration = timers[6] - timers[5];
 			mLastPointRenderDuration = timers[6] - timers[5]; // Over two timestamp queries
 			mLastBeginToParametricDuration = timers[6] - timers[0];
@@ -2043,6 +2127,10 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 
 			)),
 
+#if STATS_ENABLED
+				mTimestampPool->write_timestamp(firstQueryIndex + 5, stage::color_attachment_output), // measure after Tess. 4xSS+8xMS
+#endif
+
 			command::render_pass(mRenderpass.as_reference(), mFramebuffer.as_reference(), command::gather(
 
 				// 3.1) Render tessellated patches with noAA
@@ -2078,7 +2166,9 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 				command::push_constants(tessPipePxFillNoaaToBeUsed->layout(), patch_into_tess_push_constants{ mConstOuterTessLevel, mConstInnerTessLevel, 0 }),
 				command::draw_vertices_indirect(mIndirectPxFillCountBuffer.as_reference(), 0, sizeof(VkDrawIndirectCommand), 1u), // <-- Exactly ONE draw (but potentially a lot of instances), use the one at [0]
 				
-				
+#if STATS_ENABLED
+				mTimestampPool->write_timestamp(firstQueryIndex + 6, stage::color_attachment_output), // measure after Tess. noAA
+#endif
 
 				// 3.2) Render tessellated patches with MSAA
                 command::bind_pipeline(tessPipePxFillMultisampledToBeUsed.as_reference()),
@@ -2103,7 +2193,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 			)),
 
 #if STATS_ENABLED
-			mTimestampPool->write_timestamp(firstQueryIndex + 5, stage::color_attachment_output), // measure after rendering with tessellation
+			mTimestampPool->write_timestamp(firstQueryIndex + 7, stage::color_attachment_output), // measure after rendering with Tess. 8xSS(MS)
 #endif
 			// 3.4) Color attachment has been resolved into non-super sampled image
 			// 3.5) TODO: Copy resolved (color + depth) --into--> combined attachment 
@@ -2151,7 +2241,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 				sync::global_memory_barrier(stage::compute_shader + access::memory_write >> stage::compute_shader + access::memory_read),
 #endif
 #if STATS_ENABLED
-				mTimestampPool->write_timestamp(firstQueryIndex + 6, stage::compute_shader), // measure after patch to tile step
+				mTimestampPool->write_timestamp(firstQueryIndex + 8, stage::compute_shader), // measure after patch to tile step
 #endif
 
 				// 3rd pass compute shader: px fill PER DRAW PACKAGE
@@ -2188,7 +2278,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 #endif
 
 #if STATS_ENABLED
-			mTimestampPool->write_timestamp(firstQueryIndex + 7, stage::compute_shader), // measure after point rendering
+			mTimestampPool->write_timestamp(firstQueryIndex + 9, stage::compute_shader), // measure after point rendering
 #endif
 
 
@@ -2331,7 +2421,10 @@ private: // v== Member variables ==v
 	uint64_t mLastInitDuration = 0;
 	uint64_t mLastLodStageDuration = 0;
 	uint64_t mLast3dModelsRenderDuration = 0;
-	uint64_t mLastTessRenderDuration = 0;
+	uint64_t mLastTess4xSSand8xMSRenderDuration = 0;
+	uint64_t mLastTessNoaaRenderDuration = 0;
+	uint64_t mLastTess8xSSRenderDuration = 0;
+	uint64_t mLastTotalTessRenderDuration = 0;
 	uint64_t mLastPatchToTileDuration = 0;
 	uint64_t mLastPointRenderDuration = 0;
 	uint64_t mLastBeginToParametricDuration = 0;

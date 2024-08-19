@@ -390,7 +390,7 @@ void main()
 							if (isInside(globalHiResFbCoords, screenCoordsLB, screenCoordsUB)) {
 								uint64_t data = getUint64ForFramebuffer(
 													vpcPing.z, shade(matIndex, myColor, 
-																	getParamShadingUserParams(u, v, curveIndex, userData, wsPing.xyz),
+																	getParamShadingUserParams(u, v, curveIndex, userData, wsPing.xyz, objectId),
 																	n, 
 																	getParamTexCoords(u, v, curveIndex, userData, wsPing.xyz), 
 																	dfdx, dfdy

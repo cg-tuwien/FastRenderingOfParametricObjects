@@ -37,7 +37,7 @@ layout (location = 0) in PerVertexData
 	vec3 positionWS;
 	vec3 normalWS;
 	vec2 texCoords;
-    vec3 shadingUserParams;
+    vec4 shadingUserParams;
 	flat int matIndex;
 	flat vec3 color;
 } v_in;

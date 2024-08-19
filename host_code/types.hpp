@@ -100,6 +100,9 @@ public:
         , mRenderingMethod{ rendering_method::tessellated_rasterized }
         , mMultiSampled{ false }
         , mSuperSampled{ false }
+        , mScreenDistanceThreshold{ 84.0f }
+        , mParametersEpsilon{ 0.005f }
+        , mSamplingFactor{ 1.0f }
     { }
 
     const char* name() const { return mName; }
@@ -118,6 +121,9 @@ public:
     bool      multi_sampling_on() const { return mMultiSampled; }
     bool      super_sampling_on() const { return mSuperSampled; }
     glm::uvec2 num_elements() const { return glm::uvec2(mEvalDims[2], mEvalDims[3]); }
+    float     screen_distance_threshold() const { return mScreenDistanceThreshold; }
+    glm::vec2 parameters_epsilon() const { return mParametersEpsilon; }
+    float     sampling_factor() const { return mSamplingFactor; }
 
     void set_enabled(bool yesOrNo) { mEnabled = yesOrNo; }
     void set_modifying(bool yesOrNo) { mModifying = yesOrNo; }
@@ -132,6 +138,9 @@ public:
     void set_multi_sampling(bool onOrOff) { mMultiSampled = onOrOff; }
     void set_super_sampling(bool onOrOff) { mSuperSampled = onOrOff; }
     void set_num_elements(uint32_t x, uint32_t y) { mEvalDims[2] = x; mEvalDims[3] = y; }
+    void set_screen_distance_threshold(float t) { mScreenDistanceThreshold = t; }
+    void set_parameters_epsilon(glm::vec2 epsilons) { mParametersEpsilon = epsilons; }
+    void set_sampling_factor(float percentage) { mSamplingFactor = percentage; }
 
 private:
     const char* mName;
@@ -146,6 +155,9 @@ private:
     rendering_method mRenderingMethod;
     bool mMultiSampled;
     bool mSuperSampled;
+    float mScreenDistanceThreshold;
+    glm::vec2 mParametersEpsilon;
+    float mSamplingFactor;
 };
 
 // +------------------------------------------------------------------------------+

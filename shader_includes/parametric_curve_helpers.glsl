@@ -19,15 +19,19 @@ vec2 getParamTexCoords(float u, float v, int curveIndex, uvec3 userData, vec3 po
 }
 
 // Gets user parameters for shading
-vec3 getParamShadingUserParams(float u, float v, int curveIndex, uvec3 userData, vec3 posWS) {
-    vec3 shadingUserParams = vec3(0.0);
+vec4 getParamShadingUserParams(float u, float v, int curveIndex, uvec3 userData, vec3 posWS, uint objectId) {
+    vec4 shadingUserParams = vec4(0.0);
     switch (curveIndex) {
         // +-------------------------------------------------+
         // |   SH Glyphs                                     |
         // +-------------------------------------------------+
         case 5:
 	    case 6: 
-            shadingUserParams = posWS;
+            uint dimX     = (userData.x & 0xFF  ) << 0;
+            uint dimY     = (userData.y & 0xFF  ) << 8;
+            uint glyphId  = (userData.z & 0xFFFF) << 16;
+            uint combined = dimX | dimY | glyphId;
+            shadingUserParams = vec4(posWS, uintBitsToFloat(combined));
             break;
         // +-------------------------------------------------+
         // |   Seashells                                     |

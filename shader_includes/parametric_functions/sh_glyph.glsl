@@ -59,6 +59,9 @@ void eval_sh_2(out float out_shs[91], vec3 point) {
     d = 0.546274215;
     out_shs[1] = c0 * d;
     out_shs[5] = s0 * d;
+    for (int i = 6; i < 91; ++i) {
+        out_shs[i] = 0.0;
+    }
 }
 
 
@@ -106,6 +109,9 @@ void eval_sh_4(out float out_shs[91], vec3 point) {
     d = 0.625835735;
     out_shs[6] = c0 * d;
     out_shs[14] = s0 * d;
+    for (int i = 15; i < 91; ++i) {
+        out_shs[i] = 0.0;
+    }
 }
 
 
@@ -186,6 +192,9 @@ void eval_sh_6(out float out_shs[91], vec3 point) {
     d = 0.683184105;
     out_shs[15] = c0 * d;
     out_shs[27] = s0 * d;
+    for (int i = 28; i < 91; ++i) {
+        out_shs[i] = 0.0;
+    }
 }
 
 
@@ -309,6 +318,9 @@ void eval_sh_8(out float out_shs[91], vec3 point) {
     d = 0.72892666;
     out_shs[28] = c0 * d;
     out_shs[44] = s0 * d;
+    for (int i = 45; i < 91; ++i) {
+        out_shs[i] = 0.0;
+    }
 }
 
 
@@ -485,6 +497,9 @@ void eval_sh_10(out float out_shs[91], vec3 point) {
     d = 0.767395118;
     out_shs[45] = c0 * d;
     out_shs[65] = s0 * d;
+    for (int i = 66; i < 91; ++i) {
+        out_shs[i] = 0.0;
+    }
 }
 
 
@@ -2411,50 +2426,51 @@ vec3 get_sh_glyph(float u, float v, uvec3 userData)
     uint  glyphId     = userData.z;
     
     bool isBigDataset = (datasetDims.x * datasetDims.y) > 1;
+
+    vec3 pt = to_sphere(u, TWO_PI - v);
+    float tmp = pt.y;
+    pt.y = pt.z;
+    pt.z = tmp;
+    mat3 rot_x = mat3(1.0, 0.0, 0.0, 0.0, cos(PI), sin(PI), 0.0, -sin(PI), cos(PI));
+    mat3 rot_z = mat3(cos(PI), sin(PI), 0.0, -sin(PI), cos(PI), 0.0, 0.0, 0.0, 1.0);
+    mat3 rot_y = mat3(cos(PI), 0.0, sin(PI), 0.0, 1.0, 0.0, -sin(PI), 0.0, cos(PI));
 	
 	switch (ubo.mDebugSlidersi[0])
 	{
 	case 2:
-		eval_sh_2(out_shs, to_sphere(u, v));
-		sh_count = 6;
+		eval_sh_2(out_shs, pt);
 		break;
 	case 4:
-		eval_sh_4(out_shs, to_sphere(u, v));
-		sh_count = 15;
+		eval_sh_4(out_shs, pt);
 		break;
 	case 6:
-		eval_sh_6(out_shs, to_sphere(u, v));
-		sh_count = 28;
+		eval_sh_6(out_shs, pt);
 		break;
 	case 8:
-		eval_sh_8(out_shs, to_sphere(u, v));
-		sh_count = 45;
+		eval_sh_8(out_shs, pt);
 		break;
 	case 10:
-		eval_sh_10(out_shs, to_sphere(u, v));
-		sh_count = 66;
+		eval_sh_10(out_shs, pt);
 		break;
 	case 12:
-		eval_sh_12(out_shs, to_sphere(u, v));
-		sh_count = 91;
+		eval_sh_12(out_shs, pt);
 		break;
 	}
-	
+
 	float f = 0.0;
     if (isBigDataset) {
         dataset_sh_coeffs coeffs = uBigDataset.mEntries[glyphId];
-        for (int i = 0; i < sh_count; i++) {
+        for (int i = 0; i < 91; i++) {
             f += out_shs[i] * coeffs.mCoeffs[i];
         }
     }
     else {
-        for (int i = 0; i < sh_count; i++) {
+        for (int i = 0; i < 91; i++) {
             f += out_shs[i] * SH_COEFFS[i];
         }
     }
 
 	vec3 glyph = to_sphere(u, v, f);
-    glyph = rotate_x(glyph, -90);
     if (isBigDataset) {
         glyph += get_translation(datasetDims, glyphId);
     }

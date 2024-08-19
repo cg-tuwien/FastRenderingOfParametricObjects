@@ -25,8 +25,8 @@
 // The index  buffer  offers space for 67M vertices (=> 500MB for index data):
 #define MAX_INDICES					134217728
 
-// Whether statistics are enabled at all
-#define STATS_ENABLED               1
+//// Whether statistics are enabled at all
+#define STATS_ENABLED               0
 
 // Enable/disable local rasterization into shared memory in px fill shaders:
 #define SHARED_MEM_LOCAL_RASTER     0
@@ -66,3 +66,19 @@
 #define SH_BRAIN_DATA_SIZE_X      140
 #define SH_BRAIN_DATA_SIZE_Y      140
 #define SH_BRAIN_ELEMENT_OFFSET    25.0
+
+
+// The index of the highest used band of the spherical harmonics basis. Must be
+// even, at least 2 and at most 12.
+#define SH_DEGREE 12
+// The number of spherical harmonics basis functions
+#define SH_COUNT (((SH_DEGREE + 1) * (SH_DEGREE + 2)) / 2)
+
+// The number of spherical harmonics basis functions
+#define SH_COUNT (((SH_DEGREE + 1) * (SH_DEGREE + 2)) / 2)
+
+// Rounds up to the next multiple of four
+#define ROUNDUP4(n) ((((n) + 3)/4)*4)
+
+// Degree of polynomials for which we have to find roots
+#define MAX_DEGREE (2 * SH_DEGREE + 2)
