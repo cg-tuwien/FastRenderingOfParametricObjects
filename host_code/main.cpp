@@ -736,22 +736,13 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
             tmp.mTransformationMatrix = po.transformation_matrix();
 			tmp.mMaterialIndex = po.material_index();
 			tmp.mUseAdaptiveDetail = mAdaptivePxFill ? 1 : 0;
-			tmp.mPxFillSetIndex = po.how_to_render() == rendering_method::tessellated_rasterized ? 0 : 2;  // handle Tess. noAA and point rendering
-			if (po.how_to_render() == rendering_method::tessellated_rasterized && po.multi_sampling_on()) {
-				tmp.mPxFillSetIndex = 1; // handle Tess. Multisampling
-			}
-			if (po.how_to_render() == rendering_method::tessellated_rasterized && po.super_sampling_on()) {
-				tmp.mPxFillSetIndex = 3; // handle Tess. Supersampling
-			}
+			tmp.mPxFillSetIndex = get_px_fill_set_index(po.how_to_render());
 
 			tmp.mLodAndRenderSettings = { 
 				po.parameters_epsilon()[0], po.parameters_epsilon()[1],
-				po.screen_distance_threshold(),
+				po.screen_distance_threshold() / get_screen_space_threshold_divisor(po.how_to_render()),
 				po.sampling_factor()
 			};
-			if (po.super_sampling_on() || po.multi_sampling_on()) {
-				tmp.mLodAndRenderSettings.z *= 0.5f;
-			}
 
 			if (is_knit_yarn(po.param_obj_type())) {
 				knitYarnSavedForLater.push_back(tmp);
@@ -878,11 +869,9 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 			}
 
 			// One table row for setting the rendering mdethod:
-			std::vector<int> howRendered(mParametricObjects.size(), 0);
 			ImGui::TableNextRow();
 			poId = 0;
 			for (auto& po : mParametricObjects) {
-				howRendered[poId] = po.how_to_render() == rendering_method::point_rendered ? 0 : 1;
 				ImGui::TableNextColumn();
 				ImGui::PushID(poId++);
 				ImGui::Text("Rendering method:");
@@ -894,28 +883,11 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 				ImGui::TableNextColumn();
 				ImGui::PushID(poId);
 				auto howRendered = po.how_to_render();
-				if (ImGui::Combo("##renderingmethod", reinterpret_cast<int*>(&howRendered), "Point-rendered\0Tessellated -> rasterized\0(Wireframe) Tessellated -> rasterized\0Hybrid\0")) {
+				if (ImGui::Combo("##renderingmethod", reinterpret_cast<int*>(&howRendered), "Tess. noAA\0Tess. 8xSS (sample shading)\0Tess. 4xSS+8xMS\0Point rendering ~1spp direct\0Point rendering ~4spp local fb.\0Hybrid\0")) {
 					po.set_how_to_render(howRendered);
 					updateObjects = true;
 				}
 				poId++;
-				ImGui::PopID();
-			}
-			// ...and another (related) table row for enabling/disabling super sampling:
-			poId = 0;
-			for (auto& po : mParametricObjects) {
-				ImGui::TableNextColumn();
-				ImGui::PushID(poId++);
-				bool ms = po.multi_sampling_on();
-				if (ImGui::Checkbox("8xMS", &ms)) {
-					po.set_multi_sampling(ms);
-					updateObjects = true;
-				}
-				bool ss = po.super_sampling_on();
-				if (ImGui::Checkbox("4xSS", &ss)) {
-					po.set_super_sampling(ss);
-					updateObjects = true;
-				}
 				ImGui::PopID();
 			}
 

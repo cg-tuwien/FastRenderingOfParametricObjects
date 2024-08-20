@@ -72,12 +72,51 @@ enum struct parametric_object_type : int32_t
 
 enum struct rendering_method : int
 {
-    point_rendered = 0,
-    tessellated_rasterized,
-    tessellated_rasterized_wireframe,
-    hybrid,
-    vertices_rasterized
+    Tess_noAA = 0,
+    Tess_8xSS,
+    Tess_4xSS_8xMS,
+    PointRendered_direct,
+    PointRendered_4xSS_local_fb,
+    Hybrid
 };
+
+static int get_px_fill_set_index(rendering_method aRenderMethod)
+{
+    switch (aRenderMethod) {
+    case rendering_method::Tess_noAA: 
+    case rendering_method::Hybrid: // default to 0
+        return 0;
+    case rendering_method::Tess_8xSS: 
+        return 1;
+    case rendering_method::PointRendered_direct:
+    case rendering_method::PointRendered_4xSS_local_fb:
+        return 2;
+    case rendering_method::Tess_4xSS_8xMS:
+        return 3;
+    default:
+        assert (false);
+        return 0;
+    }
+}
+
+// Gets a divisor for the screen space threshold based on the render method:
+// Imagine it like this: 4x super sampling variants must use half the threshold (in u and v direction each).
+static float get_screen_space_threshold_divisor(rendering_method aRenderMethod)
+{
+    switch (aRenderMethod) {
+    case rendering_method::Tess_noAA: 
+    case rendering_method::PointRendered_direct:
+    case rendering_method::Hybrid: // default to 0
+        return 1.0f;
+    case rendering_method::Tess_8xSS: 
+    case rendering_method::Tess_4xSS_8xMS:
+    case rendering_method::PointRendered_4xSS_local_fb:
+        return 2.0f;
+    default:
+        assert (false);
+        return 1.0f;
+    }
+}
 
 // ATTENTION: Whenever you add a new enum item  ^^^  here, also add it to the string  vvv  here!
 static const char* PARAMETRIC_OBJECT_TYPE_UI_STRING
@@ -97,11 +136,9 @@ public:
         , mParamObjType { objType }
         , mTransformationMatrix{ aTransformationMatrix }
         , mMaterialIndex{ aMaterialIndex }
-        , mRenderingMethod{ rendering_method::tessellated_rasterized }
-        , mMultiSampled{ false }
-        , mSuperSampled{ false }
+        , mRenderingMethod{ rendering_method::Tess_noAA }
         , mScreenDistanceThreshold{ 84.0f }
-        , mParametersEpsilon{ 0.005f }
+        , mParametersEpsilon{ -0.005f, 0.005f }
         , mSamplingFactor{ 1.0f }
     { }
 
@@ -118,8 +155,6 @@ public:
     int32_t   curve_index() const { return static_cast<std::underlying_type_t<parametric_object_type>>(mParamObjType); }
     int32_t   material_index() const { return mMaterialIndex; }
     auto      how_to_render() const { return mRenderingMethod; }
-    bool      multi_sampling_on() const { return mMultiSampled; }
-    bool      super_sampling_on() const { return mSuperSampled; }
     glm::uvec2 num_elements() const { return glm::uvec2(mEvalDims[2], mEvalDims[3]); }
     float     screen_distance_threshold() const { return mScreenDistanceThreshold; }
     glm::vec2 parameters_epsilon() const { return mParametersEpsilon; }
@@ -135,8 +170,6 @@ public:
     void set_curve_index(int32_t curveIndex) { mParamObjType = static_cast<parametric_object_type>(curveIndex); }
     void set_material_index(int32_t matIndex) { mMaterialIndex = matIndex; }
     void set_how_to_render(rendering_method renderMeth) { mRenderingMethod = renderMeth; }
-    void set_multi_sampling(bool onOrOff) { mMultiSampled = onOrOff; }
-    void set_super_sampling(bool onOrOff) { mSuperSampled = onOrOff; }
     void set_num_elements(uint32_t x, uint32_t y) { mEvalDims[2] = x; mEvalDims[3] = y; }
     void set_screen_distance_threshold(float t) { mScreenDistanceThreshold = t; }
     void set_parameters_epsilon(glm::vec2 epsilons) { mParametersEpsilon = epsilons; }
@@ -153,8 +186,6 @@ private:
     parametric_object_type mParamObjType;
     int32_t mMaterialIndex;
     rendering_method mRenderingMethod;
-    bool mMultiSampled;
-    bool mSuperSampled;
     float mScreenDistanceThreshold;
     glm::vec2 mParametersEpsilon;
     float mSamplingFactor;
