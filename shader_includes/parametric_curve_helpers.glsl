@@ -131,6 +131,11 @@ vec4 toCS(vec4 posWS)
     return posCS;
 }
 
+vec3 toNDC(vec4 posCS)
+{
+    return posCS.xyz / posCS.w;
+}
+
 vec4 clampCS(vec4 posCS)
 {
     float w = abs(posCS.w);

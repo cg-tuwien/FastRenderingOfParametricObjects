@@ -251,7 +251,7 @@ void main()
 				
 					// ...but write out the previous one (now with normals information):
 					vec3 n = calculateNormalWS(wsPing, wsNeighbor, wsPong, curveIndex, userData);
-					bool backfaceCull = ubo.mResolutionAndCulling.z == 1 && normalize(mat3(ubo.mViewMatrix) * n).z < 0.0;
+					bool backfaceCull = ubo.mResolutionAndCulling.z == 1 && toNDC(toCS(vec4(n, 0.0))).z < 0.0;
 					if (!backfaceCull) {
 						// PRODUCE PIXEL:
 //						vec3 myColor = groupcolors[pxFillId % MAX_COLORS];
