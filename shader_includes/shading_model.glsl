@@ -92,7 +92,7 @@ vec3 gltf_dielectric_brdf(vec3 incoming, vec3 outgoing, vec3 normal, float rough
 
 vec3 shade(int matIndex, vec3 albedo, vec3 shadingUserParams, vec3 posWS, vec3 normalWS, vec2 texCoords SHADE_ADDITIONAL_PARAMS)
 {
-    if (matIndex < -3 || matIndex > 10000) {
+    if (matIndex < -5 || matIndex > 1000) {
 		return linear_rgb_to_srgb(vec3(1.0, 0.0, 1.0));
     }
 
@@ -148,9 +148,12 @@ vec3 shade(int matIndex, vec3 albedo, vec3 shadingUserParams, vec3 posWS, vec3 n
 
     } // ========== SH GLYPH MATERIAL END ============
 
-    if (-3 == matIndex) { // ========== NICE AND BLUE MATERIAL BEGIN ============
+    if (matIndex <= -3) { // ========== NICE AND RED|GREEN|BLUE MATERIAL BEGIN ============
         vec3 outgoing = normalize(normalWS);
-        vec3 base_color = srgb_to_linear_rgb(vec3(0.2, 0.5, 1.0));
+        vec3 base_color = srgb_to_linear_rgb(
+            matIndex == -3 ? vec3(0.2, 0.5, 1.0) :
+            matIndex == -4 ? vec3(0.2, 1.0, 0.5) : vec3(1.0, 0.2, 0.5)
+        );
         const vec3 incoming = normalize(vec3(1.23, 7.89, 4.56));
         float ambient = 0.04;
         float exposure = 4.0;
@@ -158,7 +161,7 @@ vec3 shade(int matIndex, vec3 albedo, vec3 shadingUserParams, vec3 posWS, vec3 n
         vec3 color = exposure * (brdf * max(0.0, dot(incoming, normalWS)) + base_color * ambient);
         return linear_rgb_to_srgb(tonemap(color));
 
-    } // ========== NICE AND BLUE END ============
+    } // ========== NICE AND RED|GREEN|BLUE MATERIAL END ============
 
     if (0 == matIndex) { // ========== CHECKERBOARD BEGIN ============
 		vec3 checker = SAMPLE(textures[materialsBuffer.materials[matIndex].mDiffuseTexIndex], texCoords  SAMPLE_ADDITIONAL_PARAMS ).rgb;

@@ -88,11 +88,12 @@ static int get_px_fill_set_index(rendering_method aRenderMethod)
         return 0;
     case rendering_method::Tess_8xSS: 
         return 1;
-    case rendering_method::PointRendered_direct:
-    case rendering_method::PointRendered_4xSS_local_fb:
-        return 2;
     case rendering_method::Tess_4xSS_8xMS:
+        return 2;
+    case rendering_method::PointRendered_direct:
         return 3;
+    case rendering_method::PointRendered_4xSS_local_fb:
+        return 4;
     default:
         assert (false);
         return 0;
@@ -138,7 +139,7 @@ public:
         , mMaterialIndex{ aMaterialIndex }
         , mRenderingMethod{ rendering_method::Tess_noAA }
         , mScreenDistanceThreshold{ 84.0f }
-        , mParametersEpsilon{ -0.005f, 0.005f }
+        , mParametersEpsilon{ 0.005f, 0.005f }
         , mSamplingFactor{ 1.0f }
     { }
 

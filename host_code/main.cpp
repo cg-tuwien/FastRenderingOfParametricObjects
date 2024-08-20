@@ -22,7 +22,7 @@
 
 #define NUM_TIMESTAMP_QUERIES 10
 
-#define NUM_DIFFERENT_RENDER_VARIANTS 4
+#define NUM_DIFFERENT_RENDER_VARIANTS 5
 
 // Sample count possible values:
 // vk::SampleCountFlagBits::e1
@@ -104,12 +104,12 @@ static std::array<parametric_object, 13> PredefinedParametricObjects {{
 	parametric_object{"Sphere"      , "assets/po-sphere-patches.png",     false, parametric_object_type::Sphere,                 0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>() , glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{ 0.f,  0.f,  0.f})},
 	parametric_object{"Johi's Heart", "assets/po-johis-heart.png",        false, parametric_object_type::JohisHeart,              0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>(), glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{ 0.f,  0.f, -2.f})},
 	parametric_object{"Plane" ,       "assets/po-johis-heart.png",        true,  parametric_object_type::Plane,                  1.0f,   0.0f,            0.0f,  1.0f},
-	parametric_object{"Seashell 1"  , "assets/po-seashell1.png",          false, parametric_object_type::Seashell1,              glm::two_pi<float>() * 8.0f,/* -> */0.0f,   0.0f,/* -> */glm::two_pi<float>(), glm::uvec2{ 1u, 1u }, glm::mat4{ 1.0f }, 2},
-	parametric_object{"Seashell 2"  , "assets/po-seashell2.png",          false, parametric_object_type::Seashell2,              glm::two_pi<float>() * 8.0f,/* -> */0.0f,   0.0f,/* -> */glm::two_pi<float>(), glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{-4.5f, 7.0f, 0.0f }), 2},
-	parametric_object{"Seashell 3"  , "assets/po-seashell3.png",          false, parametric_object_type::Seashell3,              glm::two_pi<float>() * 8.0f,/* -> */0.0f,   0.0f,/* -> */glm::two_pi<float>(), glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{ 4.5f, 7.0f, 0.0f }), 2},
+	parametric_object{"Seashell 1"  , "assets/po-seashell1.png",          false, parametric_object_type::Seashell1,              glm::two_pi<float>() * 8.0f,/* -> */0.0f,   0.0f,/* -> */glm::two_pi<float>(), glm::uvec2{ 1u, 1u }, glm::mat4{ 1.0f }, -5},
+	parametric_object{"Seashell 2"  , "assets/po-seashell2.png",          false, parametric_object_type::Seashell2,              glm::two_pi<float>() * 8.0f,/* -> */0.0f,   0.0f,/* -> */glm::two_pi<float>(), glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{-4.5f, 7.0f, 0.0f }), -4},
+	parametric_object{"Seashell 3"  , "assets/po-seashell3.png",          false, parametric_object_type::Seashell3,              glm::two_pi<float>() * 8.0f,/* -> */0.0f,   0.0f,/* -> */glm::two_pi<float>(), glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{ 4.5f, 7.0f, 0.0f }), -3},
 	parametric_object{"Yarn Curve"  , "assets/po-yarn-curve-single.png",  false, parametric_object_type::SingleYarnCurve,        1.0f, 1.0f,     /* <-- yarn dimensions | n/a yarn -> */ 0.f, /* thickness --> */ 0.8f, glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{-0.3f, 0.0f, 0.0f}) * glm::scale(glm::vec3{ 0.3f }), -3},
 	parametric_object{"Fiber Curve" , "assets/po-fiber-curve-single.png", false, parametric_object_type::SingleFiberCurve,       1.0f, 1.0f,     /* <-- yarn dimensions | #fibers --> */ 6.f, /* thickness --> */ 0.3f, glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{-0.5f, 0.0f, 0.0f}) * glm::scale(glm::vec3{ 0.3f }), -3},
-	parametric_object{"Blue Curtain", "assets/po-blue-curtain.png",		  false, parametric_object_type::CurtainYarnCurves,      235.0f, 254.0f, /* <-- yarn dimensions | #fibers --> */ 6.f, /* thickness --> */ 0.8f, glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{-3.35f, 0.08f, 5.32f}) * glm::scale(glm::vec3{ 0.005f }), 8},
+	parametric_object{"Blue Curtain", "assets/po-blue-curtain.png",		  false, parametric_object_type::CurtainYarnCurves,      235.0f, 254.0f, /* <-- yarn dimensions | #fibers --> */ 6.f, /* thickness --> */ 0.8f, glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{-3.35f, 0.08f, 5.32f}) * glm::scale(glm::vec3{ 0.005f }), 19},
 	parametric_object{"Palm Tree"   , "assets/po-palm-tree.png",		  false, parametric_object_type::PalmTreeTrunk,          0.0f,   1.0f,            0.0f,  glm::two_pi<float>(), glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{ 0.f,  0.f, -4.f})},
 	parametric_object{"Giant Worm"  , "assets/po-giant-worm.png",		  false, parametric_object_type::PalmTreeTrunk,  235.0f, 254.0f, /* <-- yarn dimensions | #fibers --> */ 4.f, 1.f, glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{-3.35f, 0.08f, 5.32f}) * glm::scale(glm::vec3{ 0.005f }), 19},
 	parametric_object{"SH Glyph"    , "assets/po-single-sh-glyph.png",    false, parametric_object_type::SHGlyph,                0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>(),     glm::uvec2{ 1u, 1u }, glm::mat4{ 1.0f }, -2},
@@ -923,7 +923,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 			poId = 0;
 			for (auto& po : mParametricObjects) {
 				ImGui::TableNextColumn();
-				constexpr auto predefMats = 3;
+				constexpr auto predefMats = 5;
 				auto matIndex = po.material_index() + predefMats;
 				ImGui::PushID(poId++);
 				if (ImGui::SliderInt("Material Index", &matIndex, 0, mNumMaterials + predefMats - 1)) {
@@ -2094,8 +2094,15 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 					descriptor_binding(4, 0, mBigDataset->as_storage_buffer())
 				})),
 
-				command::push_constants(tessPipePxFillSupersampledToBeUsed->layout(), patch_into_tess_push_constants{ mConstOuterTessLevel, mConstInnerTessLevel, 3 * MAX_INDIRECT_DISPATCHES }),
-				command::draw_vertices_indirect(mIndirectPxFillCountBuffer.as_reference(), 3 * sizeof(VkDrawIndirectCommand), sizeof(VkDrawIndirectCommand), 1u) // <-- Exactly ONE draw (but potentially a lot of instances), use the one at [1]
+				command::push_constants(tessPipePxFillSupersampledToBeUsed->layout(), patch_into_tess_push_constants{ 
+					mConstOuterTessLevel, mConstInnerTessLevel, 
+					get_px_fill_set_index(rendering_method::Tess_4xSS_8xMS) * MAX_INDIRECT_DISPATCHES 
+				}),
+				command::draw_vertices_indirect(
+					mIndirectPxFillCountBuffer.as_reference(), 
+					get_px_fill_set_index(rendering_method::Tess_4xSS_8xMS) * sizeof(VkDrawIndirectCommand), 
+					sizeof(VkDrawIndirectCommand), 
+					1u) // <-- Exactly ONE draw (but potentially a lot of instances), use the one at [1]
 
 			)),
 
@@ -2135,8 +2142,15 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 					descriptor_binding(4, 0, mBigDataset->as_storage_buffer())
 				})),
 					
-				command::push_constants(tessPipePxFillNoaaToBeUsed->layout(), patch_into_tess_push_constants{ mConstOuterTessLevel, mConstInnerTessLevel, 0 }),
-				command::draw_vertices_indirect(mIndirectPxFillCountBuffer.as_reference(), 0, sizeof(VkDrawIndirectCommand), 1u), // <-- Exactly ONE draw (but potentially a lot of instances), use the one at [0]
+				command::push_constants(tessPipePxFillNoaaToBeUsed->layout(), patch_into_tess_push_constants{ 
+					mConstOuterTessLevel, mConstInnerTessLevel, 
+					get_px_fill_set_index(rendering_method::Tess_noAA) * MAX_INDIRECT_DISPATCHES 
+				}),
+				command::draw_vertices_indirect(
+					mIndirectPxFillCountBuffer.as_reference(), 
+					get_px_fill_set_index(rendering_method::Tess_noAA) * sizeof(VkDrawIndirectCommand), 
+					sizeof(VkDrawIndirectCommand), 
+					1u), // <-- Exactly ONE draw (but potentially a lot of instances), use the one at [0]
 				
 #if STATS_ENABLED
 				mTimestampPool->write_timestamp(firstQueryIndex + 6, stage::color_attachment_output), // measure after Tess. noAA
@@ -2159,8 +2173,15 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 					descriptor_binding(4, 0, mBigDataset->as_storage_buffer())
 				})),
 					
-				command::push_constants(tessPipePxFillMultisampledToBeUsed->layout(), patch_into_tess_push_constants{ mConstOuterTessLevel, mConstInnerTessLevel, 1 * MAX_INDIRECT_DISPATCHES }),
-				command::draw_vertices_indirect(mIndirectPxFillCountBuffer.as_reference(), sizeof(VkDrawIndirectCommand), sizeof(VkDrawIndirectCommand), 1u) // <-- Exactly ONE draw (but potentially a lot of instances), use the one at [1]
+				command::push_constants(tessPipePxFillMultisampledToBeUsed->layout(), patch_into_tess_push_constants{ 
+					mConstOuterTessLevel, mConstInnerTessLevel, 
+					get_px_fill_set_index(rendering_method::Tess_8xSS) * MAX_INDIRECT_DISPATCHES 
+				}),
+				command::draw_vertices_indirect(
+					mIndirectPxFillCountBuffer.as_reference(), 
+					get_px_fill_set_index(rendering_method::Tess_8xSS) * sizeof(VkDrawIndirectCommand), 
+					sizeof(VkDrawIndirectCommand), 
+					1u) // <-- Exactly ONE draw (but potentially a lot of instances), use the one at [1]
 
 			)),
 
