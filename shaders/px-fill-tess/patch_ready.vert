@@ -67,8 +67,8 @@ void main()
 	);
 
 	vec2 paramsRange = paramsTo - paramsFrom;
-	paramsFrom -= epsilons * sign(paramsRange) * paramsRange;
-	paramsTo   += epsilons * sign(paramsRange) * paramsRange;
+	paramsFrom -= epsilons * paramsRange;
+	paramsTo   += epsilons * paramsRange;
 	
 	const uint vertexSubId = gl_VertexIndex - 1; // Gotta subtract 1 (see clear_r64_image.comp)
 
