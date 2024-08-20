@@ -162,10 +162,11 @@ vec3 modifiedHeatmapColors[MAX_HEATMAP_COLORS] = {
 // @param  posWS               OUT parameter, returns the point's world space position 
 // @param  isOff               OUT parameter, returns is_off_screen information 
 // @return The resulting viewport coordinates as vec3
-vec3 calcPoint(float u, float v, int curveIndex, uvec3 userData, mat4 tM, out vec3 posWS, out uint isOff) 
+vec3 calcPoint(float u, float v, int curveIndex, uvec3 userData, mat4 tM, out vec3 posWS_untranslated, out vec3 posWS, out uint isOff) 
 {
 	// Start with world space:
 	vec4 rawWS = paramToWS(u, v, curveIndex, userData);
+	posWS_untranslated = rawWS.xyz;
 	vec4 traWS = tM * rawWS;
 	posWS = traWS.xyz;
 	vec4 posCS = toCS(traWS);
@@ -336,9 +337,9 @@ void main()
 			const float u = paramsStart[0]   +   iu * iterationDeltaU   +   deltaU * myInvocIdx;
 			float       v = paramsStart[1];
 			// Calculate the "bottom"-most row now, because we need that values for normals calculation in subsequent loop iterations:
-			vec3 wsPing;
+			vec3 wsPing, wsPing_untranslated;
 			uint offPing;
-			vec3 vpcPing = calcPoint(u, v, curveIndex, userData, tM, /* out: */ wsPing, /* out: */ offPing);
+			vec3 vpcPing = calcPoint(u, v, curveIndex, userData, tM, /* out: */ wsPing_untranslated, /* out: */ wsPing, /* out: */ offPing);
 
 			// In order to calclate the normal, steal from neighbor:
 			vec3 wsNeighbor  = subgroupShuffleDown(wsPing , 1); // subgroupShuffle(wsPing, clamp(gl_SubgroupInvocationID + 1, 0, gl_WorkGroupSize.x - 1));
@@ -348,9 +349,9 @@ void main()
 			for (float iv = deltaV; iv < vTarget; iv += deltaV) {
 				v = paramsStart[1] + iv;
 				// Calculate the next row...
-				vec3 wsPong;
+				vec3 wsPong, wsPong_untranslated;
 				uint offPong;
-				vec3 vpcPong = calcPoint(u, v, curveIndex, userData, tM, /* out: */ wsPong, /* out: */ offPong);
+				vec3 vpcPong = calcPoint(u, v, curveIndex, userData, tM, /* out: */ wsPong_untranslated, /* out: */ wsPong, /* out: */ offPong);
 
 				bool tryAgain = false;
 				if (useAdaptive) {
@@ -390,8 +391,8 @@ void main()
 							if (isInside(globalHiResFbCoords, screenCoordsLB, screenCoordsUB)) {
 								uint64_t data = getUint64ForFramebuffer(
 													vpcPing.z, shade(matIndex, myColor, 
-																	getParamShadingUserParams(u, v, curveIndex, userData, wsPing.xyz, objectId),
-																	n, 
+																	getParamShadingUserParams(u, v, curveIndex, userData, wsPing_untranslated.xyz, objectId),
+																	wsPing.xyz, n, 
 																	getParamTexCoords(u, v, curveIndex, userData, wsPing.xyz), 
 																	dfdx, dfdy
 																)

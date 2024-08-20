@@ -33,7 +33,7 @@ layout (location = 0) out PerVertexData
 	vec3 positionWS;
 	vec3 normalWS;
 	vec2 texCoords;
-    vec4 shadingUserParams;
+    vec3 shadingUserParams;
 	flat int matIndex;
 	flat vec3 color;
 } v_out;
@@ -61,7 +61,7 @@ void main() {
 	v_out.positionWS = posWS.xyz;
 	v_out.normalWS   = inNormal;
     v_out.texCoords  = inTexCoord;
-    v_out.shadingUserParams = vec4(0.0);
+    v_out.shadingUserParams = vec3(0.0);
     v_out.matIndex   = pushConstants.mMatIndex;
 	v_out.color      = vertexColors[gl_VertexIndex % MAX_COLORS];
     gl_Position      = ubo.mViewProjMatrix * posWS;

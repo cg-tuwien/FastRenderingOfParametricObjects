@@ -1,4 +1,15 @@
 
+#include "parametric_functions/plane.glsl"
+#include "parametric_functions/palm_tree_trunk.glsl"
+#include "parametric_functions/johis_heart.glsl"
+#include "parametric_functions/spiky_heart.glsl"
+#include "parametric_functions/sh_glyph.glsl"
+#include "parametric_functions/single_yarn_curve.glsl"
+#include "parametric_functions/single_fiber_curve.glsl"
+#include "parametric_functions/curtain_yarn_curve.glsl"
+#include "parametric_functions/curtain_fiber_curve.glsl"
+#include "parametric_functions/seashells.glsl"
+
 // +------------------------------------------------------------------------------+
 // |   Parametric Curve Helpers:                                                  |
 // +------------------------------------------------------------------------------+
@@ -19,19 +30,19 @@ vec2 getParamTexCoords(float u, float v, int curveIndex, uvec3 userData, vec3 po
 }
 
 // Gets user parameters for shading
-vec4 getParamShadingUserParams(float u, float v, int curveIndex, uvec3 userData, vec3 posWS, uint objectId) {
-    vec4 shadingUserParams = vec4(0.0);
+vec3 getParamShadingUserParams(float u, float v, int curveIndex, uvec3 userData, vec3 posWS_untranslated, uint objectId) {
+    vec3 shadingUserParams = vec3(0.0);
     switch (curveIndex) {
         // +-------------------------------------------------+
         // |   SH Glyphs                                     |
         // +-------------------------------------------------+
         case 5:
-	    case 6: 
-            uint dimX     = (userData.x & 0xFF  ) << 0;
-            uint dimY     = (userData.y & 0xFF  ) << 8;
-            uint glyphId  = (userData.z & 0xFFFF) << 16;
-            uint combined = dimX | dimY | glyphId;
-            shadingUserParams = vec4(posWS, uintBitsToFloat(combined));
+	    case 6:
+            {
+                uvec2 datasetDims = userData.xy;
+                uint  glyphId     = userData.z;
+                shadingUserParams = vec3(posWS_untranslated) - get_translation(datasetDims, glyphId);
+            }
             break;
         // +-------------------------------------------------+
         // |   Seashells                                     |
@@ -57,17 +68,6 @@ vec3 calculateNormalWS(vec3 posWS, vec3 neighborUPosWS, vec3 neighborVPosWS, int
     n = normalize(n);
     return n;
 }
-
-#include "parametric_functions/plane.glsl"
-#include "parametric_functions/palm_tree_trunk.glsl"
-#include "parametric_functions/johis_heart.glsl"
-#include "parametric_functions/spiky_heart.glsl"
-#include "parametric_functions/sh_glyph.glsl"
-#include "parametric_functions/single_yarn_curve.glsl"
-#include "parametric_functions/single_fiber_curve.glsl"
-#include "parametric_functions/curtain_yarn_curve.glsl"
-#include "parametric_functions/curtain_fiber_curve.glsl"
-#include "parametric_functions/seashells.glsl"
 
 vec4 paramToWS(float u, float v, int curveIndex, uvec3 userData)
 {

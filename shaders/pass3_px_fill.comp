@@ -125,10 +125,11 @@ vec3 groupcolors[MAX_COLORS] = {
 // @param  posWS               OUT parameter, returns the point's world space position 
 // @param  isOff               OUT parameter, returns is_off_screen information 
 // @return The resulting viewport coordinates as vec3
-vec3 calcPoint(float u, float v, int curveIndex, uvec3 userData, mat4 tM, out vec3 posWS, out uint isOff) 
+vec3 calcPoint(float u, float v, int curveIndex, uvec3 userData, mat4 tM, out vec3 posWS_untranslated, out vec3 posWS, out uint isOff) 
 {
 	// Start with world space:
 	vec4 rawWS = paramToWS(u, v, curveIndex, userData);
+	posWS_untranslated = rawWS.xyz;
 	vec4 traWS = tM * rawWS;
 	posWS = traWS.xyz;
 	vec4 posCS = toCS(traWS);
@@ -212,9 +213,9 @@ void main()
 		const float u = paramsStart[0]   +   iu * iterationDeltaU   +   deltaU * myInvocIdx;
 		float       v = paramsStart[1];
 		// Calculate the "bottom"-most row now, because we need that values for normals calculation in subsequent loop iterations:
-		vec3 wsPing;
+		vec3 wsPing, wsPing_untranslated;
 		uint offPing;
-		vec3 vpcPing = calcPoint(u, v, curveIndex, userData, tM, /* out: */ wsPing, /* out: */ offPing);
+		vec3 vpcPing = calcPoint(u, v, curveIndex, userData, tM, /* out: */ wsPing_untranslated, /* out: */ wsPing, /* out: */ offPing);
 
 		// In order to calclate the normal, steal from neighbor:
 		vec3 wsNeighbor  = subgroupShuffleDown(wsPing , 1); // subgroupShuffle(wsPing, clamp(gl_SubgroupInvocationID + 1, 0, gl_WorkGroupSize.x - 1));
@@ -224,9 +225,9 @@ void main()
 		for (float iv = deltaV; iv < vTarget; iv += deltaV) {
 			v = paramsStart[1] + iv;
 			// Calculate the next row...
-			vec3 wsPong;
+			vec3 wsPong, wsPong_untranslated;
 			uint offPong;
-			vec3 vpcPong = calcPoint(u, v, curveIndex, userData, tM, /* out: */ wsPong, /* out: */ offPong);
+			vec3 vpcPong = calcPoint(u, v, curveIndex, userData, tM, /* out: */ wsPong_untranslated, /* out: */ wsPong, /* out: */ offPong);
 
 			bool tryAgain = false;
 			if (useAdaptive) {
@@ -271,7 +272,7 @@ void main()
 						}
 #else
 						float depth = vpcPing.z;
-						vec3  color = shade(matIndex, myColor, getParamShadingUserParams(u, v, curveIndex, userData, wsPing, objectId), n, getParamTexCoords(u, v, curveIndex, userData, wsPing), dfdx, dfdy);
+						vec3  color = shade(matIndex, myColor, getParamShadingUserParams(u, v, curveIndex, userData, wsPing_untranslated, objectId), wsPing, n, getParamTexCoords(u, v, curveIndex, userData, wsPing), dfdx, dfdy);
 #if SUPERSAMPLING
 						writeSupersampled(ivec2(vpcPing.xy), depth, vec4(color, 1.0));
 #else 
@@ -309,9 +310,9 @@ void main()
 				float depth = data.mDepth;
 				vec3 myColor = groupcolors[pxFillId % MAX_COLORS];
 
-				vec4 posWS = tM * paramToWS(u, v, curveIndex, userData)
+				vec4 posWS = paramToWS(u, v, curveIndex, userData)
 
-				uint64_t data = getUint64ForFramebuffer(depth, shade(matIndex, myColor, getParamShadingUserParams(params.x, params.y, curveIndex, userData, posWS, objectId), n, getParamTexCoords(params.x, params.y, curveIndex, userData, wsPing), dfdx, dfdy));
+				uint64_t data = getUint64ForFramebuffer(depth, shade(matIndex, myColor, getParamShadingUserParams(params.x, params.y, curveIndex, userData, posWS_untranslated, objectId), n, getParamTexCoords(params.x, params.y, curveIndex, userData, wsPing), dfdx, dfdy));
 				writeToCombinedAttachment(globalFbCoords, data);
 			}
 		}

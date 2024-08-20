@@ -90,7 +90,7 @@ vec3 gltf_dielectric_brdf(vec3 incoming, vec3 outgoing, vec3 normal, float rough
     return mix(diffuse, vec3(specular), fresnel);
 }
 
-vec3 shade(int matIndex, vec3 albedo, vec4 shadingUserParams, vec3 normalWS, vec2 texCoords SHADE_ADDITIONAL_PARAMS)
+vec3 shade(int matIndex, vec3 albedo, vec3 shadingUserParams, vec3 posWS, vec3 normalWS, vec2 texCoords SHADE_ADDITIONAL_PARAMS)
 {
     if (matIndex < -3 || matIndex > 10000) {
 		return linear_rgb_to_srgb(vec3(1.0, 0.0, 1.0));
@@ -126,19 +126,7 @@ vec3 shade(int matIndex, vec3 albedo, vec4 shadingUserParams, vec3 normalWS, vec
 
     if (-2 == matIndex) { // ========== SH GLYPH MATERIAL BEGIN ============
         vec3 color = vec3(1.0);
-        vec3 posWS = shadingUserParams.xyz;
-        uint combined = floatBitsToUint(shadingUserParams.w);
-        uint dimX     = combined         & 0xFF;
-        uint dimY     = (combined >> 8)  & 0xFF;
-        uint glyphId  = (combined >> 16) & 0xFFFF;
-
-        uint y = glyphId / max(1, dimX);
-        uint x = glyphId - (y * dimX);
-        //if (shadingUserParams.w != 0)
-            //debugPrintfEXT("%f", shadingUserParams.w);
-        const float f = SH_BRAIN_ELEMENT_OFFSET;
-        vec3 translation = vec3(x * f, 0.0, y * f) - vec3(float(dimX) * 0.5 * f, 0.0, float(dimY) * 0.5 * f);
-        vec3 posWS_untranslated = posWS - translation;
+        vec3 posWS_untranslated = shadingUserParams.xyz;
 
         // Evaluate shading for a directional light
         vec3 intersection = posWS_untranslated;
