@@ -89,14 +89,14 @@
 //#define POINT_RENDERIN_PATCH_RES_S_Y   1.5f
 
 // ================= UNCOMMENT FOR PATCH->TESS RENDERING METHOD ======================
-// Values: rendering_method::point_rendered | rendering_method::tessellated_rasterized
-#define TEST_RENDERING_METHOD          rendering_method::tessellated_rasterized
+// Values: rendering_variant::point_rendered | rendering_variant::tessellated_rasterized
+#define TEST_RENDERING_METHOD          rendering_variant::tessellated_rasterized
 // Values: 0 = Uint64 image | 3 = framebuffer (must use that for SSAA or MSAA)
 #define TEST_TARGET_IMAGE              3
 
 //// ================= UNCOMMENT FOR POINT->PATCH RENDERING METHOD =====================
-//// Values: rendering_method::point_rendered | rendering_method::tessellated_rasterized
-//#define TEST_RENDERING_METHOD          rendering_method::point_rendered
+//// Values: rendering_variant::point_rendered | rendering_variant::tessellated_rasterized
+//#define TEST_RENDERING_METHOD          rendering_variant::point_rendered
 //// Values: 0 = Uint64 image | 3 = framebuffer (must use that for SSAA or MSAA)
 //#define TEST_TARGET_IMAGE              0
 
@@ -736,7 +736,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
             tmp.mTransformationMatrix = po.transformation_matrix();
 			tmp.mMaterialIndex = po.material_index();
 			tmp.mUseAdaptiveDetail = mAdaptivePxFill ? 1 : 0;
-			tmp.mPxFillSetIndex = get_px_fill_set_index(po.how_to_render());
+			tmp.mRenderingVariantIndex = get_rendering_variant_index(po.how_to_render());
 
 			tmp.mLodAndRenderSettings = { 
 				po.parameters_epsilon()[0], po.parameters_epsilon()[1],
@@ -1459,6 +1459,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 					ImGui::Text(std::format("{:12L} pixel fill patches spawned[1]", mNumPxFillPatchesCreated[1]).c_str());
 					ImGui::Text(std::format("{:12L} pixel fill patches spawned[2]", mNumPxFillPatchesCreated[2]).c_str());
 					ImGui::Text(std::format("{:12L} pixel fill patches spawned[3]", mNumPxFillPatchesCreated[3]).c_str());
+					ImGui::Text(std::format("{:12L} pixel fill patches spawned[4]", mNumPxFillPatchesCreated[4]).c_str());
 					ImGui::End();
 				}
 
@@ -1646,7 +1647,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 				LOG_INFO(            " - mGatherPipelineStats not included in build (!STATS_ENABLED)");
 #endif
 //                switch (mRenderingMethod) {
-//                case rendering_method::point_rendered: 
+//                case rendering_variant::point_rendered: 
 //					LOG_INFO(std::format(" - Use individual patch resolution during px fill: {}", mUseMaxPatchResolutionDuringPxFill));
 //					LOG_INFO(std::format(" - Adaptive pixel fill enabled:                    {}", mAdaptivePxFill));
 //					LOG_INFO(std::format(" - PX_FILL_LOCAL_FB enabled: {}", (0 != PX_FILL_LOCAL_FB)));
@@ -1657,8 +1658,8 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 //
 //#endif
 //                    break;
-//                case rendering_method::tessellated_rasterized:
-//                case rendering_method::tessellated_rasterized_wireframe:
+//                case rendering_variant::tessellated_rasterized:
+//                case rendering_variant::tessellated_rasterized_wireframe:
 //					LOG_INFO(std::format(" - Constant Inner Tessellation Level: {}", mConstInnerTessLevel));
 //					LOG_INFO(std::format(" - Constant Outer Tessellation Level: {}", mConstOuterTessLevel));
 //					LOG_INFO(std::format(" - Use individual patch resolution during px fill: {}", mUseMaxPatchResolutionDuringPxFill));
@@ -1961,6 +1962,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 			mNumPxFillPatchesCreated[1] = pxFillCountBufferContents[1].instanceCount;
 			mNumPxFillPatchesCreated[2] = pxFillCountBufferContents[2].instanceCount;
 			mNumPxFillPatchesCreated[3] = pxFillCountBufferContents[3].instanceCount;
+			mNumPxFillPatchesCreated[4] = pxFillCountBufferContents[4].instanceCount;
 			for (int i = 0; i < patchLodCountBufferContents.size(); ++i) {
 			    mPatchesCreatedPerLevel[i] = patchLodCountBufferContents[i].x;
 			}
@@ -2096,11 +2098,11 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 
 				command::push_constants(tessPipePxFillSupersampledToBeUsed->layout(), patch_into_tess_push_constants{ 
 					mConstOuterTessLevel, mConstInnerTessLevel, 
-					get_px_fill_set_index(rendering_method::Tess_4xSS_8xMS) * MAX_INDIRECT_DISPATCHES 
+					get_rendering_variant_index(rendering_variant::Tess_4xSS_8xMS) * MAX_INDIRECT_DISPATCHES 
 				}),
 				command::draw_vertices_indirect(
 					mIndirectPxFillCountBuffer.as_reference(), 
-					get_px_fill_set_index(rendering_method::Tess_4xSS_8xMS) * sizeof(VkDrawIndirectCommand), 
+					get_rendering_variant_index(rendering_variant::Tess_4xSS_8xMS) * sizeof(VkDrawIndirectCommand), 
 					sizeof(VkDrawIndirectCommand), 
 					1u) // <-- Exactly ONE draw (but potentially a lot of instances), use the one at [1]
 
@@ -2144,11 +2146,11 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 					
 				command::push_constants(tessPipePxFillNoaaToBeUsed->layout(), patch_into_tess_push_constants{ 
 					mConstOuterTessLevel, mConstInnerTessLevel, 
-					get_px_fill_set_index(rendering_method::Tess_noAA) * MAX_INDIRECT_DISPATCHES 
+					get_rendering_variant_index(rendering_variant::Tess_noAA) * MAX_INDIRECT_DISPATCHES 
 				}),
 				command::draw_vertices_indirect(
 					mIndirectPxFillCountBuffer.as_reference(), 
-					get_px_fill_set_index(rendering_method::Tess_noAA) * sizeof(VkDrawIndirectCommand), 
+					get_rendering_variant_index(rendering_variant::Tess_noAA) * sizeof(VkDrawIndirectCommand), 
 					sizeof(VkDrawIndirectCommand), 
 					1u), // <-- Exactly ONE draw (but potentially a lot of instances), use the one at [0]
 				
@@ -2175,11 +2177,11 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 					
 				command::push_constants(tessPipePxFillMultisampledToBeUsed->layout(), patch_into_tess_push_constants{ 
 					mConstOuterTessLevel, mConstInnerTessLevel, 
-					get_px_fill_set_index(rendering_method::Tess_8xSS) * MAX_INDIRECT_DISPATCHES 
+					get_rendering_variant_index(rendering_variant::Tess_8xSS) * MAX_INDIRECT_DISPATCHES 
 				}),
 				command::draw_vertices_indirect(
 					mIndirectPxFillCountBuffer.as_reference(), 
-					get_px_fill_set_index(rendering_method::Tess_8xSS) * sizeof(VkDrawIndirectCommand), 
+					get_rendering_variant_index(rendering_variant::Tess_8xSS) * sizeof(VkDrawIndirectCommand), 
 					sizeof(VkDrawIndirectCommand), 
 					1u) // <-- Exactly ONE draw (but potentially a lot of instances), use the one at [1]
 

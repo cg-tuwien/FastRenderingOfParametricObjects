@@ -11,6 +11,9 @@
 #extension GL_KHR_shader_subgroup_shuffle_relative       : require
 #extension GL_EXT_debug_printf                           : enable
 
+// This is const (see static int get_px_fill_set_index(rendering_method aRenderMethod) -> case rendering_method::PointRendered_4xSS_local_fb):
+#define POINT_RENDERED_4XSS_LOCAL_FB_INDEX 4
+
 layout(local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
 #include "../shader_includes/host_device_shared.h"
 #include "../shader_includes/util/ui64_conv.glsl"
@@ -36,14 +39,13 @@ layout(set = 4, binding = 0) buffer TilePatchesBuffer { uint mPatchIndices[]; } 
 void main()
 {
 	// Go over all the patches => store into uTilePatches at the correct locations
-	const uint pointRenderingVariantIndex = 2; // <-- Note: Point rendering is [2] always
-	const uint numPatches  = uPxFillCounts.mDrawParams[pointRenderingVariantIndex].instanceCount;
+	const uint numPatches  = uPxFillCounts.mDrawParams[POINT_RENDERED_4XSS_LOCAL_FB_INDEX].instanceCount;
 	const uvec2 tileSizes  = uvec2(PX_FILL_LOCAL_FB_TILE_SIZE_X, PX_FILL_LOCAL_FB_TILE_SIZE_Y);
 	const uvec2 resolution = uvec2(imageSize(uCombinedAttachment));
 	const uvec2 numTiles   = uvec2(resolution.x/PX_FILL_LOCAL_FB_TILE_SIZE_X, resolution.y/PX_FILL_LOCAL_FB_TILE_SIZE_Y);
 	
 	for (uint p = gl_GlobalInvocationID.x; p < numPatches; p += gl_WorkGroupSize.x * 128 /* <-- because we made a dispatch(128u, 1u, 1u) */) {
-		uint elementIndex = p + MAX_INDIRECT_DISPATCHES * pointRenderingVariantIndex;
+		uint elementIndex = p + MAX_INDIRECT_DISPATCHES * POINT_RENDERED_4XSS_LOCAL_FB_INDEX;
 		// Bounds check: 
 		vec4 patchScreenInfo  = uPxFillParams.mElements[elementIndex].mScreenDists;
 		ivec2 minScreenCoords = ivec2(patchScreenInfo.zw);

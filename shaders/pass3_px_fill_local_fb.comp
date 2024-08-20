@@ -15,6 +15,9 @@
 #define _unroll_ [[unroll]]
 #define _loop_   [[loop]]
 
+// This is const (see static int get_px_fill_set_index(rendering_method aRenderMethod) -> case rendering_method::PointRendered_4xSS_local_fb):
+#define POINT_RENDERED_4XSS_LOCAL_FB_INDEX 4
+
 #if PX_FILL_LOCAL_FB && !SEPARATE_PATCH_TILE_ASSIGNMENT_PASS
 #define MAX_TILE_PATCHES  3600
 shared uint NumTilePatches;
@@ -228,8 +231,7 @@ void main()
 	const int tileBufferBaseIndex = (int(gl_WorkGroupID.y) * numTiles.x + int(gl_WorkGroupID.x)) * MAX_PATCHES_PER_TILE;
 	uint numPatches = uTilePatches.mPatchIndices[tileBufferBaseIndex];
 #elif PX_FILL_LOCAL_FB
-	const uint pointRenderingVariantIndex = 2; // <-- Note: Point rendering is [2] always
-	const uint numPatches = uPxFillCounts.mDrawParams[pointRenderingVariantIndex].instanceCount;
+	const uint numPatches = uPxFillCounts.mDrawParams[POINT_RENDERED_4XSS_LOCAL_FB_INDEX].instanceCount;
 	if (gl_LocalInvocationID.yz == uvec2(0, 0)) {
 		for (uint p = gl_LocalInvocationID.x; p < numPatches; p += gl_WorkGroupSize.x) {
 			// Bounds check: 

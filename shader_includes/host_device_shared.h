@@ -20,13 +20,19 @@
 // NOTE: This  vvv  is also the stride for the start indices of the different rendering variants.
 #define MAX_INDIRECT_DISPATCHES		4000000
 
+// How many different rendering variants are there?
+#define NUM_RENDERING_VARIANTS		5
+
+// Index that represents the hybrid variant:
+#define HYBRID_VARIANT_INDEX		5
+
 // The vertex buffers offer  space for 67M vertices each (=> 800MB for positions data):
 #define MAX_VERTICES				 67108864
 // The index  buffer  offers space for 67M vertices (=> 500MB for index data):
 #define MAX_INDICES					134217728
 
 //// Whether statistics are enabled at all
-#define STATS_ENABLED               0
+#define STATS_ENABLED               1
 
 // Enable/disable local rasterization into shared memory in px fill shaders:
 #define SHARED_MEM_LOCAL_RASTER     0

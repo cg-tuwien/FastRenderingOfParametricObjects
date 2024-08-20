@@ -70,7 +70,7 @@ enum struct parametric_object_type : int32_t
     Seashell3
 };
 
-enum struct rendering_method : int
+enum struct rendering_variant : int
 {
     Tess_noAA = 0,
     Tess_8xSS,
@@ -80,20 +80,21 @@ enum struct rendering_method : int
     Hybrid
 };
 
-static int get_px_fill_set_index(rendering_method aRenderMethod)
+static int get_rendering_variant_index(rendering_variant aRenderMethod)
 {
     switch (aRenderMethod) {
-    case rendering_method::Tess_noAA: 
-    case rendering_method::Hybrid: // default to 0
+    case rendering_variant::Tess_noAA: 
         return 0;
-    case rendering_method::Tess_8xSS: 
+    case rendering_variant::Tess_8xSS: 
         return 1;
-    case rendering_method::Tess_4xSS_8xMS:
+    case rendering_variant::Tess_4xSS_8xMS:
         return 2;
-    case rendering_method::PointRendered_direct:
+    case rendering_variant::PointRendered_direct:
         return 3;
-    case rendering_method::PointRendered_4xSS_local_fb:
+    case rendering_variant::PointRendered_4xSS_local_fb:
         return 4;
+    case rendering_variant::Hybrid:
+        return 5;
     default:
         assert (false);
         return 0;
@@ -102,16 +103,16 @@ static int get_px_fill_set_index(rendering_method aRenderMethod)
 
 // Gets a divisor for the screen space threshold based on the render method:
 // Imagine it like this: 4x super sampling variants must use half the threshold (in u and v direction each).
-static float get_screen_space_threshold_divisor(rendering_method aRenderMethod)
+static float get_screen_space_threshold_divisor(rendering_variant aRenderMethod)
 {
     switch (aRenderMethod) {
-    case rendering_method::Tess_noAA: 
-    case rendering_method::PointRendered_direct:
-    case rendering_method::Hybrid: // default to 0
+    case rendering_variant::Tess_noAA: 
+    case rendering_variant::PointRendered_direct:
+    case rendering_variant::Hybrid: // default to 0
         return 1.0f;
-    case rendering_method::Tess_8xSS: 
-    case rendering_method::Tess_4xSS_8xMS:
-    case rendering_method::PointRendered_4xSS_local_fb:
+    case rendering_variant::Tess_8xSS: 
+    case rendering_variant::Tess_4xSS_8xMS:
+    case rendering_variant::PointRendered_4xSS_local_fb:
         return 2.0f;
     default:
         assert (false);
@@ -137,7 +138,7 @@ public:
         , mParamObjType { objType }
         , mTransformationMatrix{ aTransformationMatrix }
         , mMaterialIndex{ aMaterialIndex }
-        , mRenderingMethod{ rendering_method::Tess_noAA }
+        , mRenderingMethod{ rendering_variant::Tess_noAA }
         , mScreenDistanceThreshold{ 84.0f }
         , mParametersEpsilon{ 0.005f, 0.005f }
         , mSamplingFactor{ 1.0f }
@@ -170,7 +171,7 @@ public:
     void set_curve(parametric_object_type objType) { mParamObjType = objType; }
     void set_curve_index(int32_t curveIndex) { mParamObjType = static_cast<parametric_object_type>(curveIndex); }
     void set_material_index(int32_t matIndex) { mMaterialIndex = matIndex; }
-    void set_how_to_render(rendering_method renderMeth) { mRenderingMethod = renderMeth; }
+    void set_how_to_render(rendering_variant renderMeth) { mRenderingMethod = renderMeth; }
     void set_num_elements(uint32_t x, uint32_t y) { mEvalDims[2] = x; mEvalDims[3] = y; }
     void set_screen_distance_threshold(float t) { mScreenDistanceThreshold = t; }
     void set_parameters_epsilon(glm::vec2 epsilons) { mParametersEpsilon = epsilons; }
@@ -186,7 +187,7 @@ private:
     glm::mat4 mTransformationMatrix;
     parametric_object_type mParamObjType;
     int32_t mMaterialIndex;
-    rendering_method mRenderingMethod;
+    rendering_variant mRenderingMethod;
     float mScreenDistanceThreshold;
     glm::vec2 mParametersEpsilon;
     float mSamplingFactor;
@@ -206,7 +207,7 @@ struct object_data
         , mCurveIndex{0}
         , mMaterialIndex{0}
         , mUseAdaptiveDetail{1}
-        , mPxFillSetIndex{ 0 }
+        , mRenderingVariantIndex{ 0 }
         , mLodAndRenderSettings{ 1.0f, 1.0f, 100.0f, 1.0f }
     {}
 
@@ -217,7 +218,7 @@ struct object_data
     int32_t    mMaterialIndex;
     // The following means "adaptive tessellation levels" (for tessellation-based rendering) or "adaptive sampling" (for point-based rendering)
     int32_t    mUseAdaptiveDetail;
-    int32_t    mPxFillSetIndex;
+    int32_t    mRenderingVariantIndex;
     // The following settings are stored in the vec4:
     //  .xy ... Percent how much to increase patch parameters (s.t. neighboring patches overlap a bit)
     //  .z  ... screen-space distance for the LOD stage
