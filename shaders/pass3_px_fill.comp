@@ -11,6 +11,9 @@
 #extension GL_KHR_shader_subgroup_shuffle_relative       : require
 #extension GL_EXT_debug_printf                           : enable
 
+// This is const (see static int get_px_fill_set_index(rendering_method aRenderMethod) -> case rendering_method::PointRendered_direct):
+#define POINT_RENDERED_DIRECT_INDEX 3
+
 // Possible values: [1...4]
 // Obviously, higher numbers might lead to better parallelization.
 // More groups can probably better utilize the shared memory, because shared memory is shared between 4 SMs anyways.
@@ -153,7 +156,7 @@ void main()
 	}
 #endif
 
-	uint pxFillId = gl_WorkGroupID.x;
+	uint pxFillId = gl_WorkGroupID.x + MAX_INDIRECT_DISPATCHES * POINT_RENDERED_DIRECT_INDEX;
 //	if (pxFillId != 0) return;
 
 	// in: 

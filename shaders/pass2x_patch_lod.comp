@@ -37,13 +37,16 @@ layout(local_size_x = EVAL_GRID_X, local_size_y = EVAL_GRID_Y, local_size_z = EV
 #include "../shader_includes/types.glsl"
 #include "../shader_includes/common_ubo.glsl"
 
-#if SHARED_MEM_LOCAL_RASTER
+// Note: The following must be turned on now always since we
+//       effectively have PX_FILL_LOCAL_FB always enabled, so to say.
+// (In a previous version it could be turned off, but not now with the 5 concurrent rendering variants.)
 #define WRITE_OUT_MIN_MAX_SCREEN_COORDS 1
-#else 
-#define WRITE_OUT_MIN_MAX_SCREEN_COORDS 0
-#endif
 
-#define DO_ONE_TO_FOUR_SPLITS_ONLY 1
+// The following is a debug/test setting which should NOT be turned on.
+// Is was added to test 1:4 splits always (which was proposed by a previous
+// technique by Eisenacher et al. 2009, but was found to be suboptimal 
+// during our research).
+#define DO_ONE_TO_FOUR_SPLITS_ONLY 0
 
 // +------------------------------------------------------------------------------+
 // |   Bound Resources                                                            |
