@@ -23,7 +23,7 @@ layout(set = 2, binding = 1, r32ui) uniform restrict uimage2D   uHeatmapImage;
 layout(set = 3, binding = 0) buffer PatchLodPing { px_fill_data mElements[]; } uPatchLodPing; 
 layout(set = 3, binding = 1) buffer PatchLodPong { px_fill_data mElements[]; } uPatchLodPong; 
 layout(set = 3, binding = 2) buffer PatchLodCount { uvec4 mDispatchCounts[]; } uPatchLodCount; 
-#if PX_FILL_LOCAL_FB && SEPARATE_PATCH_TILE_ASSIGNMENT_PASS
+#if SEPARATE_PATCH_TILE_ASSIGNMENT_PASS
 layout(set = 4, binding = 0) buffer TilePatchesBuffer { uint mPatchIndices[]; } uTilePatches;
 #endif
 // -------------------------------------------------------
@@ -34,7 +34,7 @@ layout(set = 4, binding = 0) buffer TilePatchesBuffer { uint mPatchIndices[]; } 
 // Clears uImg to a depth of 1.0 and a clear color.
 void main()
 {
-#if NICE_CLEAR_COLOR || (PX_FILL_LOCAL_FB && SEPARATE_PATCH_TILE_ASSIGNMENT_PASS)
+#if NICE_CLEAR_COLOR || SEPARATE_PATCH_TILE_ASSIGNMENT_PASS
 	uvec2 resolution = imageSize(uCombinedAttachment);
 #endif
 
@@ -77,7 +77,7 @@ void main()
 		}
 	}
 
-#if PX_FILL_LOCAL_FB && SEPARATE_PATCH_TILE_ASSIGNMENT_PASS
+#if SEPARATE_PATCH_TILE_ASSIGNMENT_PASS
 	uvec2 numTiles = uvec2(resolution.x/PX_FILL_LOCAL_FB_TILE_SIZE_X, resolution.y/PX_FILL_LOCAL_FB_TILE_SIZE_Y);
 	if (gl_GlobalInvocationID.x <= numTiles.x && gl_GlobalInvocationID.y <= numTiles.y && (gl_GlobalInvocationID.y * numTiles.x + gl_GlobalInvocationID.x) * MAX_PATCHES_PER_TILE < TILE_PATCHES_BUFFER_ELEMENTS) {
 		uTilePatches.mPatchIndices[(gl_GlobalInvocationID.y * numTiles.x + gl_GlobalInvocationID.x) * MAX_PATCHES_PER_TILE] = 0;

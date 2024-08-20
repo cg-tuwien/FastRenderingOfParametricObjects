@@ -40,9 +40,7 @@
 // Enable supersampling, i.e., accumulating of samples and storing their average in the framebuffer
 #define SUPERSAMPLING               0
 
-// Enable pass3_px_fill_local_fb.comp instead of pass3_px_fill.comp
-#define PX_FILL_LOCAL_FB                1
-// Tile size for which we construct a local framebuffer:
+// Tile size for which we construct a local framebuffer (relevant for pass3_px_fill_local_fb.comp)
 #define PX_FILL_LOCAL_FB_TILE_SIZE_X    16
 #define PX_FILL_LOCAL_FB_TILE_SIZE_Y    16
 
@@ -59,7 +57,7 @@
 #define WRITE_MAX_COORDS_IN_PASS2       1
 
 // If enabled, adds a new buffer and a new compute pass which goes over all patches and assigns them to screen tiles.
-// Only makes sense in conjunction with PX_FILL_LOCAL_FB enabled.
+// (Only relevant in conjunction with pass3_px_fill_local_fb.comp)
 #define SEPARATE_PATCH_TILE_ASSIGNMENT_PASS    1
 #define MAX_PATCHES_PER_TILE                   3000
 // 20736 is enough for all the buckets of a 4k resolution

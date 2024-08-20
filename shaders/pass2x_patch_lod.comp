@@ -37,7 +37,7 @@ layout(local_size_x = EVAL_GRID_X, local_size_y = EVAL_GRID_Y, local_size_z = EV
 #include "../shader_includes/types.glsl"
 #include "../shader_includes/common_ubo.glsl"
 
-#if SHARED_MEM_LOCAL_RASTER || PX_FILL_LOCAL_FB
+#if SHARED_MEM_LOCAL_RASTER
 #define WRITE_OUT_MIN_MAX_SCREEN_COORDS 1
 #else 
 #define WRITE_OUT_MIN_MAX_SCREEN_COORDS 0

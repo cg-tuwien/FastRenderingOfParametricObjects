@@ -18,7 +18,7 @@
 // This is const (see static int get_px_fill_set_index(rendering_method aRenderMethod) -> case rendering_method::PointRendered_4xSS_local_fb):
 #define POINT_RENDERED_4XSS_LOCAL_FB_INDEX 4
 
-#if PX_FILL_LOCAL_FB && !SEPARATE_PATCH_TILE_ASSIGNMENT_PASS
+#if !SEPARATE_PATCH_TILE_ASSIGNMENT_PASS
 #define MAX_TILE_PATCHES  3600
 shared uint NumTilePatches;
 shared uint TilePatches[MAX_TILE_PATCHES];
@@ -61,7 +61,7 @@ layout(set = 3, binding = 0, r64ui) uniform restrict volatile u64image2D uCombin
 layout(set = 3, binding = 1, r32ui) uniform restrict uimage2D   uHeatmapImage;
 #endif
 layout(set = 4, binding = 0) buffer BigDataset { dataset_sh_coeffs mEntries[]; } uBigDataset; 
-#if PX_FILL_LOCAL_FB && SEPARATE_PATCH_TILE_ASSIGNMENT_PASS
+#if SEPARATE_PATCH_TILE_ASSIGNMENT_PASS
 layout(set = 5, binding = 0) buffer TilePatchesBuffer { uint mPatchIndices[]; } uTilePatches;
 #endif
 
@@ -204,7 +204,7 @@ bool isOutside(ivec2 boxMin, ivec2 boxMax, ivec2 referenceFrameLBInclusive, ivec
 // ################## compute shader main ###################
 void main()
 {
-#if PX_FILL_LOCAL_FB && !SEPARATE_PATCH_TILE_ASSIGNMENT_PASS
+#if !SEPARATE_PATCH_TILE_ASSIGNMENT_PASS
 	// Gotta find the relevant patches:
 	if (subgroupElect()) {
 		NumTilePatches = 0;
@@ -224,13 +224,13 @@ void main()
 	// |                                                 |
 	// |   vvv   Select all the relevant patches   vvv   |
 	// +-------------------------------------------------+
-#if PX_FILL_LOCAL_FB && SEPARATE_PATCH_TILE_ASSIGNMENT_PASS
+#if SEPARATE_PATCH_TILE_ASSIGNMENT_PASS
 	const ivec2 tileSizes  = ivec2(PX_FILL_LOCAL_FB_TILE_SIZE_X, PX_FILL_LOCAL_FB_TILE_SIZE_Y);
 	const ivec2 resolution = imageSize(uCombinedAttachment);
 	const ivec2 numTiles   = ivec2(resolution.x, resolution.y)/tileSizes;
 	const int tileBufferBaseIndex = (int(gl_WorkGroupID.y) * numTiles.x + int(gl_WorkGroupID.x)) * MAX_PATCHES_PER_TILE;
 	uint numPatches = uTilePatches.mPatchIndices[tileBufferBaseIndex];
-#elif PX_FILL_LOCAL_FB
+#else
 	const uint numPatches = uPxFillCounts.mDrawParams[POINT_RENDERED_4XSS_LOCAL_FB_INDEX].instanceCount;
 	if (gl_LocalInvocationID.yz == uvec2(0, 0)) {
 		for (uint p = gl_LocalInvocationID.x; p < numPatches; p += gl_WorkGroupSize.x) {
@@ -239,9 +239,6 @@ void main()
 			ivec2 minScreenCoords = ivec2(patchScreenInfo.zw);
 #if WRITE_MAX_COORDS_IN_PASS2
 			ivec2 maxScreenCoords = ivec2(uPxFillParams.mElements[p].mScreenMax.xy);
-#else
-			// TODO: Why is this                                  vvv              buggy?
-			ivec2 maxScreenCoords = minScreenCoords + ivec2(sqrt(patchScreenInfo.x*patchScreenInfo.x + patchScreenInfo.y*patchScreenInfo.y));
 #endif
 			if (!isOutside(minScreenCoords, maxScreenCoords, screenCoordsLB, screenCoordsUB)) {
 				const uint insertIndex = atomicAdd(NumTilePatches, 1);
@@ -272,19 +269,16 @@ void main()
 	// Also, go high-res:
 	screenCoordsLB *= ivec2(TILE_FACTOR_X, TILE_FACTOR_Y);
 	screenCoordsUB *= ivec2(TILE_FACTOR_X, TILE_FACTOR_Y);
-#if PX_FILL_LOCAL_FB && SEPARATE_PATCH_TILE_ASSIGNMENT_PASS
+#if SEPARATE_PATCH_TILE_ASSIGNMENT_PASS
 	for (uint s = gl_LocalInvocationID.z; s < numPatches; s += COOPERATIVE_GROUPS) {
 		uint pxFillId = uTilePatches.mPatchIndices[tileBufferBaseIndex + s + 1];
 //		if (gl_LocalInvocationIndex == 0 && gl_WorkGroupID.x == 43 && gl_WorkGroupID.y == 26)
 //			debugPrintfEXT("[%u, %u]: patch %u of %u -> pxFillId[%u]", gl_WorkGroupID.x, gl_WorkGroupID.y, s, numPatches, pxFillId);
-#elif PX_FILL_LOCAL_FB
+#else
 	for (uint s = 0; s < NumTilePatches; s += 1) {
 		uint pxFillId = TilePatches[s];
 //		if (gl_LocalInvocationIndex == 0)
 //			debugPrintfEXT("[%u, %u]: patch %u of %u -> pxFillId[%u]", gl_WorkGroupID.x, gl_WorkGroupID.y, s, NumTilePatches, pxFillId);
-#else 
-	for (uint s = 0; s < 1; s+= 1) {
-		uint pxFillId = 0; // <-- this code is not supposed to be called (just implemented here to prevent shader compiler errors if PX_FILL_LOCAL_FB is disabled entirely.
 #endif
 
 		// in: 
@@ -436,7 +430,7 @@ void main()
 		for (uint y = gl_LocalInvocationID.z; y < PX_FILL_LOCAL_FB_TILE_SIZE_Y; y += COOPERATIVE_GROUPS) {
 			ivec2 globalFbCoords = ivec2(x, y) + screenCoordsLB;
 			writeToCombinedAttachment(globalFbCoords, getUint64ForFramebuffer(0.9999, vec4(modifiedHeatmapColors[
-#if PX_FILL_LOCAL_FB && SEPARATE_PATCH_TILE_ASSIGNMENT_PASS
+#if SEPARATE_PATCH_TILE_ASSIGNMENT_PASS
 				min(numPatches, MAX_HEATMAP_COLORS-1)
 #else
 				min(NumTilePatches, MAX_HEATMAP_COLORS-1)

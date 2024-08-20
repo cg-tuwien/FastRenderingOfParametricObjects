@@ -455,11 +455,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
         mUpdater->on(shader_files_changed_event(mPatchLodComputePipe.as_reference())).update(mPatchLodComputePipe);
 
 		mPxFillComputePipe = create_compute_pipe_for_parametric(
-#if PX_FILL_LOCAL_FB
-			"shaders/pass3_px_fill_local_fb.comp",
-#else
 			"shaders/pass3_px_fill.comp", 
-#endif
 			descriptor_binding(0, 1, as_combined_image_samplers(mImageSamplers, layout::shader_read_only_optimal)),
 			descriptor_binding(0, 2, mMaterialBuffer), // TODO: Optimized descriptor set assignment would be cool
             // super druper image & heatmap image:
@@ -468,14 +464,28 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
             descriptor_binding(3, 1, mHeatMapImageView->as_storage_image(layout::general)),
 #endif
 			descriptor_binding(4, 0, mBigDataset->as_storage_buffer()),
-#if PX_FILL_LOCAL_FB && SEPARATE_PATCH_TILE_ASSIGNMENT_PASS
-			descriptor_binding(5, 0, mTilePatchesBuffer->as_storage_buffer()),
-#endif
 			push_constant_binding_data{ shader_type::all, 0, sizeof(pass3_push_constants) }
 		);
         mUpdater->on(shader_files_changed_event(mPxFillComputePipe.as_reference())).update(mPxFillComputePipe);
 
-#if PX_FILL_LOCAL_FB && SEPARATE_PATCH_TILE_ASSIGNMENT_PASS
+		mPxFillLocalFbComputePipe = create_compute_pipe_for_parametric(
+			"shaders/pass3_px_fill_local_fb.comp",
+			descriptor_binding(0, 1, as_combined_image_samplers(mImageSamplers, layout::shader_read_only_optimal)),
+			descriptor_binding(0, 2, mMaterialBuffer), // TODO: Optimized descriptor set assignment would be cool
+            // super druper image & heatmap image:
+            descriptor_binding(3, 0, mCombinedAttachmentView->as_storage_image(layout::general)),
+#if STATS_ENABLED
+            descriptor_binding(3, 1, mHeatMapImageView->as_storage_image(layout::general)),
+#endif
+			descriptor_binding(4, 0, mBigDataset->as_storage_buffer()),
+#if SEPARATE_PATCH_TILE_ASSIGNMENT_PASS
+			descriptor_binding(5, 0, mTilePatchesBuffer->as_storage_buffer()),
+#endif
+			push_constant_binding_data{ shader_type::all, 0, sizeof(pass3_push_constants) }
+		);
+        mUpdater->on(shader_files_changed_event(mPxFillLocalFbComputePipe.as_reference())).update(mPxFillLocalFbComputePipe);
+
+#if SEPARATE_PATCH_TILE_ASSIGNMENT_PASS
 		mSelectTilePatchesPipe = create_compute_pipe_for_parametric(
 			"shaders/pass3pre_select_tile_patches.comp",
 			descriptor_binding(0, 1, as_combined_image_samplers(mImageSamplers, layout::shader_read_only_optimal)),
@@ -1086,7 +1096,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 			storage_buffer_meta::create_from_size(         MAX_PATCH_SUBDIV_STEPS * sizeof(glm::uvec4)) // 1 counter per "ping/pong" compute invocation
 		);
 
-#if PX_FILL_LOCAL_FB && SEPARATE_PATCH_TILE_ASSIGNMENT_PASS
+#if SEPARATE_PATCH_TILE_ASSIGNMENT_PASS
 		mTilePatchesBuffer = context().create_buffer(
 			memory_usage::device, {},
 			storage_buffer_meta::create_from_size(TILE_PATCHES_BUFFER_ELEMENTS * sizeof(uint32_t))
@@ -1108,9 +1118,9 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 #else 
 			{},
 #endif
-			// NOTE: We're creating NUM_DIFFERENT_RENDER_VARIANTS-many such  vvv  entries, because: [0] = Tess. noAA, [1] = Tess. SS, [2] = point rendered
-			indirect_buffer_meta::create_from_num_elements(NUM_DIFFERENT_RENDER_VARIANTS, sizeof(VkDrawIndirectCommand)),
-			storage_buffer_meta::create_from_size(                                        sizeof(VkDrawIndirectCommand))
+			// NOTE: We're creating NUM_DIFFERENT_RENDER_VARIANTS-many such  vvv  entries, because: [0] = Tess_noAA, [1] = Tess_8xSS, [2] = Tess_4xSS_8xMS, [3] = PointRendered_direct, [4] = PointRendered_4xSS_local_fb
+			indirect_buffer_meta::create_from_num_elements(NUM_DIFFERENT_RENDER_VARIANTS,  sizeof(VkDrawIndirectCommand)),
+			storage_buffer_meta::create_from_size(         NUM_DIFFERENT_RENDER_VARIANTS * sizeof(VkDrawIndirectCommand))
 		);
 
 		// PARAMETRIC PIPES:
@@ -1203,7 +1213,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 			descriptor_binding(3, 0, mPatchLodBufferPing->as_storage_buffer()),
 			descriptor_binding(3, 1, mPatchLodBufferPong->as_storage_buffer()),
 			descriptor_binding(3, 2, mPatchLodCountBuffer->as_storage_buffer())
-#if PX_FILL_LOCAL_FB && SEPARATE_PATCH_TILE_ASSIGNMENT_PASS
+#if SEPARATE_PATCH_TILE_ASSIGNMENT_PASS
 			, descriptor_binding(4, 0, mTilePatchesBuffer->as_storage_buffer())
 #endif
 		);
@@ -2011,7 +2021,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
                     descriptor_binding(3, 0, mPatchLodBufferPing->as_storage_buffer()),
                     descriptor_binding(3, 1, mPatchLodBufferPong->as_storage_buffer()),
                     descriptor_binding(3, 2, mPatchLodCountBuffer->as_storage_buffer())
-#if PX_FILL_LOCAL_FB && SEPARATE_PATCH_TILE_ASSIGNMENT_PASS
+#if SEPARATE_PATCH_TILE_ASSIGNMENT_PASS
 					, descriptor_binding(4, 0, mTilePatchesBuffer->as_storage_buffer())
 #endif
 				})),
@@ -2213,7 +2223,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 
 
 
-#if PX_FILL_LOCAL_FB && SEPARATE_PATCH_TILE_ASSIGNMENT_PASS
+#if SEPARATE_PATCH_TILE_ASSIGNMENT_PASS
 				// Inject another intermediate pass:
 				command::bind_pipeline(mSelectTilePatchesPipe.as_reference()),
 				command::bind_descriptors(mSelectTilePatchesPipe->layout(), mDescriptorCache->get_or_create_descriptor_sets({
@@ -2239,7 +2249,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 				mTimestampPool->write_timestamp(firstQueryIndex + 8, stage::compute_shader), // measure after patch to tile step
 #endif
 
-				// 3rd pass compute shader: px fill PER DRAW PACKAGE
+				// 3rd pass compute shaders (two variants): px fill PER DRAW PACKAGE directly from compute shaders
                 command::bind_pipeline(mPxFillComputePipe.as_reference()),
 				command::bind_descriptors(mPxFillComputePipe->layout(), mDescriptorCache->get_or_create_descriptor_sets({
 				    descriptor_binding(0, 0, mFrameDataBuffers[inFlightIndex]), 
@@ -2254,28 +2264,51 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
                     , descriptor_binding(3, 1, mHeatMapImageView->as_storage_image(layout::general))
 #endif
 					, descriptor_binding(4, 0, mBigDataset->as_storage_buffer())
-#if PX_FILL_LOCAL_FB && SEPARATE_PATCH_TILE_ASSIGNMENT_PASS
-					, descriptor_binding(5, 0, mTilePatchesBuffer->as_storage_buffer())
-#endif
 				})),
-
 				command::push_constants(mPxFillComputePipe->layout(), pass3_push_constants{
 					mGatherPipelineStats ? VK_TRUE : VK_FALSE,  /* padding: */ 0,
 					glm::vec2{ mPxFillPatchTargetResolutionScaler[0], mPxFillPatchTargetResolutionScaler[1] },
 					glm::vec2{ mPxFillParamShift[0], mPxFillParamShift[1] },
 					glm::vec2{ mPxFillParamStretch[0], mPxFillParamStretch[1] },
 				}),
+				command::dispatch_indirect(
+					mIndirectPxFillCountBuffer, 
+					get_rendering_variant_index(rendering_variant::PointRendered_direct) * sizeof(VkDrawIndirectCommand) 
+					/* offset to the right struct member: */  + sizeof(VkDrawIndirectCommand::vertexCount)
+				), // => in order to use the instanceCount!
 
-#if PX_FILL_LOCAL_FB
-				command::dispatch((resolution.x + PX_FILL_LOCAL_FB_TILE_SIZE_X - 1) / PX_FILL_LOCAL_FB_TILE_SIZE_X, (resolution.y + PX_FILL_LOCAL_FB_TILE_SIZE_Y - 1) / PX_FILL_LOCAL_FB_TILE_SIZE_Y, 1),
-#else
-				command::dispatch_indirect(mIndirectPxFillCountBuffer, sizeof(VkDrawIndirectCommand::vertexCount)), // => in order to use the instanceCount!
+
+
+				// 3rd pass compute shaders (two variants): px fill PER DRAW PACKAGE directly from compute shaders
+                command::bind_pipeline(mPxFillLocalFbComputePipe.as_reference()),
+				command::bind_descriptors(mPxFillLocalFbComputePipe->layout(), mDescriptorCache->get_or_create_descriptor_sets({
+				    descriptor_binding(0, 0, mFrameDataBuffers[inFlightIndex]), 
+			        descriptor_binding(0, 1, as_combined_image_samplers(mImageSamplers, layout::shader_read_only_optimal)),
+			        descriptor_binding(0, 2, mMaterialBuffer),
+			        descriptor_binding(1, 0, mCountersSsbo->as_storage_buffer()),
+				    descriptor_binding(2, 0, mObjectDataBuffer->as_storage_buffer()),
+				    descriptor_binding(2, 1, mIndirectPxFillParamsBuffer->as_storage_buffer()),
+				    descriptor_binding(2, 2, mIndirectPxFillCountBuffer->as_storage_buffer()),
+                    descriptor_binding(3, 0, mCombinedAttachmentView->as_storage_image(layout::general))
+#if STATS_ENABLED
+                    , descriptor_binding(3, 1, mHeatMapImageView->as_storage_image(layout::general))
 #endif
+					, descriptor_binding(4, 0, mBigDataset->as_storage_buffer())
+#if SEPARATE_PATCH_TILE_ASSIGNMENT_PASS
+					, descriptor_binding(5, 0, mTilePatchesBuffer->as_storage_buffer())
+#endif
+				})),
+				command::push_constants(mPxFillLocalFbComputePipe->layout(), pass3_push_constants{
+					mGatherPipelineStats ? VK_TRUE : VK_FALSE,  /* padding: */ 0,
+					glm::vec2{ mPxFillPatchTargetResolutionScaler[0], mPxFillPatchTargetResolutionScaler[1] },
+					glm::vec2{ mPxFillParamShift[0], mPxFillParamShift[1] },
+					glm::vec2{ mPxFillParamStretch[0], mPxFillParamStretch[1] },
+				}),
+				command::dispatch((resolution.x + PX_FILL_LOCAL_FB_TILE_SIZE_X - 1) / PX_FILL_LOCAL_FB_TILE_SIZE_X, (resolution.y + PX_FILL_LOCAL_FB_TILE_SIZE_Y - 1) / PX_FILL_LOCAL_FB_TILE_SIZE_Y, 1),
 
 #if STATS_ENABLED
 			mTimestampPool->write_timestamp(firstQueryIndex + 9, stage::compute_shader), // measure after point rendering
 #endif
-
 
 
 
@@ -2376,7 +2409,8 @@ private: // v== Member variables ==v
 	avk::compute_pipeline mInitShBrainComputePipe;
 	avk::compute_pipeline mPatchLodComputePipe;
 	avk::compute_pipeline mPxFillComputePipe;
-#if PX_FILL_LOCAL_FB && SEPARATE_PATCH_TILE_ASSIGNMENT_PASS
+	avk::compute_pipeline mPxFillLocalFbComputePipe;
+#if SEPARATE_PATCH_TILE_ASSIGNMENT_PASS
 	avk::compute_pipeline mSelectTilePatchesPipe;
 #endif
 
@@ -2443,7 +2477,7 @@ private: // v== Member variables ==v
 	avk::buffer mPatchLodBufferPing;
 	avk::buffer mPatchLodBufferPong;
 	avk::buffer mPatchLodCountBuffer;
-#if PX_FILL_LOCAL_FB && SEPARATE_PATCH_TILE_ASSIGNMENT_PASS
+#if SEPARATE_PATCH_TILE_ASSIGNMENT_PASS
 	avk::buffer mTilePatchesBuffer;
 #endif
 	avk::buffer mIndirectPxFillParamsBuffer;
