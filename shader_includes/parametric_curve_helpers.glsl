@@ -37,6 +37,10 @@ vec3 getParamShadingUserParams(float u, float v, int curveIndex, uvec3 userData,
         // |   SH Glyphs                                     |
         // +-------------------------------------------------+
         case 5:
+            {
+                shadingUserParams = posWS_untranslated;
+            }
+            break;
 	    case 6:
             {
                 uvec2 datasetDims = userData.xy;
