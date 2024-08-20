@@ -14,11 +14,11 @@
 #define MAX_PATCH_SUBDIV_STEPS		12
 
 // Maximum number of LOD patches per "ping/pong" buffer:
-#define MAX_LOD_PATCHES				1000000
+#define MAX_LOD_PATCHES				4000000
 
 // Maximum number of indirect dispatch calls for the "pixel fill" compute pass (2nd pass):
 // NOTE: This  vvv  is also the stride for the start indices of the different rendering variants.
-#define MAX_INDIRECT_DISPATCHES		1000000
+#define MAX_INDIRECT_DISPATCHES		4000000
 
 // The vertex buffers offer  space for 67M vertices each (=> 800MB for positions data):
 #define MAX_VERTICES				 67108864
@@ -66,19 +66,3 @@
 #define SH_BRAIN_DATA_SIZE_X      140
 #define SH_BRAIN_DATA_SIZE_Y      140
 #define SH_BRAIN_ELEMENT_OFFSET    25.0
-
-
-// The index of the highest used band of the spherical harmonics basis. Must be
-// even, at least 2 and at most 12.
-#define SH_DEGREE 12
-// The number of spherical harmonics basis functions
-#define SH_COUNT (((SH_DEGREE + 1) * (SH_DEGREE + 2)) / 2)
-
-// The number of spherical harmonics basis functions
-#define SH_COUNT (((SH_DEGREE + 1) * (SH_DEGREE + 2)) / 2)
-
-// Rounds up to the next multiple of four
-#define ROUNDUP4(n) ((((n) + 3)/4)*4)
-
-// Degree of polynomials for which we have to find roots
-#define MAX_DEGREE (2 * SH_DEGREE + 2)
