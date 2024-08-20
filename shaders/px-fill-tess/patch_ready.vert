@@ -66,8 +66,9 @@ void main()
 		uPxFillParams.mElements[pxFillId].mParams[3]
 	);
 
-	paramsFrom -= vec2(epsilons[0] * (paramsTo.x - paramsFrom.x));
-	paramsTo   += vec2(epsilons[1] * (paramsTo.y - paramsFrom.y));
+	vec2 paramsRange = paramsTo - paramsFrom;
+	paramsFrom -= epsilons * sign(paramsRange) * paramsRange;
+	paramsTo   += epsilons * sign(paramsRange) * paramsRange;
 	
 	const uint vertexSubId = gl_VertexIndex - 1; // Gotta subtract 1 (see clear_r64_image.comp)
 
