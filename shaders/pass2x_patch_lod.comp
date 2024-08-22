@@ -220,59 +220,108 @@ void evalSplitDecision(bool aTransposeEval, vec2 aParamsStart, vec2 aParamsRange
 	}
 }
 
-bool measureSubpixelBumpiness(float uStart, float uEnd, float vStart, float vEnd, vec2 screenDists, mat4 aTM, int curveIndex, uvec3 userData)
+// This function measures if the parametric function varies strongly on a sub-pixel level:
+// (If it does, why not super-sample the patch?! If it doesn't no need for super sampling.)
+bool hasSubpixelFeatures(float uStart, float uEnd, float vStart, float vEnd, vec2 screenDists, mat4 aTM, int curveIndex, uvec3 userData)
 {
 	// Parameter ranges for ~1px:
 	vec2 parameterRange      = vec2(uEnd - uStart, vEnd - vStart);
 	vec2 onePxParamRange     = parameterRange / screenDists;
-	vec2 quarterPxParamRange = onePxParamRange;
+	vec2 quarterPxParamRange = onePxParamRange / 4.0;
 	vec2 middlePxStartParams = vec2(
-		uStart + parameterRange.x * 0.5 - onePxParamRange.x ,
-		vStart + parameterRange.y * 0.5 - onePxParamRange.y
+		uStart + parameterRange.x * 0.5 - onePxParamRange.x * 4.0,
+		vStart + parameterRange.y * 0.5 - onePxParamRange.y	* 4.0
 	);
 	
 	// Start in the middle:
-	float vParamPing = middlePxStartParams.y;
-	float vParamPong = vParamPing + quarterPxParamRange.y;
-	float uParam     = middlePxStartParams.x + gl_SubgroupInvocationID * quarterPxParamRange.x;
-	vec4  posPingWS  = aTM * paramToWS(uParam, vParamPing, curveIndex, userData);
-	vec4  posPongWS  = aTM * paramToWS(uParam, vParamPong, curveIndex, userData);
-	const uint neighborIndex = gl_SubgroupInvocationID == 31 ? gl_SubgroupInvocationID : gl_SubgroupInvocationID - 1;
-	vec4  posPongWSN = subgroupShuffle(posPongWS, neighborIndex);
-	vec3  normalPong = cross(normalize(posPongWSN.xyz - posPongWS.xyz), normalize(posPongWS.xyz - posPingWS.xyz));
-	vec3  normalPing = normalPong;
-	int sameDirCount = 0;
+	float vParam = middlePxStartParams.y;
+	float uParam = middlePxStartParams.x + gl_SubgroupInvocationID * quarterPxParamRange.x;
+
+//	vec3  tanWSv     = posPongWS.xyz - posPingWS.xyz;
+//	float lenTanWSv  = length(tanWS);
+
+	// We're going to take a look at quarter pixel neighbors and full pixel neighbors:
+	const uint pxNeighborIndex      = min(31, gl_SubgroupInvocationID % 4 == 0 ? gl_SubgroupInvocationID + 4 : gl_SubgroupInvocationID);
+	const uint pxBaseNeighborIndex  = uint(gl_SubgroupInvocationID / 4) * 4;
+	const uint quarterNeighborIndex = min(31, gl_SubgroupInvocationID + 1);
+
+//	float sumAbsAngleDiffSub = 0.0; // absolute differences between the angles on sub-pixel level
+	int count = 0;
+	int significantDiffs = 0;
 	
-	for (int i = 0; i < 8; ++i) {
-		// Next row:
-		vParamPing   = vParamPong;
-		vParamPong  += quarterPxParamRange.y;
-		posPingWS    = posPongWS;
-		posPongWS    = aTM * paramToWS(uParam, vParamPong, curveIndex, userData);
-		posPongWSN   = subgroupShuffle(posPongWS, neighborIndex);
+	// v direction:
+	for (int i = 0; i < 32; ++i) {
+		vec4 posWS     = aTM * paramToWS(uParam, vParam, curveIndex, userData);
+		vec4 pxnPosWS  = subgroupShuffle(posWS, pxNeighborIndex);
+		vec4 qunPosWS  = subgroupShuffle(posWS, quarterNeighborIndex);
 
-		normalPing   = normalPong;
-		normalPong   = cross(normalize(posPongWSN.xyz - posPongWS.xyz), normalize(posPongWS.xyz - posPingWS.xyz));
-		vec3 normalPongN = subgroupShuffle(normalPong, neighborIndex);
+		// Calc the tangents:
+		vec3 pxnTangTmp= pxnPosWS.xyz - posWS.xyz;
+		vec3 pxnTang   = subgroupShuffle(pxnTangTmp, pxBaseNeighborIndex); // regardless of this invocation's pxnTang, always pick the pxBase's value
+		float pxnLen   = length(pxnTang);
 
-		vec3 rotU    = cross(normalPong, normalPongN);
-		vec3 rotUN   = subgroupShuffle(rotU, neighborIndex);
-		vec3 rotV    = cross(normalPing, normalPong);
-		vec3 rotVN   = subgroupShuffle(rotV, neighborIndex);
+		vec3 qunTang   = qunPosWS.xyz - posWS.xyz;
+		float qunLen   = length(qunTang);
 
-		int sameDir      = gl_SubgroupInvocationID > 8 ? 0
-						 : ( (dot(rotU, rotUN) > 0.0 ? 1 : 0) 
-						   + (dot(rotV, rotVN) > 0.0 ? 1 : 0));
-		sameDirCount    += subgroupAdd(sameDir);
+		if (pxnLen > 0 && qunLen > 0) {
+			pxnTang /= pxnLen;
+			qunTang /= qunLen;
+			count += 1;
+			if (dot(pxnTang, qunTang) < 0.9) {
+				significantDiffs += 1;
+			}
+		}
 
 #if DRAW_PATCH_EVAL_DEBUG_VIS_BUMPINESS_EVAL
-		if (gl_SubgroupInvocationID <= 8) {
-			writeToCombinedAttachment(ivec2(toScreen(toCS(posPongWS)).xy), 0.0001, normalPong);
-		}
+//		if (gl_SubgroupInvocationID <= 8) {
+			writeToCombinedAttachment(ivec2(toScreen(toCS(posWS)).xy), 0.0001, DEBUG_COLOR_SUBSAMPLE);
+//		}
 #endif
+		// Next row:
+		vParam      += quarterPxParamRange.y;
 	}
 
-	return sameDirCount < 64;
+	// same same, but u direction:
+	vParam = middlePxStartParams.y + gl_SubgroupInvocationID * quarterPxParamRange.x;
+	uParam = middlePxStartParams.x;
+	for (int i = 0; i < 32; ++i) {
+		vec4 posWS     = aTM * paramToWS(uParam, vParam, curveIndex, userData);
+		vec4 pxnPosWS  = subgroupShuffle(posWS, pxNeighborIndex);
+		vec4 qunPosWS  = subgroupShuffle(posWS, quarterNeighborIndex);
+
+		// Calc the tangents:
+		vec3 pxnTangTmp= pxnPosWS.xyz - posWS.xyz;
+		vec3 pxnTang   = subgroupShuffle(pxnTangTmp, pxBaseNeighborIndex); // regardless of this invocation's pxnTang, always pick the pxBase's value
+		float pxnLen   = length(pxnTang);
+
+		vec3 qunTang   = qunPosWS.xyz - posWS.xyz;
+		float qunLen   = length(qunTang);
+
+		if (pxnLen > 0 && qunLen > 0) {
+			pxnTang /= pxnLen;
+			qunTang /= qunLen;
+			count += 1;
+			if (dot(pxnTang, qunTang) < 0.9) {
+				significantDiffs += 1;
+			}
+		}
+
+#if DRAW_PATCH_EVAL_DEBUG_VIS_BUMPINESS_EVAL
+//		if (gl_SubgroupInvocationID <= 8) {
+			writeToCombinedAttachment(ivec2(toScreen(toCS(posWS)).xy), 0.0001, DEBUG_COLOR_SUBSAMPLE);
+//		}
+#endif
+		// Next row:
+		uParam      += quarterPxParamRange.x;
+	}
+
+	uint significantDiffsTotal = subgroupAdd(significantDiffs);
+	uint countTotal            = subgroupAdd(count);
+//	if (subgroupElect()) {
+//		debugPrintfEXT("significantDiffsTotal[%u], countTotal[%u]", significantDiffsTotal, countTotal);
+//	}
+	// If there are more than 6.67% of pixels that have sub-pixel detail => return true:
+	return (significantDiffsTotal * 15) > countTotal;
 }
 
 // renderingVariantIndex:  [0] = Tess_noAA, [1] = Tess_8xSS, [2] = Tess_4xSS_8xMS, [3] = PointRendered_direct, [4] = PointRendered_4xSS_local_fb, [5] = Hybrid
@@ -288,7 +337,7 @@ void pxFillOut(int renderingVariantIndex, float uStart, float uEnd, float vStart
 		}
 		// TODO:  ^ Implement a proper heuristic => see here v
 
-		bool isBumpy = measureSubpixelBumpiness(uStart, uEnd, vStart, vEnd, screenDists, aTM, curveIndex, userData);
+		bool isBumpy = hasSubpixelFeatures(uStart, uEnd, vStart, vEnd, screenDists, aTM, curveIndex, userData);
 		renderingVariantIndex = isBumpy ? 4 : 0;
 	}
 
