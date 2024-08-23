@@ -220,10 +220,39 @@ void evalSplitDecision(bool aTransposeEval, vec2 aParamsStart, vec2 aParamsRange
 	}
 }
 
+float getCentralDifference(float u, float v, const mat4 aTM, const int curveIndex, const uvec3 userData, float h, float k) 
+{
+//	vec4 pos1 = aTM * paramToWS(u + h, v + k, curveIndex, userData);
+//	vec4 pos2 = aTM * paramToWS(u + h, v    , curveIndex, userData);
+//	vec4 pos3 = aTM * paramToWS(u    , v + k, curveIndex, userData);
+//	vec4 pos4 = aTM * paramToWS(u    , v    , curveIndex, userData);
+//	vec4 pos5 = aTM * paramToWS(u - h, v    , curveIndex, userData);
+//	vec4 pos6 = aTM * paramToWS(u    , v - k, curveIndex, userData);
+//	vec4 pos7 = aTM * paramToWS(u - h, v - k, curveIndex, userData);
+
+	vec2 params[7] = { vec2(u+h, v+k), vec2(u+h, v), vec2(u, v+k), vec2(u, v), vec2(u-h, v), vec2(u, v-k), vec2(u-h, v-k) };
+	vec3 pos[7];
+	for (int i = 0; i < 7; ++i) {
+		pos[i] = (aTM * paramToWS(params[i].x, params[i].y, curveIndex, userData)).xyz;
+	}
+
+#if DRAW_PATCH_EVAL_DEBUG_VIS_BUMPINESS_EVAL
+	writeToCombinedAttachment(ivec2(toScreen(toCS(pos4)).xy), 0.0001, DEBUG_COLOR_SUBSAMPLE);
+#endif
+
+	vec3 fuv = (pos[0] - pos[1] - pos[2] + 2.0 * pos[3] - pos[4] - pos[5] + pos[6]) / (2 * h * k);
+	return length(fuv);
+}
+
 // This function measures if the parametric function varies strongly on a sub-pixel level:
 // (If it does, why not super-sample the patch?! If it doesn't no need for super sampling.)
-bool hasSubpixelFeatures(float uStart, float uEnd, float vStart, float vEnd, vec2 screenDists, mat4 aTM, int curveIndex, uvec3 userData)
+bool hasSubpixelFeatures(float uStart, float uEnd, float vStart, float vEnd, vec2 screenDists, const uint elementIdxIn)
 {
+	const uint  objectId              = uPatchLodPing.mElements[elementIdxIn].mObjectIdUserData[0];
+	const uvec3 userData              = uPatchLodPing.mElements[elementIdxIn].mObjectIdUserData.yzw;
+	const int   curveIndex            = uObjectData.mElements[objectId].mCurveIndex;
+	const mat4  tM                    = uObjectData.mElements[objectId].mTransformationMatrix;
+
 	// Parameter ranges for ~1px:
 	vec2 parameterRange      = vec2(uEnd - uStart, vEnd - vStart);
 	vec2 onePxParamRange     = parameterRange / screenDists;
@@ -232,100 +261,30 @@ bool hasSubpixelFeatures(float uStart, float uEnd, float vStart, float vEnd, vec
 		uStart + parameterRange.x * 0.5 - onePxParamRange.x * 4.0,
 		vStart + parameterRange.y * 0.5 - onePxParamRange.y	* 4.0
 	);
-	
+
 	// Start in the middle:
 	float vParam = middlePxStartParams.y;
 	float uParam = middlePxStartParams.x + gl_SubgroupInvocationID * quarterPxParamRange.x;
 
-//	vec3  tanWSv     = posPongWS.xyz - posPingWS.xyz;
-//	float lenTanWSv  = length(tanWS);
+	float lolpx      = getCentralDifference(uParam, vParam, tM, curveIndex, userData, onePxParamRange.x,     onePxParamRange.y);
+	float lolquarter = getCentralDifference(uParam, vParam, tM, curveIndex, userData, quarterPxParamRange.x, quarterPxParamRange.y);
 
-	// We're going to take a look at quarter pixel neighbors and full pixel neighbors:
-	const uint pxNeighborIndex      = min(31, gl_SubgroupInvocationID % 4 == 0 ? gl_SubgroupInvocationID + 4 : gl_SubgroupInvocationID);
-	const uint pxBaseNeighborIndex  = uint(gl_SubgroupInvocationID / 4) * 4;
-	const uint quarterNeighborIndex = min(31, gl_SubgroupInvocationID + 1);
-
-//	float sumAbsAngleDiffSub = 0.0; // absolute differences between the angles on sub-pixel level
-	int count = 0;
-	int significantDiffs = 0;
+	if (subgroupElect())
+		debugPrintfEXT("lolpx[%f], lolquarter[%f]", lolpx, lolquarter);
 	
-	// v direction:
-	for (int i = 0; i < 32; ++i) {
-		vec4 posWS     = aTM * paramToWS(uParam, vParam, curveIndex, userData);
-		vec4 pxnPosWS  = subgroupShuffle(posWS, pxNeighborIndex);
-		vec4 qunPosWS  = subgroupShuffle(posWS, quarterNeighborIndex);
-
-		// Calc the tangents:
-		vec3 pxnTangTmp= pxnPosWS.xyz - posWS.xyz;
-		vec3 pxnTang   = subgroupShuffle(pxnTangTmp, pxBaseNeighborIndex); // regardless of this invocation's pxnTang, always pick the pxBase's value
-		float pxnLen   = length(pxnTang);
-
-		vec3 qunTang   = qunPosWS.xyz - posWS.xyz;
-		float qunLen   = length(qunTang);
-
-		if (pxnLen > 0 && qunLen > 0) {
-			pxnTang /= pxnLen;
-			qunTang /= qunLen;
-			count += 1;
-			if (dot(pxnTang, qunTang) < 0.9) {
-				significantDiffs += 1;
-			}
-		}
-
-#if DRAW_PATCH_EVAL_DEBUG_VIS_BUMPINESS_EVAL
-//		if (gl_SubgroupInvocationID <= 8) {
-			writeToCombinedAttachment(ivec2(toScreen(toCS(posWS)).xy), 0.0001, DEBUG_COLOR_SUBSAMPLE);
-//		}
-#endif
-		// Next row:
-		vParam      += quarterPxParamRange.y;
-	}
-
-	// same same, but u direction:
-	vParam = middlePxStartParams.y + gl_SubgroupInvocationID * quarterPxParamRange.x;
-	uParam = middlePxStartParams.x;
-	for (int i = 0; i < 32; ++i) {
-		vec4 posWS     = aTM * paramToWS(uParam, vParam, curveIndex, userData);
-		vec4 pxnPosWS  = subgroupShuffle(posWS, pxNeighborIndex);
-		vec4 qunPosWS  = subgroupShuffle(posWS, quarterNeighborIndex);
-
-		// Calc the tangents:
-		vec3 pxnTangTmp= pxnPosWS.xyz - posWS.xyz;
-		vec3 pxnTang   = subgroupShuffle(pxnTangTmp, pxBaseNeighborIndex); // regardless of this invocation's pxnTang, always pick the pxBase's value
-		float pxnLen   = length(pxnTang);
-
-		vec3 qunTang   = qunPosWS.xyz - posWS.xyz;
-		float qunLen   = length(qunTang);
-
-		if (pxnLen > 0 && qunLen > 0) {
-			pxnTang /= pxnLen;
-			qunTang /= qunLen;
-			count += 1;
-			if (dot(pxnTang, qunTang) < 0.9) {
-				significantDiffs += 1;
-			}
-		}
-
-#if DRAW_PATCH_EVAL_DEBUG_VIS_BUMPINESS_EVAL
-//		if (gl_SubgroupInvocationID <= 8) {
-			writeToCombinedAttachment(ivec2(toScreen(toCS(posWS)).xy), 0.0001, DEBUG_COLOR_SUBSAMPLE);
-//		}
-#endif
-		// Next row:
-		uParam      += quarterPxParamRange.x;
-	}
-
-	uint significantDiffsTotal = subgroupAdd(significantDiffs);
+	int count = lolpx > 0.0 && lolquarter > 0.0
+		? 1 : 0;
+	int significantDiffs = count > 0 && lolquarter * 4.0 > lolpx  // => no idea, what I'm doing
+		? 1 : 0;
+	
 	uint countTotal            = subgroupAdd(count);
-//	if (subgroupElect()) {
-//		debugPrintfEXT("significantDiffsTotal[%u], countTotal[%u]", significantDiffsTotal, countTotal);
-//	}
-	// If there are more than 6.67% of pixels that have sub-pixel detail => return true:
+	uint significantDiffsTotal = subgroupAdd(significantDiffs);
+
 	return (significantDiffsTotal * 15) > countTotal;
 }
 
 // renderingVariantIndex:  [0] = Tess_noAA, [1] = Tess_8xSS, [2] = Tess_4xSS_8xMS, [3] = PointRendered_direct, [4] = PointRendered_4xSS_local_fb, [5] = Hybrid
-void pxFillOut(int renderingVariantIndex, float uStart, float uEnd, float vStart, float vEnd, vec2 screenDists, const uint elementIdxIn, mat4 aTM, int curveIndex, uvec3 userData) 
+void pxFillOut(int renderingVariantIndex, float uStart, float uEnd, float vStart, float vEnd, vec2 screenDists, const uint elementIdxIn) 
 {
 	// Before we decide about them splits, see if we must decide upon them different rendering variants (HYBRID METHOD):
 	if (HYBRID_VARIANT_INDEX == renderingVariantIndex) { 
@@ -337,7 +296,7 @@ void pxFillOut(int renderingVariantIndex, float uStart, float uEnd, float vStart
 		}
 		// TODO:  ^ Implement a proper heuristic => see here v
 
-		bool isBumpy = hasSubpixelFeatures(uStart, uEnd, vStart, vEnd, screenDists, aTM, curveIndex, userData);
+		bool isBumpy = hasSubpixelFeatures(uStart, uEnd, vStart, vEnd, screenDists, elementIdxIn);
 		renderingVariantIndex = isBumpy ? 4 : 0;
 	}
 
@@ -380,7 +339,7 @@ void pxFillOut(int renderingVariantIndex, float uStart, float uEnd, float vStart
 }
 
 // renderingVariantIndex:  [0] = Tess_noAA, [1] = Tess_8xSS, [2] = Tess_4xSS_8xMS, [3] = PointRendered_direct, [4] = PointRendered_4xSS_local_fb, [5] = Hybrid
-void patchOut(int renderingVariantIndex, const uint levelIn, float uStart, float uEnd, float vStart, float vEnd, vec2 screenDists, const uint elementIdxIn, mat4 aTM, int curveIndex, uvec3 userData) 
+void patchOut(int renderingVariantIndex, const uint levelIn, float uStart, float uEnd, float vStart, float vEnd, vec2 screenDists, const uint elementIdxIn) 
 {
 	// out (from ping->pong):
 	uint maxLevel = MAX_PATCH_SUBDIV_STEPS-1;
@@ -397,8 +356,7 @@ void patchOut(int renderingVariantIndex, const uint levelIn, float uStart, float
 		pxFillOut(renderingVariantIndex,
 		          uStart, uEnd, vStart, vEnd, 
 		          screenDists,
-		          elementIdxIn,
-				  aTM, curveIndex, userData);
+		          elementIdxIn);
 	}
 }
 
@@ -578,18 +536,15 @@ void main()
 			if (shallSplitU[i]) {
 				patchOut(renderingVariantIndex, levelIn, paramsStart.x                    , paramsStart.x + halfParamsRange.x, vStarts[i], vEnds[i], 
 				         vec2(max(screenDistsU[0], screenDistsU[1]), max(screenDistsV[i*2], screenDistsV[i*2 + 1])),
-				         elementIdxIn,
-				         tM, curveIndex, userData);
+				         elementIdxIn);
 				patchOut(renderingVariantIndex, levelIn, paramsStart.x + halfParamsRange.x, paramsStart.x + paramsRange.x    , vStarts[i], vEnds[i], 
 				         vec2(max(screenDistsU[2], screenDistsU[3]), max(screenDistsV[i*2], screenDistsV[i*2 + 1])),
-				         elementIdxIn,
-				         tM, curveIndex, userData);
+				         elementIdxIn);
 			}
 			else {
 				patchOut(renderingVariantIndex, levelIn, paramsStart.x                    , paramsStart.x + paramsRange.x    , vStarts[i], vEnds[i], 
 				         vec2(max(max(max(screenDistsU[0], screenDistsU[1]), screenDistsU[2]), screenDistsU[3]), max(screenDistsV[i*2], screenDistsV[i*2 + 1])),
-				         elementIdxIn,
-				         tM, curveIndex, userData);
+				         elementIdxIn);
 			}
 		}
 	}
@@ -600,18 +555,15 @@ void main()
 			if (shallSplitV[i]) {
 				patchOut(renderingVariantIndex, levelIn, uStarts[i], uEnds[i], paramsStart.y                    , paramsStart.y + halfParamsRange.y, 
 				         vec2(max(screenDistsU[i*2], screenDistsU[i*2 + 1]), max(screenDistsV[0], screenDistsV[1])),
-				         elementIdxIn,
-				         tM, curveIndex, userData);
+				         elementIdxIn);
 				patchOut(renderingVariantIndex, levelIn, uStarts[i], uEnds[i], paramsStart.y + halfParamsRange.y, paramsStart.y + paramsRange.y    , 
 				         vec2(max(screenDistsU[i*2], screenDistsU[i*2 + 1]), max(screenDistsV[2], screenDistsV[3])),
-				         elementIdxIn,
-				         tM, curveIndex, userData);
+				         elementIdxIn);
 			}
 			else {
 				patchOut(renderingVariantIndex, levelIn, uStarts[i], uEnds[i], paramsStart.y                    , paramsStart.y + paramsRange.y    , 
 				         vec2(max(screenDistsU[i*2], screenDistsU[i*2 + 1]), max(max(max(screenDistsV[0], screenDistsV[1]), screenDistsV[2]), screenDistsV[3])),
-				         elementIdxIn,
-				         tM, curveIndex, userData);
+				         elementIdxIn);
 			}
 		}
 	}
@@ -620,7 +572,6 @@ void main()
 		// No splits required
 		pxFillOut(renderingVariantIndex, paramsStart.x, paramsStart.x + paramsRange.x, paramsStart.y, paramsStart.y + paramsRange.y, 
 		          vec2(max(max(max(screenDistsU[0], screenDistsU[1]), screenDistsU[2]), screenDistsU[3]), max(max(max(screenDistsV[0], screenDistsV[1]), screenDistsV[2]), screenDistsV[3])),
-		          elementIdxIn,
-				  tM, curveIndex, userData);
+		          elementIdxIn);
 	}
 }
