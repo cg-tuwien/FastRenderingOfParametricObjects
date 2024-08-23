@@ -2459,9 +2459,8 @@ vec3 get_sh_glyph(float u, float v, uvec3 userData)
 
 	float f = 0.0;
     if (isBigDataset) {
-        dataset_sh_coeffs coeffs = uBigDataset.mEntries[glyphId];
         for (int i = 0; i < 91; i++) {
-            f += out_shs[i] * coeffs.mCoeffs[i];
+            f += out_shs[i] * uBigDataset.mEntries[glyphId].mCoeffs[i];
         }
     }
     else {
