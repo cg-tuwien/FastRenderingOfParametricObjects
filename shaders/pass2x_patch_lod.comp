@@ -166,7 +166,7 @@ void evalSplitDecision(bool aTransposeEval, vec2 aParamsStart, vec2 aParamsRange
 	vec4 posWS  = aTM * rawWS;
 	posCS       = toCS(posWS);
 	// Note: No frustum check here. toScreen() should clamp to 
-	//       the frustum borders, which is what we want here:s
+	//       the frustum borders, which is what we want here:
 	const vec3 vpc           = toScreen(posCS);
 	const vec2 screenCoords  = vpc.xy;
 
@@ -220,30 +220,6 @@ void evalSplitDecision(bool aTransposeEval, vec2 aParamsStart, vec2 aParamsRange
 	}
 }
 
-float getCentralDifference(float u, float v, const mat4 aTM, const int curveIndex, const uvec3 userData, float h, float k) 
-{
-//	vec4 pos1 = aTM * paramToWS(u + h, v + k, curveIndex, userData);
-//	vec4 pos2 = aTM * paramToWS(u + h, v    , curveIndex, userData);
-//	vec4 pos3 = aTM * paramToWS(u    , v + k, curveIndex, userData);
-//	vec4 pos4 = aTM * paramToWS(u    , v    , curveIndex, userData);
-//	vec4 pos5 = aTM * paramToWS(u - h, v    , curveIndex, userData);
-//	vec4 pos6 = aTM * paramToWS(u    , v - k, curveIndex, userData);
-//	vec4 pos7 = aTM * paramToWS(u - h, v - k, curveIndex, userData);
-
-	vec2 params[7] = { vec2(u+h, v+k), vec2(u+h, v), vec2(u, v+k), vec2(u, v), vec2(u-h, v), vec2(u, v-k), vec2(u-h, v-k) };
-	vec3 pos[7];
-	for (int i = 0; i < 7; ++i) {
-		pos[i] = (aTM * paramToWS(params[i].x, params[i].y, curveIndex, userData)).xyz;
-	}
-
-#if DRAW_PATCH_EVAL_DEBUG_VIS_BUMPINESS_EVAL
-	writeToCombinedAttachment(ivec2(toScreen(toCS(pos4)).xy), 0.0001, DEBUG_COLOR_SUBSAMPLE);
-#endif
-
-	vec3 fuv = (pos[0] - pos[1] - pos[2] + 2.0 * pos[3] - pos[4] - pos[5] + pos[6]) / (2 * h * k);
-	return length(fuv);
-}
-
 // This function measures if the parametric function varies strongly on a sub-pixel level:
 // (If it does, why not super-sample the patch?! If it doesn't no need for super sampling.)
 bool hasSubpixelFeatures(float uStart, float uEnd, float vStart, float vEnd, vec2 screenDists, const uint elementIdxIn)
@@ -256,31 +232,70 @@ bool hasSubpixelFeatures(float uStart, float uEnd, float vStart, float vEnd, vec
 	// Parameter ranges for ~1px:
 	vec2 parameterRange      = vec2(uEnd - uStart, vEnd - vStart);
 	vec2 onePxParamRange     = parameterRange / screenDists;
-	vec2 quarterPxParamRange = onePxParamRange / 4.0;
 	vec2 middlePxStartParams = vec2(
 		uStart + parameterRange.x * 0.5 - onePxParamRange.x * 4.0,
 		vStart + parameterRange.y * 0.5 - onePxParamRange.y	* 4.0
 	);
 
 	// Start in the middle:
-	float vParam = middlePxStartParams.y;
-	float uParam = middlePxStartParams.x + gl_SubgroupInvocationID * quarterPxParamRange.x;
+	float uParam = middlePxStartParams.x + gl_LocalInvocationID.x * onePxParamRange.x;
+	float vParam = middlePxStartParams.y + gl_LocalInvocationID.y * onePxParamRange.y;
+	const uint neighborX  = calcInvocationIdFrom2DIndices(gl_LocalInvocationID.xy + uvec2(1, 0), gl_WorkGroupSize.xy);
+	const uint neighborY  = calcInvocationIdFrom2DIndices(gl_LocalInvocationID.xy + uvec2(0, 1), gl_WorkGroupSize.xy);
+	const uint neighborXY = calcInvocationIdFrom2DIndices(gl_LocalInvocationID.xy + uvec2(1, 1), gl_WorkGroupSize.xy);
 
-	float lolpx      = getCentralDifference(uParam, vParam, tM, curveIndex, userData, onePxParamRange.x,     onePxParamRange.y);
-	float lolquarter = getCentralDifference(uParam, vParam, tM, curveIndex, userData, quarterPxParamRange.x, quarterPxParamRange.y);
+	vec4 pos0WS = tM * paramToWS(uParam, vParam, curveIndex, userData);
+	vec4 pos0CS = toCS(pos0WS);
+	vec3 ndc0   = pos0CS.xyz / pos0CS.w;
+	vec3 vpc0   = toScreen(pos0CS);
 
-	if (subgroupElect())
-		debugPrintfEXT("lolpx[%f], lolquarter[%f]", lolpx, lolquarter);
-	
-	int count = lolpx > 0.0 && lolquarter > 0.0
-		? 1 : 0;
-	int significantDiffs = count > 0 && lolquarter * 4.0 > lolpx  // => no idea, what I'm doing
-		? 1 : 0;
-	
-	uint countTotal            = subgroupAdd(count);
-	uint significantDiffsTotal = subgroupAdd(significantDiffs);
+	vec4 posCsU   = subgroupShuffle(pos0CS, neighborX);
+	vec4 posCsV   = subgroupShuffle(pos0CS, neighborY);
+	vec4 posCsUV  = subgroupShuffle(pos0CS, neighborXY);
 
-	return (significantDiffsTotal * 15) > countTotal;
+	uint different = 0;
+	uint total = 0;
+
+	const int NumTests = 3;
+	if (gl_LocalInvocationID.x < gl_WorkGroupSize.x - 1 && gl_LocalInvocationID.y < gl_WorkGroupSize.y - 1) {
+//		if (length(toScreen(posCsU).xy - vpc0.xy)  < 4.0 ||
+//		    length(toScreen(posCsV).xy - vpc0.xy)  < 4.0 ||
+//			length(toScreen(posCsUV).xy - vpc0.xy) < 4.0) {
+//			different += NumTests;
+//			total     += NumTests;
+//		}
+//		else {
+			const float offsets[10] = { 0.5, 0.333333, 0.2, 0.1428, 0.090909, 
+										0.5, 0.333333, 0.2, 0.1428, 0.090909 };
+			const uvec2 selectedOffsets = uvec2(gl_LocalInvocationID.x % 5, gl_LocalInvocationID.y % 5);
+			for (uint i = 0; i < NumTests; ++i) {
+				// Calc interpolated position:
+				float offU     = offsets[selectedOffsets.x + i];
+				float offV     = offsets[selectedOffsets.y + i];
+				vec4 bLerpedCS = getBilinearInterpolated(pos0CS, posCsU, posCsV, posCsUV, offU, offV);
+				vec4 subWS     = tM * paramToWS(uParam + onePxParamRange.x * offU, vParam + onePxParamRange.y * offV, curveIndex, userData);
+				vec4 subCS     = toCS(subWS);
+
+				// Compare interpolated with computed normals in NDC:
+				float angleDiff            = dot(normalize(bLerpedCS.xyz/bLerpedCS.w - ndc0.xyz), normalize(subCS.xyz/subCS.w - ndc0.xyz));
+				const float angleThreshold = 0.98; // 0.97 => ~14° | 0.98 => ~11° | 0.99 => ~8°
+				different += angleDiff < angleThreshold ? 1 : 0;
+
+//				// Measuring distances between pixels in screen space is probably not really what we want:
+//				float dist   = length(toScreen(bLerped).xy - toScreen(subCS).xy);
+//				different   += dist > 1.0 ? 1 : 0
+			}
+			total += NumTests;
+//		}
+	}
+
+	uint differentTotal = subgroupAdd(different);
+	uint totalTotal     = subgroupAdd(total);
+
+//	if (subgroupElect())
+//		debugPrintfEXT("differentTotal[%u], totalTotal[%u]", differentTotal, totalTotal);
+
+	return (differentTotal * 15) > totalTotal;
 }
 
 // renderingVariantIndex:  [0] = Tess_noAA, [1] = Tess_8xSS, [2] = Tess_4xSS_8xMS, [3] = PointRendered_direct, [4] = PointRendered_4xSS_local_fb, [5] = Hybrid
