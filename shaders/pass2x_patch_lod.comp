@@ -245,48 +245,47 @@ bool hasSubpixelFeatures(float uStart, float uEnd, float vStart, float vEnd, vec
 	const uint neighborXY = calcInvocationIdFrom2DIndices(gl_LocalInvocationID.xy + uvec2(1, 1), gl_WorkGroupSize.xy);
 
 	vec4 pos0WS = tM * paramToWS(uParam, vParam, curveIndex, userData);
-	vec4 pos0CS = toCS(pos0WS);
-	vec3 ndc0   = pos0CS.xyz / pos0CS.w;
-	vec3 vpc0   = toScreen(pos0CS);
-
-	vec4 posCsU   = subgroupShuffle(pos0CS, neighborX);
-	vec4 posCsV   = subgroupShuffle(pos0CS, neighborY);
-	vec4 posCsUV  = subgroupShuffle(pos0CS, neighborXY);
+	vec4 posU   = subgroupShuffle(pos0WS, neighborX);
+	vec4 posV   = subgroupShuffle(pos0WS, neighborY);
+	vec3 nrm0   = normalize(cross(posU.xyz - pos0WS.xyz, posV.xyz - pos0WS.xyz));
+	vec3 nrmU   = subgroupShuffle(nrm0  , neighborX );
+	vec3 nrmV   = subgroupShuffle(nrm0  , neighborY );
+	vec3 nrmUV  = subgroupShuffle(nrm0  , neighborXY);
 
 	uint different = 0;
 	uint total = 0;
 
-	const int NumTests = 3;
-	if (gl_LocalInvocationID.x < gl_WorkGroupSize.x - 1 && gl_LocalInvocationID.y < gl_WorkGroupSize.y - 1) {
-//		if (length(toScreen(posCsU).xy - vpc0.xy)  < 4.0 ||
-//		    length(toScreen(posCsV).xy - vpc0.xy)  < 4.0 ||
-//			length(toScreen(posCsUV).xy - vpc0.xy) < 4.0) {
-//			different += NumTests;
-//			total     += NumTests;
-//		}
-//		else {
-			const float offsets[10] = { 0.5, 0.333333, 0.2, 0.1428, 0.090909, 
-										0.5, 0.333333, 0.2, 0.1428, 0.090909 };
-			const uvec2 selectedOffsets = uvec2(gl_LocalInvocationID.x % 5, gl_LocalInvocationID.y % 5);
-			for (uint i = 0; i < NumTests; ++i) {
-				// Calc interpolated position:
-				float offU     = offsets[selectedOffsets.x + i];
-				float offV     = offsets[selectedOffsets.y + i];
-				vec4 bLerpedCS = getBilinearInterpolated(pos0CS, posCsU, posCsV, posCsUV, offU, offV);
-				vec4 subWS     = tM * paramToWS(uParam + onePxParamRange.x * offU, vParam + onePxParamRange.y * offV, curveIndex, userData);
-				vec4 subCS     = toCS(subWS);
+	const int NumTests = 9;
+	const vec2 offsets[NumTests] = {
+		vec2(0.5,      0.5     ),
+		vec2(0.5,      0.333333),
+		vec2(0.5,      0.2     ),
+		vec2(0.333333, 0.5     ),
+		vec2(0.333333, 0.333333),
+		vec2(0.333333, 0.2     ),
+		vec2(0.2,      0.5     ),
+		vec2(0.2,      0.333333),
+		vec2(0.2,      0.2     )
+	};
+	
+	for (uint i = 0; i < NumTests; ++i) {
+		// Calc interpolated normal:
+		vec2 curOff    = offsets[i];
+		vec3 lerpedNrm = getBilinearInterpolated(nrm0, nrmU, nrmV, nrmUV, curOff.x, curOff.y);
 
-				// Compare interpolated with computed normals in NDC:
-				float angleDiff            = dot(normalize(bLerpedCS.xyz/bLerpedCS.w - ndc0.xyz), normalize(subCS.xyz/subCS.w - ndc0.xyz));
-				const float angleThreshold = 0.98; // 0.97 => ~14° | 0.98 => ~11° | 0.99 => ~8°
-				different += angleDiff < angleThreshold ? 1 : 0;
+		// Calc subsampled normal:
+		vec4 sspos0WS = tM * paramToWS(uParam + onePxParamRange.x * curOff.x, vParam + onePxParamRange.y * curOff.y, curveIndex, userData);
+		vec4 ssposU   = subgroupShuffle(sspos0WS, neighborX);
+		vec4 ssposV   = subgroupShuffle(sspos0WS, neighborY);
+		if (gl_LocalInvocationID.x < gl_WorkGroupSize.x - 1 && gl_LocalInvocationID.y < gl_WorkGroupSize.y - 1) {
+			vec3 ssnrm0   = normalize(cross(ssposU.xyz - sspos0WS.xyz, ssposV.xyz - sspos0WS.xyz));
 
-//				// Measuring distances between pixels in screen space is probably not really what we want:
-//				float dist   = length(toScreen(bLerped).xy - toScreen(subCS).xy);
-//				different   += dist > 1.0 ? 1 : 0
-			}
+			// Compare interpolated with subsampled normal:
+			float angleDiff            = dot(normalize(lerpedNrm), ssnrm0);
+			const float angleThreshold = 0.98; // 0.97 => ~14° | 0.98 => ~11° | 0.99 => ~8°
+			different += angleDiff < angleThreshold ? 1 : 0;
 			total += NumTests;
-//		}
+		}
 	}
 
 	uint differentTotal = subgroupAdd(different);
