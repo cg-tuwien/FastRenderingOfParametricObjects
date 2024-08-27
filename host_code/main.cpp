@@ -111,7 +111,7 @@ static std::array<parametric_object, 13> PredefinedParametricObjects {{
 	parametric_object{"Fiber Curve" , "assets/po-fiber-curve-single.png", false, parametric_object_type::SingleFiberCurve,       1.0f, 1.0f,     /* <-- yarn dimensions | #fibers --> */ 6.f, /* thickness --> */ 0.3f, glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{-0.5f, 0.0f, 0.0f}) * glm::scale(glm::vec3{ 0.3f }), -3},
 	parametric_object{"Blue Curtain", "assets/po-blue-curtain.png",		  false, parametric_object_type::CurtainYarnCurves,      235.0f, 254.0f, /* <-- yarn dimensions | #fibers --> */ 6.f, /* thickness --> */ 0.8f, glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{-3.35f, 0.08f, 5.32f}) * glm::scale(glm::vec3{ 0.005f }), 19},
 	parametric_object{"Palm Tree"   , "assets/po-palm-tree.png",		  false, parametric_object_type::PalmTreeTrunk,          0.0f,   1.0f,            0.0f,  glm::two_pi<float>(), glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{ 0.f,  0.f, -4.f})},
-	parametric_object{"Giant Worm"  , "assets/po-giant-worm.png",		  false, parametric_object_type::PalmTreeTrunk,  235.0f, 254.0f, /* <-- yarn dimensions | #fibers --> */ 4.f, 1.f, glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{-3.35f, 0.08f, 5.32f}) * glm::scale(glm::vec3{ 0.005f }), 19},
+	parametric_object{"Giant Worm"  , "assets/po-giant-worm.png",		  false, parametric_object_type::GiantWorm,              0.0f,   1.0f,            0.0f,  glm::two_pi<float>(), glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{ 0.f,  0.f, -4.f})},
 	parametric_object{"SH Glyph"    , "assets/po-single-sh-glyph.png",    false, parametric_object_type::SHGlyph,                0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>(),     glm::uvec2{ 1u, 1u }, glm::mat4{ 1.0f }, -2},
 	parametric_object{"Brain Scan"  , "assets/po-sh-brain.png",           false, parametric_object_type::SHBrain,                0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>(), glm::uvec2{ SH_BRAIN_DATA_SIZE_X, SH_BRAIN_DATA_SIZE_Y }, glm::mat4{ 1.0f }, -2}
 }};
@@ -718,6 +718,11 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 		return pot == parametric_object_type::SHBrain;
 	}
 
+	bool is_giant_worm(parametric_object_type pot)
+	{
+		return pot == parametric_object_type::GiantWorm;
+	}
+
 	void fill_object_data_buffer()
 	{
 		using namespace avk;
@@ -759,6 +764,28 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 			}
 			else if (is_sh_brain(po.param_obj_type())) {
 				shBrainSavedForLater.push_back(tmp);
+			}
+			else if (is_giant_worm(po.param_obj_type())) {
+				// Giant worm body
+				tmp.mCurveIndex = 14;
+				tmp.mTransformationMatrix = glm::translate(tmp.mTransformationMatrix, glm::vec3{ 1.0f, 0.0f, 0.0f });
+				mObjectData[i++] = tmp;
+				// Giant worm mouth piece (inside)
+				tmp.mCurveIndex = 15;
+				tmp.mTransformationMatrix = glm::translate(tmp.mTransformationMatrix, glm::vec3{ 1.0f, 0.0f, 0.0f });
+				mObjectData[i++] = tmp;
+				// Giant worm mouth piece (outside)
+				tmp.mCurveIndex = 16;
+				tmp.mTransformationMatrix = glm::translate(tmp.mTransformationMatrix, glm::vec3{ 1.0f, 0.0f, 0.0f });
+				mObjectData[i++] = tmp;
+				// Giant worm teeth 
+				tmp.mCurveIndex = 17;
+				tmp.mTransformationMatrix = glm::translate(tmp.mTransformationMatrix, glm::vec3{ 1.0f, 0.0f, 0.0f });
+				mObjectData[i++] = tmp;
+				// Giant worm tongue
+				tmp.mCurveIndex = 18;
+				tmp.mTransformationMatrix = glm::translate(tmp.mTransformationMatrix, glm::vec3{ 1.0f, 0.0f, 0.0f });
+				mObjectData[i++] = tmp;
 			}
 			else {
 				mObjectData[i] = tmp;

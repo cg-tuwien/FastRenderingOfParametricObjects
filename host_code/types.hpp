@@ -67,7 +67,8 @@ enum struct parametric_object_type : int32_t
     CurtainFiberCurves,
     Seashell1,
     Seashell2,
-    Seashell3
+    Seashell3,
+    GiantWorm
 };
 
 enum struct rendering_variant : int
@@ -122,7 +123,7 @@ static float get_screen_space_threshold_divisor(rendering_variant aRenderMethod)
 
 // ATTENTION: Whenever you add a new enum item  ^^^  here, also add it to the string  vvv  here!
 static const char* PARAMETRIC_OBJECT_TYPE_UI_STRING
-	= "Plane\0Sphere\0Palm Tree Trunk\0JohisHeart\0Spiky Heart\0SH Glyph\0SH Brain Dataset\0Single Yarn Curve\0Single Fiber Curve\0Curtain Yarn Curves\0Curtain Fiber Curves\0Seashell 1\0Seashell 2\0Seashell 3\0";
+	= "Plane\0Sphere\0Palm Tree Trunk\0JohisHeart\0Spiky Heart\0SH Glyph\0SH Brain Dataset\0Single Yarn Curve\0Single Fiber Curve\0Curtain Yarn Curves\0Curtain Fiber Curves\0Seashell 1\0Seashell 2\0Seashell 3\0Giant Worm\0";
 
 // Data about one parametric object:
 class parametric_object

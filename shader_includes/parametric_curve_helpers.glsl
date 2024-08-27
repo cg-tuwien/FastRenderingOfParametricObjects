@@ -9,6 +9,7 @@
 #include "parametric_functions/curtain_yarn_curve.glsl"
 #include "parametric_functions/curtain_fiber_curve.glsl"
 #include "parametric_functions/seashells.glsl"
+#include "parametric_functions/giant_worm.glsl"
 
 // +------------------------------------------------------------------------------+
 // |   Parametric Curve Helpers:                                                  |
@@ -122,6 +123,13 @@ vec4 paramToWS(float u, float v, int curveIndex, uvec3 userData)
             break;
 	    case 13: 
             object = get_seashell3(u, v);
+            break;
+        case 14: // Giant worm body 
+        case 15: // Giant worm mouth piece (inside)
+        case 16: // Giant worm mouth piece (outside)
+        case 17: // Giant worm teeth 
+        case 18: // Giant worm tongue
+            object = get_giant_worm_body(u, v, userData);
             break;
     }
 
