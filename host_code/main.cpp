@@ -893,7 +893,11 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 				ImGui::TableNextColumn();
 				ImGui::PushID(poId);
 				auto howRendered = po.how_to_render();
+#if ENABLE_HYBRID_TECHNIQUE
 				if (ImGui::Combo("##renderingmethod", reinterpret_cast<int*>(&howRendered), "Tess. noAA\0Tess. 8xSS (sample shading)\0Tess. 4xSS+8xMS\0Point rendering ~1spp direct\0Point rendering ~4spp local fb.\0Hybrid\0")) {
+#else
+				if (ImGui::Combo("##renderingmethod", reinterpret_cast<int*>(&howRendered), "Tess. noAA\0Tess. 8xSS (sample shading)\0Tess. 4xSS+8xMS\0Point rendering ~1spp direct\0Point rendering ~4spp local fb.\0")) {
+#endif
 					po.set_how_to_render(howRendered);
 					updateObjects = true;
 				}

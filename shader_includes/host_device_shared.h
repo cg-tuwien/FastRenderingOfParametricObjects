@@ -64,7 +64,11 @@
 #define TILE_PATCHES_BUFFER_ELEMENTS           MAX_PATCHES_PER_TILE * 20736
 
 // Draws points and lines, visualizing how pass2x evaluates the split decisions
-#define DRAW_PATCH_EVAL_DEBUG_VIS 1
+#define DRAW_PATCH_EVAL_DEBUG_VIS 0
+
+// Option to enable or disable the hybrid rendering technique.
+// Enabling it might lead to higher compile times for the pass2x_patch_lod.comp shader (not sure why).
+#define ENABLE_HYBRID_TECHNIQUE 0
 
 // Data size of the big brain dataset to be loaded (note that only even numbers will be properly shaded (sorry!), i.e., e.g.: 10x10, 100x100, or the maximum of 140x140)
 #define SH_BRAIN_DATA_SIZE_X      140
