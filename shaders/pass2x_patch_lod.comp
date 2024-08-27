@@ -251,6 +251,9 @@ bool hasSubpixelFeatures(float uStart, float uEnd, float vStart, float vEnd, vec
 	vec3 nrmU   = subgroupShuffle(nrm0  , neighborX );
 	vec3 nrmV   = subgroupShuffle(nrm0  , neighborY );
 	vec3 nrmUV  = subgroupShuffle(nrm0  , neighborXY);
+#if DRAW_PATCH_EVAL_DEBUG_VIS_BUMPINESS_EVAL
+	writeToCombinedAttachment(ivec2(toScreen(toCS(pos0WS)).xy), 0.0001, nrm0);
+#endif
 
 	uint different = 0;
 	uint total = 0;
@@ -268,20 +271,26 @@ bool hasSubpixelFeatures(float uStart, float uEnd, float vStart, float vEnd, vec
 		vec2(0.2,      0.2     )
 	};
 	
-	for (uint i = 0; i < NumTests; ++i) {
-		// Calc interpolated normal:
-		vec2 curOff    = offsets[i];
-		vec3 lerpedNrm = getBilinearInterpolated(nrm0, nrmU, nrmV, nrmUV, curOff.x, curOff.y);
+	if (gl_LocalInvocationID.x < gl_WorkGroupSize.x - 1 && gl_LocalInvocationID.y < gl_WorkGroupSize.y - 1) {
+		for (uint i = 0; i < NumTests; ++i) {
+			// Calc interpolated normal:
+			vec2 curOff     = offsets[i];
+			vec3 lerpedNrm  = getBilinearInterpolated(nrm0, nrmU, nrmV, nrmUV, curOff.x, curOff.y);
 
-		// Calc subsampled normal:
-		vec4 sspos0WS = tM * paramToWS(uParam + onePxParamRange.x * curOff.x, vParam + onePxParamRange.y * curOff.y, curveIndex, userData);
-		vec4 ssposU   = subgroupShuffle(sspos0WS, neighborX);
-		vec4 ssposV   = subgroupShuffle(sspos0WS, neighborY);
-		if (gl_LocalInvocationID.x < gl_WorkGroupSize.x - 1 && gl_LocalInvocationID.y < gl_WorkGroupSize.y - 1) {
-			vec3 ssnrm0   = normalize(cross(ssposU.xyz - sspos0WS.xyz, ssposV.xyz - sspos0WS.xyz));
+			// Calc subsampled normal:
+			vec4 ssposU     = tM * paramToWS(uParam + onePxParamRange.x * curOff.x, vParam                               , curveIndex, userData);
+			vec4 ssposV     = tM * paramToWS(uParam                               , vParam + onePxParamRange.y * curOff.y, curveIndex, userData);
+			vec3 ssnrm      = normalize(cross(ssposU.xyz - pos0WS.xyz, ssposV.xyz - pos0WS.xyz));
+
+//#if DRAW_PATCH_EVAL_DEBUG_VIS_BUMPINESS_EVAL
+//			if (i == 0) {
+//				writeToCombinedAttachment(ivec2(toScreen(toCS(pos0WS)).xy) + ivec2(-5, 10), 0.0001, lerpedNrm);
+//				writeToCombinedAttachment(ivec2(toScreen(toCS(pos0WS)).xy) + ivec2( 5, 10), 0.0001, ssnrm);
+//			}
+//#endif
 
 			// Compare interpolated with subsampled normal:
-			float angleDiff            = dot(normalize(lerpedNrm), ssnrm0);
+			float angleDiff = dot(normalize(lerpedNrm), ssnrm);
 			const float angleThreshold = 0.98; // 0.97 => ~14° | 0.98 => ~11° | 0.99 => ~8°
 			different += angleDiff < angleThreshold ? 1 : 0;
 			total += NumTests;
