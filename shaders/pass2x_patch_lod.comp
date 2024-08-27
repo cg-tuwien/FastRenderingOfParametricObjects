@@ -64,7 +64,10 @@ layout(set = 4, binding = 0) buffer BigDataset { dataset_sh_coeffs mEntries[]; }
 #include "../shader_includes/parametric_functions/shape_functions.glsl"
 #include "../shader_includes/parametric_curve_helpers.glsl"
 
+
 #if DRAW_PATCH_EVAL_DEBUG_VIS
+#define DRAW_PATCH_EVAL_DEBUG_VIS_SCREEN_DISTANCES 0
+#define DRAW_PATCH_EVAL_DEBUG_VIS_BUMPINESS_EVAL   0
 layout(set = 5, binding = 0, r64ui) uniform restrict volatile u64image2D uCombinedAttachment;
 #if STATS_ENABLED
 layout(set = 5, binding = 1, r32ui) uniform restrict uimage2D uHeatmapImage;
@@ -75,9 +78,11 @@ layout(set = 5, binding = 1, r32ui) uniform restrict uimage2D uHeatmapImage;
 #define DEBUG_COLOR_X         vec4(1.0, 1.0 , 0.0 , 1.0)
 #define DEBUG_COLOR_Y         vec4(1.0, 0.3 , 0.0 , 1.0)
 #define DEBUG_COLOR_XTRA      vec4(1.0, 0.05, 0.05, 1.0)
+#define DEBUG_COLOR_SUBSAMPLE vec4(0.1, 0.6 , 1.0 , 1.0)
 #define DEBUG_VIS_WRAP_BEGIN  if (0 == pushConstants.mPatchLodLevel) {
 #define DEBUG_VIS_WRAP_END    }
 
+#if DRAW_PATCH_EVAL_DEBUG_VIS_SCREEN_DISTANCES
 // DDA Function for line generation 
 void DDA(ivec2 pt0, ivec2 pt1, vec4 color) 
 { 
@@ -101,6 +106,7 @@ void DDA(ivec2 pt0, ivec2 pt1, vec4 color)
         Y += Yinc; // increment in y at each step 
     } 
 } 
+#endif
 #endif
 
 // +------------------------------------------------------------------------------+
@@ -160,7 +166,7 @@ void evalSplitDecision(bool aTransposeEval, vec2 aParamsStart, vec2 aParamsRange
 	vec4 posWS  = aTM * rawWS;
 	posCS       = toCS(posWS);
 	// Note: No frustum check here. toScreen() should clamp to 
-	//       the frustum borders, which is what we want here:s
+	//       the frustum borders, which is what we want here:
 	const vec3 vpc           = toScreen(posCS);
 	const vec2 screenCoords  = vpc.xy;
 
@@ -177,7 +183,7 @@ void evalSplitDecision(bool aTransposeEval, vec2 aParamsStart, vec2 aParamsRange
 	const vec2 neighborScreenCoords = subgroupShuffle(screenCoords, neighborIndex);
 	const float neighborDist = length(screenCoords - neighborScreenCoords); // TODO: Optimize performance with squared distance
 
-#if DRAW_PATCH_EVAL_DEBUG_VIS
+#if DRAW_PATCH_EVAL_DEBUG_VIS_SCREEN_DISTANCES
 	{ DEBUG_VIS_WRAP_BEGIN
 		vec4 dbgColor = aTransposeEval ? DEBUG_COLOR_Y : DEBUG_COLOR_X;
 		for (int i = -DEBUG_POINT_HALF_SIZE; i <= DEBUG_POINT_HALF_SIZE; ++i) {
@@ -214,9 +220,123 @@ void evalSplitDecision(bool aTransposeEval, vec2 aParamsStart, vec2 aParamsRange
 	}
 }
 
+// This function measures if the parametric function varies strongly on a sub-pixel level:
+// (If it does, why not super-sample the patch?! If it doesn't no need for super sampling.)
+bool hasSubpixelFeatures(float uStart, float uEnd, float vStart, float vEnd, vec2 screenDists, const uint elementIdxIn)
+{
+	const uint  objectId              = uPatchLodPing.mElements[elementIdxIn].mObjectIdUserData[0];
+	const uvec3 userData              = uPatchLodPing.mElements[elementIdxIn].mObjectIdUserData.yzw;
+	const int   curveIndex            = uObjectData.mElements[objectId].mCurveIndex;
+	const mat4  tM                    = uObjectData.mElements[objectId].mTransformationMatrix;
+
+	// Parameter ranges for ~1px:
+	vec2 parameterRange      = vec2(uEnd - uStart, vEnd - vStart);
+	vec2 onePxParamRange     = parameterRange / screenDists;
+	vec2 middlePxStartParams = vec2(
+		uStart + parameterRange.x * 0.5 - onePxParamRange.x * 4.0,
+		vStart + parameterRange.y * 0.5 - onePxParamRange.y	* 4.0
+	);
+
+	// Start in the middle:
+	float uParam = middlePxStartParams.x + gl_LocalInvocationID.x * onePxParamRange.x;
+	float vParam = middlePxStartParams.y + gl_LocalInvocationID.y * onePxParamRange.y;
+	const uint neighborX  = calcInvocationIdFrom2DIndices(gl_LocalInvocationID.xy + uvec2(1, 0), gl_WorkGroupSize.xy);
+	const uint neighborY  = calcInvocationIdFrom2DIndices(gl_LocalInvocationID.xy + uvec2(0, 1), gl_WorkGroupSize.xy);
+	const uint neighborXY = calcInvocationIdFrom2DIndices(gl_LocalInvocationID.xy + uvec2(1, 1), gl_WorkGroupSize.xy);
+
+	vec4 pos0WS = tM * paramToWS(uParam, vParam, curveIndex, userData);
+	vec4 posU   = subgroupShuffle(pos0WS, neighborX);
+	vec4 posV   = subgroupShuffle(pos0WS, neighborY);
+	vec3 nrm0   = normalize(cross(posU.xyz - pos0WS.xyz, posV.xyz - pos0WS.xyz));
+	vec3 nrmU   = subgroupShuffle(nrm0  , neighborX );
+	vec3 nrmV   = subgroupShuffle(nrm0  , neighborY );
+	vec3 nrmUV  = subgroupShuffle(nrm0  , neighborXY);
+#if DRAW_PATCH_EVAL_DEBUG_VIS_BUMPINESS_EVAL
+	writeToCombinedAttachment(ivec2(toScreen(toCS(pos0WS)).xy), 0.0001, nrm0);
+#endif
+
+	uint different = 0;
+	uint total = 0;
+
+	const int NumTests = 9;
+	const vec2 offsets[NumTests] = {
+		vec2(0.5,      0.5     ),
+		vec2(0.5,      0.333333),
+		vec2(0.5,      0.2     ),
+		vec2(0.333333, 0.5     ),
+		vec2(0.333333, 0.333333),
+		vec2(0.333333, 0.2     ),
+		vec2(0.2,      0.5     ),
+		vec2(0.2,      0.333333),
+		vec2(0.2,      0.2     )
+	};
+	
+	if (gl_LocalInvocationID.x < gl_WorkGroupSize.x - 1 && gl_LocalInvocationID.y < gl_WorkGroupSize.y - 1) {
+		for (uint i = 0; i < NumTests; ++i) {
+			// Calc interpolated normal:
+			vec2 curOff     = offsets[i];
+			vec3 lerpedNrm  = getBilinearInterpolated(nrm0, nrmU, nrmV, nrmUV, curOff.x, curOff.y);
+
+			// Calc subsampled normal:
+			vec4 ssposU     = tM * paramToWS(uParam + onePxParamRange.x * curOff.x, vParam                               , curveIndex, userData);
+			vec4 ssposV     = tM * paramToWS(uParam                               , vParam + onePxParamRange.y * curOff.y, curveIndex, userData);
+			vec3 ssnrm      = normalize(cross(ssposU.xyz - pos0WS.xyz, ssposV.xyz - pos0WS.xyz));
+
+//#if DRAW_PATCH_EVAL_DEBUG_VIS_BUMPINESS_EVAL
+//			if (i == 0) {
+//				writeToCombinedAttachment(ivec2(toScreen(toCS(pos0WS)).xy) + ivec2(-5, 10), 0.0001, lerpedNrm);
+//				writeToCombinedAttachment(ivec2(toScreen(toCS(pos0WS)).xy) + ivec2( 5, 10), 0.0001, ssnrm);
+//			}
+//#endif
+
+			// Compare interpolated with subsampled normal:
+			float angleDiff = dot(normalize(lerpedNrm), ssnrm);
+			const float angleThreshold = 0.98; // 0.97 => ~14° | 0.98 => ~11° | 0.99 => ~8°
+			different += angleDiff < angleThreshold ? 1 : 0;
+			total += NumTests;
+		}
+	}
+
+	uint differentTotal = subgroupAdd(different);
+	uint totalTotal     = subgroupAdd(total);
+
+//	if (subgroupElect())
+//		debugPrintfEXT("differentTotal[%u], totalTotal[%u]", differentTotal, totalTotal);
+
+	return (differentTotal * 15) > totalTotal;
+}
+
 // renderingVariantIndex:  [0] = Tess_noAA, [1] = Tess_8xSS, [2] = Tess_4xSS_8xMS, [3] = PointRendered_direct, [4] = PointRendered_4xSS_local_fb, [5] = Hybrid
 void pxFillOut(int renderingVariantIndex, float uStart, float uEnd, float vStart, float vEnd, vec2 screenDists, const uint elementIdxIn) 
 {
+	// Before we decide about them splits, see if we must decide upon them different rendering variants (HYBRID METHOD):
+	if (HYBRID_VARIANT_INDEX == renderingVariantIndex) { 
+		if (gl_WorkGroupID.x % 2 == 0) {
+			renderingVariantIndex = 0;
+		}
+		else {
+			renderingVariantIndex = 4;
+		}
+		// TODO:  ^ Implement a proper heuristic => see here v
+
+		bool isBumpy = hasSubpixelFeatures(uStart, uEnd, vStart, vEnd, screenDists, elementIdxIn);
+		renderingVariantIndex = isBumpy ? 4 : 0;
+	}
+
+	if (!subgroupElect() || gl_LocalInvocationID.z != 0) { // Only one thread is allowed to do that. // Only z==0 writes the split data
+		return;
+	}
+		// Before we decide about them splits, see if we must decide upon them different rendering variants (HYBRID METHOD):
+	if (HYBRID_VARIANT_INDEX == renderingVariantIndex) { 
+		// TODO: Implement a proper heuristic
+		if (gl_WorkGroupID.x % 2 == 0) {
+			renderingVariantIndex = 0;
+		}
+		else {
+			renderingVariantIndex = 4;
+		}
+	}
+
 //	if (uStart < 0.8 || vStart < 1.8) return;
 	const uint insertIdx 
 		= MAX_INDIRECT_DISPATCHES * renderingVariantIndex // <-- start offset (depending on rendering variant)
@@ -248,10 +368,12 @@ void patchOut(int renderingVariantIndex, const uint levelIn, float uStart, float
 	uint maxLevel = MAX_PATCH_SUBDIV_STEPS-1;
 
 	if (levelIn != maxLevel) { // Split and continue with ping->pong
-		const uint levelOut = levelIn + 1;
-		const uint insertIdx = atomicAdd(uPatchLodCount.mDispatchCounts[levelOut].x, 1);
-		uPatchLodPong.mElements[insertIdx].mParams           = vec4(uStart, uEnd, vStart, vEnd);
-		uPatchLodPong.mElements[insertIdx].mObjectIdUserData = uPatchLodPing.mElements[elementIdxIn].mObjectIdUserData;
+		if (subgroupElect() && gl_LocalInvocationID.z == 0) { // Only one thread is allowed to do that. // Only z==0 writes the split data
+			const uint levelOut = levelIn + 1;
+			const uint insertIdx = atomicAdd(uPatchLodCount.mDispatchCounts[levelOut].x, 1);
+			uPatchLodPong.mElements[insertIdx].mParams           = vec4(uStart, uEnd, vStart, vEnd);
+			uPatchLodPong.mElements[insertIdx].mObjectIdUserData = uPatchLodPing.mElements[elementIdxIn].mObjectIdUserData;
+		}
 	} 
 	else { // We do not split OR we have reached max.level (i.e., no more patch lod calls afterwards):
 		pxFillOut(renderingVariantIndex,
@@ -337,7 +459,7 @@ void main()
 		vec4 posWS_xtra  = tM * rawWS_xtra;
 		vec4 posCS_xtra  = toCS(posWS_xtra);
 
-#if DRAW_PATCH_EVAL_DEBUG_VIS
+#if DRAW_PATCH_EVAL_DEBUG_VIS_SCREEN_DISTANCES
 		{ DEBUG_VIS_WRAP_BEGIN
 			const vec3 vpc  = toScreen(posCS_xtra);
 			for (int i = -DEBUG_POINT_HALF_SIZE; i <= DEBUG_POINT_HALF_SIZE; ++i) {
@@ -393,30 +515,14 @@ void main()
 	if (pushConstants.mPerformFrustumCulling && ((workgroupAnd[0] & workgroupAnd[1]) != 0)) {
 		return;
 	}
-
-	// Only z==0 writes the split data
-	if (gl_LocalInvocationID.z != 0) {
-		return;
-	}
 #else
 	subgroupMemoryBarrierShared();
 #endif
 
-	// Before we decide about them splits, see if we must decide upon them different rendering variants (HYBRID METHOD):
-	if (HYBRID_VARIANT_INDEX == renderingVariantIndex) { 
-		// TODO: Implement a proper heuristic
-		if (gl_WorkGroupID.x % 2 == 0) {
-			renderingVariantIndex = 0;
-		}
-		else {
-			renderingVariantIndex = 4;
-		}
-	}
-
-	// Split-decision computed by only one thread:
-	if (!subgroupElect()) {
-		return;
-	}
+//	// Split-decision computed by only one thread:
+//	if (!subgroupElect()) {
+//		return;
+//	}
 
 	bool shallSplitU[2] = { splitU[0] SPLIT_OP splitU[1], splitU[2] SPLIT_OP splitU[3] };
 	bool shallSplitV[2] = { splitV[0] SPLIT_OP splitV[1], splitV[2] SPLIT_OP splitV[3] };

@@ -179,3 +179,29 @@ int guesstimateNumberOfPixelsCovered(vec3 corner1, vec3 corner2, vec3 corner3, v
     return int(ceil(pixelDists.x) * ceil(pixelDists.y));
 }
 
+// Example usage: 
+// var subgroupInvocationId = calcInvocationIdFrom2DIndices(gl_LocalInvocationID, gl_WorkGroupSize);
+uint calcInvocationIdFrom2DIndices(uvec2 indices, uvec2 size)
+{
+	return indices.y * size.x + indices.x;
+}
+
+// Get a point that is bilinearly interpolated according to u and v interpolation factor
+vec3 getBilinearInterpolated(vec3 Pos0, vec3 PosU, vec3 PosV, vec3 PosUV, float u, float v)
+{
+	vec3 P =  Pos0  * (1.0 - u) * (1.0 - v)
+			+ PosU  * u * (1.0 - v) 
+			+ PosV  * (1.0 - u) * v
+			+ PosUV * u * v;
+	return P;
+}
+
+// Get a point that is bilinearly interpolated according to u and v interpolation factor
+vec4 getBilinearInterpolated(vec4 Pos0, vec4 PosU, vec4 PosV, vec4 PosUV, float u, float v)
+{
+	vec4 P =  Pos0  * (1.0 - u) * (1.0 - v)
+			+ PosU  * u * (1.0 - v) 
+			+ PosV  * (1.0 - u) * v
+			+ PosUV * u * v;
+	return P;
+}

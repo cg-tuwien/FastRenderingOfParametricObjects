@@ -479,7 +479,7 @@ void main()
 #endif
 
 			if (colorDivisor > 0.0) {
-				ivec2 globalFbCoords = ivec2(x, y) + screenCoordsLB + ivec2(100, 0); // TODO: remove 100 (just for debug purposes);
+				ivec2 globalFbCoords = ivec2(x, y) + screenCoordsLB;
 				uint64_t resolvedData = getUint64ForFramebuffer(minDepth, avgColor);
 #if DEBUG_PATCH_FOCUS
 				if (gl_WorkGroupID.x == DEBUG_PATCH_X && gl_WorkGroupID.y == DEBUG_PATCH_Y) {
