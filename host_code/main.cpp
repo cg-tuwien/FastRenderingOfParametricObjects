@@ -768,24 +768,27 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 			else if (is_giant_worm(po.param_obj_type())) {
 				// Giant worm body
 				tmp.mCurveIndex = 14;
-				tmp.mTransformationMatrix = glm::translate(tmp.mTransformationMatrix, glm::vec3{ 1.0f, 0.0f, 0.0f });
 				mObjectData[i++] = tmp;
-				// Giant worm mouth piece (inside)
+				// Giant worm mouth piece (inside) x3
 				tmp.mCurveIndex = 15;
-				tmp.mTransformationMatrix = glm::translate(tmp.mTransformationMatrix, glm::vec3{ 1.0f, 0.0f, 0.0f });
 				mObjectData[i++] = tmp;
-				// Giant worm mouth piece (outside)
 				tmp.mCurveIndex = 16;
-				tmp.mTransformationMatrix = glm::translate(tmp.mTransformationMatrix, glm::vec3{ 1.0f, 0.0f, 0.0f });
 				mObjectData[i++] = tmp;
-				// Giant worm teeth 
 				tmp.mCurveIndex = 17;
-				tmp.mTransformationMatrix = glm::translate(tmp.mTransformationMatrix, glm::vec3{ 1.0f, 0.0f, 0.0f });
+				mObjectData[i++] = tmp;
+				// Giant worm mouth piece (outside) x3
+				tmp.mCurveIndex = 18;
+				mObjectData[i++] = tmp;
+				tmp.mCurveIndex = 19;
+				mObjectData[i++] = tmp;
+				tmp.mCurveIndex = 20;
 				mObjectData[i++] = tmp;
 				// Giant worm tongue
-				tmp.mCurveIndex = 18;
-				tmp.mTransformationMatrix = glm::translate(tmp.mTransformationMatrix, glm::vec3{ 1.0f, 0.0f, 0.0f });
+				tmp.mCurveIndex = 21;
 				mObjectData[i++] = tmp;
+				//// Giant worm teeth 
+				//tmp.mCurveIndex = 22;
+				//mObjectData[i++] = tmp;
 			}
 			else {
 				mObjectData[i] = tmp;

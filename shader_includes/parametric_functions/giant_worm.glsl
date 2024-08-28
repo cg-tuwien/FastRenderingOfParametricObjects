@@ -1,32 +1,78 @@
 // +-------------------------------------------------+
 // |   Giant Worm:                                   |
 // +-------------------------------------------------+
-vec3 get_giant_worm_body(float u, float v, uvec3 userData)
+vec3 get_giant_worm_body(float u, float v, uvec3 userData, out vec3 pos, out vec3 outward, out vec3 forward)
 {
-	const float thickness = 0.5;
+	const float thickness = 0.75;
 	const float numSawtoothElements = 15.0;
 
 	const int numControlPoints = 5;
 	vec3 controlPoints[NUM_BEZIER_CONTROL_POINTS];
-	controlPoints[0] = vec3( 0.0, 0.0  - 5.0,   0.0);
-	controlPoints[1] = vec3( 0.0, 1.0  - 5.0,   0.0);
-	controlPoints[2] = vec3( 2.0, 4.0  - 5.0,   1.0);
-	controlPoints[3] = vec3( 0.0, 8.0  - 5.0,   0.0);
-	controlPoints[4] = vec3(-1.0, 10.0 - 5.0, -1.0);
+	controlPoints[0] = 1.5 * vec3( 0.0,-0.5 * 0.65,   0.0);
+	controlPoints[1] = 1.5 * vec3( 0.0, 1.0 * 0.65,   0.0);
+	controlPoints[2] = 1.5 * vec3( 2.0, 4.0 * 0.65,   0.0);
+	controlPoints[3] = 1.5 * vec3( 0.0, 8.0 * 0.65,   0.0);
+	controlPoints[4] = 1.5 * vec3(-2.0, 7.0 * 0.65,   0.0);
 
-	vec3 pos     = bezier_value_at(numControlPoints, controlPoints, u);
-	vec3 upwards = normalize(bezier_slope_at(numControlPoints, controlPoints, u));
+	pos      = bezier_value_at(numControlPoints, controlPoints,u);
+	forward  = normalize(bezier_slope_at(numControlPoints, controlPoints, u));
 
 	// Manually make a pipe (without using the pipeify function, but same steps):
-	vec3 nTrunk = orthogonal(upwards);
+	vec3 o  = orthogonal(forward);
 
-	// Generate palm tree trunk shape:
-	float sawtooth = (u * numSawtoothElements) - floor(u * numSawtoothElements);
-	float sawtoothscale = sawtooth * 0.3 + 1.0;
+	// Small bumps:
+	float bumpySkin = abs(cos(u * 100.0)) * 0.05;
 
-	// Let the tree trunk be a bit thicker at the bottom:
-	float thicknessscale = 1.0 / (u + 1.0) + 0.5;
+	// Let the gitant worm be a bit thicker at the bottom:
+	float thicknessscale = 0.75 / (u * 0.5 + 0.5) + 0.5;
 
-	vec3 treeTrunkPos = pos + rotate_around_axis(nTrunk * thickness * sawtoothscale * thicknessscale, upwards, v);
-	return treeTrunkPos;
+	vec3 bodyPos = pos + rotate_around_axis(o * thickness * thicknessscale + bumpySkin, forward, v);
+	outward = bodyPos - pos;
+	return bodyPos;
+}
+
+vec3 get_giant_worm_jaws(float u, float v, float offset, float flipStrength, float dragToInnerRadius, uvec3 userData)
+{
+	v = v / 3.0;
+	vec3 pos, outwd, fwd;
+	vec3 jaws = get_giant_worm_body(1.0, offset + v, userData,  /* out: */ pos, /* out: */ outwd, /* out: */ fwd);
+
+	// Fake rotation from fwd to outwd:
+	fwd = mix(fwd, outwd, 0.3); // <- fake rotation 
+
+	outwd *= flipStrength;
+
+	jaws += fwd * u * 3.0 * sin(3.0*v/2.0)
+		 + sin(3.0*v/2.0) * outwd * 0.2 * sin(u * PI);
+
+	jaws = mix(jaws, pos + fwd * u * 1.5, ((-u)*(-u)*(-u)+1.0) * dragToInnerRadius);
+
+	//// For the translation:
+	//vec3 root = get_giant_worm_body(1.0, offset, userData, /* out: */ outwd, /* out: */ fwd);
+	//// For the rotation:
+	//get_giant_worm_body(1.0, offset + v, userData, /* out: */ outwd, /* out: */ fwd);
+	//outwd = normalize(outwd);
+	//fwd   = normalize(fwd);
+
+	//vec3 jaws = get_plane(u, v);
+	//// rotate along with the forward vector:
+	//jaws = mat3(fwd, cross(outwd, fwd), outwd) * jaws;
+	//// translate to the root position:
+	//jaws += root;
+
+	return jaws;
+}
+
+vec3 get_giant_worm_tongue(float u, float v, uvec3 userData)
+{
+	u *= 0.9;
+	v *= 0.9;
+
+	vec3 pos, outwd, fwd;
+	vec3 jaws = get_giant_worm_body(1.0, 0.0, userData,  /* out: */ pos, /* out: */ outwd, /* out: */ fwd);
+
+	vec3 tongue = to_sphere(u, v);
+	tongue += pos;
+
+	return tongue;
 }
