@@ -152,6 +152,8 @@ vec4 paramToWS(float u, float v, int curveIndex, uvec3 userData)
             object = get_giant_worm_tongue(u, v, userData);
             break;
         case 22: // Giant worm teeth 
+            object  = to_sphere(u * PI, v, 0.1);
+            object += get_giant_worm_jaws(0.8, PI, -TWO_PI/12.0, -0.7, 0.5, userData);
             break;
     }
 

@@ -766,29 +766,29 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 				shBrainSavedForLater.push_back(tmp);
 			}
 			else if (is_giant_worm(po.param_obj_type())) {
-				// Giant worm body
+				// Giant worm body:
 				tmp.mCurveIndex = 14;
 				mObjectData[i++] = tmp;
-				// Giant worm mouth piece (inside) x3
+				// Giant worm mouth piece (inside) x3:
 				tmp.mCurveIndex = 15;
 				mObjectData[i++] = tmp;
 				tmp.mCurveIndex = 16;
 				mObjectData[i++] = tmp;
 				tmp.mCurveIndex = 17;
 				mObjectData[i++] = tmp;
-				// Giant worm mouth piece (outside) x3
+				// Giant worm mouth piece (outside) x3:
 				tmp.mCurveIndex = 18;
 				mObjectData[i++] = tmp;
 				tmp.mCurveIndex = 19;
 				mObjectData[i++] = tmp;
 				tmp.mCurveIndex = 20;
 				mObjectData[i++] = tmp;
-				// Giant worm tongue
+				// Giant worm tongue:
 				tmp.mCurveIndex = 21;
 				mObjectData[i++] = tmp;
-				//// Giant worm teeth 
-				//tmp.mCurveIndex = 22;
-				//mObjectData[i++] = tmp;
+				// Giant worm teeth:
+				tmp.mCurveIndex = 22;
+				mObjectData[i++] = tmp;
 			}
 			else {
 				mObjectData[i] = tmp;

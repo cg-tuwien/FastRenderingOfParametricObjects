@@ -65,13 +65,20 @@ vec3 get_giant_worm_jaws(float u, float v, float offset, float flipStrength, flo
 
 vec3 get_giant_worm_tongue(float u, float v, uvec3 userData)
 {
-	u *= 0.9;
-	v *= 0.9;
+	const float radius = 0.65;
+	u = u * PI * 0.8;
+	if (u < PI * 0.5) {
+		u += 0.25 * PI - sin(5.0 * v)*sin(5.0 * v)*sin(5.0 * v)*sin(5.0 * v) * 0.2 * PI;
+	}
 
 	vec3 pos, outwd, fwd;
 	vec3 jaws = get_giant_worm_body(1.0, 0.0, userData,  /* out: */ pos, /* out: */ outwd, /* out: */ fwd);
 
-	vec3 tongue = to_sphere(u, v);
+	vec3 tongue = to_sphere(u, v, radius);
+	// rotate along with the forward vector:
+	outwd  = normalize(outwd);
+	fwd    = normalize(fwd);
+	tongue = mat3(cross(fwd, outwd), fwd, outwd) * tongue;
 	tongue += pos;
 
 	return tongue;

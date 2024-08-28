@@ -14,11 +14,11 @@
 #define MAX_PATCH_SUBDIV_STEPS		12
 
 // Maximum number of LOD patches per "ping/pong" buffer:
-#define MAX_LOD_PATCHES				4000000
+#define MAX_LOD_PATCHES				3000000
 
 // Maximum number of indirect dispatch calls for the "pixel fill" compute pass (2nd pass):
 // NOTE: This  vvv  is also the stride for the start indices of the different rendering variants.
-#define MAX_INDIRECT_DISPATCHES		4000000
+#define MAX_INDIRECT_DISPATCHES		3000000
 
 // How many different rendering variants are there?
 #define NUM_RENDERING_VARIANTS		5
