@@ -758,6 +758,8 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 				po.screen_distance_threshold() / get_screen_space_threshold_divisor(po.how_to_render()),
 				po.sampling_factor()
 			};
+			
+			tmp.mUserData = { 0, 0, 0, 0 };
 
 			if (is_knit_yarn(po.param_obj_type())) {
 				knitYarnSavedForLater.push_back(tmp);
@@ -771,23 +773,25 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 				mObjectData[i++] = tmp;
 				// Giant worm mouth piece (inside) x3:
 				tmp.mCurveIndex = 15;
+				tmp.mUserData.x = 0;
 				mObjectData[i++] = tmp;
-				tmp.mCurveIndex = 16;
+				tmp.mUserData.x = 1;
 				mObjectData[i++] = tmp;
-				tmp.mCurveIndex = 17;
+				tmp.mUserData.x = 2;
 				mObjectData[i++] = tmp;
 				// Giant worm mouth piece (outside) x3:
-				tmp.mCurveIndex = 18;
+				tmp.mCurveIndex = 16;
+				tmp.mUserData.x = 0;
 				mObjectData[i++] = tmp;
-				tmp.mCurveIndex = 19;
+				tmp.mUserData.x = 1;
 				mObjectData[i++] = tmp;
-				tmp.mCurveIndex = 20;
+				tmp.mUserData.x = 2;
 				mObjectData[i++] = tmp;
 				// Giant worm tongue:
-				tmp.mCurveIndex = 21;
+				tmp.mCurveIndex = 17;
 				mObjectData[i++] = tmp;
 				// Giant worm teeth:
-				tmp.mCurveIndex = 22;
+				tmp.mCurveIndex = 18;
 				mObjectData[i++] = tmp;
 			}
 			else {

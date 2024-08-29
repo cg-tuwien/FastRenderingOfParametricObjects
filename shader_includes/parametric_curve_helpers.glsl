@@ -130,35 +130,23 @@ vec4 paramToWS(float u, float v, int curveIndex, uvec3 userData)
                 object = get_giant_worm_body(u, v, userData, notNeeded1, notNeeded2, notNeeded3);
             }
             break;
-        case 15: // Giant worm mouth piece (inside) #1
-            object = get_giant_worm_jaws(u, TWO_PI - v, -TWO_PI/6.0, -0.7, 0.5, userData);
+        case 15: // Giant worm mouth piece (inside)
+            object = get_giant_worm_jaws(u, TWO_PI - v, -TWO_PI/6.0 + float(userData.x) * TWO_PI/3.0, -0.7, 0.5, userData);
             break;
-        case 16: // Giant worm mouth piece (inside) #2
-            object = get_giant_worm_jaws(u, TWO_PI - v, -TWO_PI/6.0 + TWO_PI/3.0, -0.7, 0.5, userData);
+        case 16: // Giant worm mouth piece (outside)
+            object = get_giant_worm_jaws(u, v, -TWO_PI/6.0 + float(userData.x) * TWO_PI/3.0, 1.0, 0.0, userData);
             break;
-        case 17: // Giant worm mouth piece (inside) #3
-            object = get_giant_worm_jaws(u, TWO_PI - v, -TWO_PI/6.0 + TWO_PI/1.5, -0.7, 0.5, userData);
-            break;
-        case 18: // Giant worm mouth piece (outside) #1
-            object = get_giant_worm_jaws(u, v, -TWO_PI/6.0, 1.0, 0.0, userData);
-            break;
-        case 19: // Giant worm mouth piece (outside) #2
-            object = get_giant_worm_jaws(u, v, -TWO_PI/6.0 + TWO_PI/3.0, 1.0, 0.0, userData);
-            break;
-        case 20: // Giant worm mouth piece (outside) #3
-            object = get_giant_worm_jaws(u, v, -TWO_PI/6.0 + TWO_PI/1.5, 1.0, 0.0, userData);
-            break;
-        case 21: // Giant worm tongue
+        case 17: // Giant worm tongue
             object = get_giant_worm_tongue(u, v, userData);
             break;
-        case 22: // Giant worm teeth 
+        case 18: // Giant worm teeth 
             {
                 object  = to_cone(u * PI, v);
                 object *= vec3(0.025, 0.1, 0.025);
                 float eps = 0.01;
-                vec3 jaws0 = get_giant_worm_jaws(0.8      , PI      , -TWO_PI/12.0, -0.7, 0.5, userData);
-                vec3 jawsU = get_giant_worm_jaws(0.8 - eps, PI      , -TWO_PI/12.0, -0.7, 0.5, userData);
-                vec3 jawsV = get_giant_worm_jaws(0.8      , PI - eps, -TWO_PI/12.0, -0.7, 0.5, userData);
+                vec3 jaws0 = get_giant_worm_jaws(0.8      , PI      , -TWO_PI/12.0 + float(userData.x) * TWO_PI/3.0, -0.7, 0.5, userData);
+                vec3 jawsU = get_giant_worm_jaws(0.8 - eps, PI      , -TWO_PI/12.0 + float(userData.x) * TWO_PI/3.0, -0.7, 0.5, userData);
+                vec3 jawsV = get_giant_worm_jaws(0.8      , PI - eps, -TWO_PI/12.0 + float(userData.x) * TWO_PI/3.0, -0.7, 0.5, userData);
                 jawsU  = normalize(jawsU - jaws0);
                 jawsV  = normalize(jawsV - jaws0);
                 vec3 X = cross(jawsV, jawsU);
@@ -166,7 +154,7 @@ vec4 paramToWS(float u, float v, int curveIndex, uvec3 userData)
                 // rotate with jaws:
                 object = jawtrix * object;
                 // translate to jaws:
-                object += jaws0 - X * 0.1;
+                object += jaws0 - X * 0.085;
             }
             break;
     }
