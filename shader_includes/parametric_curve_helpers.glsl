@@ -152,8 +152,22 @@ vec4 paramToWS(float u, float v, int curveIndex, uvec3 userData)
             object = get_giant_worm_tongue(u, v, userData);
             break;
         case 22: // Giant worm teeth 
-            object  = to_sphere(u * PI, v, 0.1);
-            object += get_giant_worm_jaws(0.8, PI, -TWO_PI/12.0, -0.7, 0.5, userData);
+            {
+                object  = to_cone(u * PI, v);
+                object *= vec3(0.025, 0.1, 0.025);
+                float eps = 0.01;
+                vec3 jaws0 = get_giant_worm_jaws(0.8      , PI      , -TWO_PI/12.0, -0.7, 0.5, userData);
+                vec3 jawsU = get_giant_worm_jaws(0.8 - eps, PI      , -TWO_PI/12.0, -0.7, 0.5, userData);
+                vec3 jawsV = get_giant_worm_jaws(0.8      , PI - eps, -TWO_PI/12.0, -0.7, 0.5, userData);
+                jawsU  = normalize(jawsU - jaws0);
+                jawsV  = normalize(jawsV - jaws0);
+                vec3 X = cross(jawsV, jawsU);
+                mat3 jawtrix = mat3(jawsU, X, jawsV);
+                // rotate with jaws:
+                object = jawtrix * object;
+                // translate to jaws:
+                object += jaws0 - X * 0.1;
+            }
             break;
     }
 

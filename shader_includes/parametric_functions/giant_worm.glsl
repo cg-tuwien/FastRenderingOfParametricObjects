@@ -47,19 +47,6 @@ vec3 get_giant_worm_jaws(float u, float v, float offset, float flipStrength, flo
 
 	jaws = mix(jaws, pos + fwd * u * 1.5, ((-u)*(-u)*(-u)+1.0) * dragToInnerRadius);
 
-	//// For the translation:
-	//vec3 root = get_giant_worm_body(1.0, offset, userData, /* out: */ outwd, /* out: */ fwd);
-	//// For the rotation:
-	//get_giant_worm_body(1.0, offset + v, userData, /* out: */ outwd, /* out: */ fwd);
-	//outwd = normalize(outwd);
-	//fwd   = normalize(fwd);
-
-	//vec3 jaws = get_plane(u, v);
-	//// rotate along with the forward vector:
-	//jaws = mat3(fwd, cross(outwd, fwd), outwd) * jaws;
-	//// translate to the root position:
-	//jaws += root;
-
 	return jaws;
 }
 
