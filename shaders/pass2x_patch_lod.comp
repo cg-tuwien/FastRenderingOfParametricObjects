@@ -66,7 +66,7 @@ layout(set = 4, binding = 0) buffer BigDataset { dataset_sh_coeffs mEntries[]; }
 
 
 #if DRAW_PATCH_EVAL_DEBUG_VIS
-#define DRAW_PATCH_EVAL_DEBUG_VIS_SCREEN_DISTANCES 0
+#define DRAW_PATCH_EVAL_DEBUG_VIS_SCREEN_DISTANCES 1
 #define DRAW_PATCH_EVAL_DEBUG_VIS_BUMPINESS_EVAL   0
 layout(set = 5, binding = 0, r64ui) uniform restrict volatile u64image2D uCombinedAttachment;
 #if STATS_ENABLED
@@ -79,7 +79,7 @@ layout(set = 5, binding = 1, r32ui) uniform restrict uimage2D uHeatmapImage;
 #define DEBUG_COLOR_Y         vec4(1.0, 0.3 , 0.0 , 1.0)
 #define DEBUG_COLOR_XTRA      vec4(1.0, 0.05, 0.05, 1.0)
 #define DEBUG_COLOR_SUBSAMPLE vec4(0.1, 0.6 , 1.0 , 1.0)
-#define DEBUG_VIS_WRAP_BEGIN  if (0 == pushConstants.mPatchLodLevel) {
+#define DEBUG_VIS_WRAP_BEGIN  if (3 == pushConstants.mPatchLodLevel && gl_WorkGroupID.x == 0) {
 #define DEBUG_VIS_WRAP_END    }
 
 #if DRAW_PATCH_EVAL_DEBUG_VIS_SCREEN_DISTANCES
@@ -133,6 +133,14 @@ shared vec2  maxScreenCoords[EVAL_GRID_Z];
 shared uint  workgroupAnd[EVAL_GRID_Z];
 #endif
 
+#if GAP_DETECTION_ENABLED
+shared float maxTapDistU;	// maximum distance between two neighboring u taps during evalSplitDecision(false, ...) 
+shared float maxTapDistV;	// maximum distance between two neighboring v taps during evalSplitDecision(true , ...)
+shared float minTapDistU;	// minimum distance between two neighboring u taps during evalSplitDecision(false, ...) 
+shared float minTapDistV;	// minimum distance between two neighboring v taps during evalSplitDecision(true , ...)
+shared bool  gapDetected;
+#endif
+
 // Eval if this patch shall be split.
 // @param aTransposeEval   false => eval in u direction, i.e. 8 taps u, 4 taps v => fill splitU data
 //                         true  => eval in v direction, i.e. 4 taps u, 8 taps v => fill splitV data
@@ -183,6 +191,22 @@ void evalSplitDecision(bool aTransposeEval, vec2 aParamsStart, vec2 aParamsRange
 	const vec2 neighborScreenCoords = subgroupShuffle(screenCoords, neighborIndex);
 	const float neighborDist = length(screenCoords - neighborScreenCoords); // TODO: Optimize performance with squared distance
 
+#if GAP_DETECTION_ENABLED
+	const float neighborDistForGapDetection = gl_SubgroupInvocationID % EVAL_GRID_X == 0 ? 0 : neighborDist;
+	const float maxNeighborDist             = subgroupMax(neighborDistForGapDetection);
+	const float minNeighborDist             = subgroupMin(neighborDistForGapDetection);
+	if (subgroupElect()) {
+		if (!aTransposeEval) {
+			maxTapDistU = maxNeighborDist;
+			minTapDistU = minNeighborDist;
+		}
+		else {
+			maxTapDistV = maxNeighborDist;
+			minTapDistV = minNeighborDist;
+		}
+	}
+#endif
+
 #if DRAW_PATCH_EVAL_DEBUG_VIS_SCREEN_DISTANCES
 	{ DEBUG_VIS_WRAP_BEGIN
 		vec4 dbgColor = aTransposeEval ? DEBUG_COLOR_Y : DEBUG_COLOR_X;
@@ -218,6 +242,43 @@ void evalSplitDecision(bool aTransposeEval, vec2 aParamsStart, vec2 aParamsRange
 			screenDistsV[sumRefIndex] = summedScreenDists;
 		}
 	}
+}
+
+vec2 getMinMaxAcrossSubgroup(bool aTransposeEval, float uStart, float uEnd, float vStart, float vEnd, vec2 screenThresholds, int aCurveIndex, uvec3 aUserData, mat4 aTM)
+{
+	vec2 aParamsStart = vec2(uStart, vStart);
+	vec2 aParamsEnd   = vec2(uEnd  , vEnd  );
+	vec2 aParamsRange = aParamsEnd - aParamsStart;
+
+	const uvec2 rangeDivisor = !aTransposeEval 
+		? gl_WorkGroupSize.xy - uvec2(1, 0)  // 7x4
+		: gl_WorkGroupSize.yx - uvec2(0, 1); // 4x7
+	const vec2  evalRanges   = aParamsRange / rangeDivisor;
+	const vec2  dimOffset    = !aTransposeEval
+		? vec2(0.0, evalRanges.y * 0.5)
+		: vec2(evalRanges.x * 0.5, 0.0);
+
+	const vec2 evalIndices   = !aTransposeEval 
+		? vec2(gl_LocalInvocationID.xy)
+		: vec2(gl_LocalInvocationID.yx);
+	const vec2 myParams = aParamsStart + evalRanges * evalIndices + dimOffset;
+
+	// Calc point:
+	vec4 rawWS  = paramToWS(myParams.x, myParams.y, aCurveIndex, aUserData);
+	vec4 posWS  = aTM * rawWS;
+	vec4 posCS  = toCS(posWS);
+	const vec3 vpc           = toScreen(posCS);
+	const vec2 screenCoords  = vpc.xy;
+
+	// What's the screen distance to the previous invocation?
+	const uint neighborIndex = (gl_SubgroupInvocationID % EVAL_GRID_X) == 0 ? gl_SubgroupInvocationID : gl_SubgroupInvocationID - 1;
+	const vec2 neighborScreenCoords = subgroupShuffle(screenCoords, neighborIndex);
+	const float neighborDist = length(screenCoords - neighborScreenCoords); // TODO: Optimize performance with squared distance
+
+	const float neighborDistForGapDetection = gl_SubgroupInvocationID % EVAL_GRID_X == 0 ? 0 : neighborDist;
+	const float maxNeighborDist             = subgroupMax(neighborDistForGapDetection);
+	const float minNeighborDist             = subgroupMin(neighborDistForGapDetection);
+	return vec2(maxNeighborDist, minNeighborDist);
 }
 
 #if ENABLE_HYBRID_TECHNIQUE
@@ -327,18 +388,13 @@ void pxFillOut(int renderingVariantIndex, float uStart, float uEnd, float vStart
 	}
 #endif
 
+#if GAP_DETECTION_ENABLED
+	if (gapDetected) {
+		renderingVariantIndex = 0;
+	}
+#endif
 	if (!subgroupElect() || gl_LocalInvocationID.z != 0) { // Only one thread is allowed to do that. // Only z==0 writes the split data
 		return;
-	}
-		// Before we decide about them splits, see if we must decide upon them different rendering variants (HYBRID METHOD):
-	if (HYBRID_VARIANT_INDEX == renderingVariantIndex) { 
-		// TODO: Implement a proper heuristic
-		if (gl_WorkGroupID.x % 2 == 0) {
-			renderingVariantIndex = 0;
-		}
-		else {
-			renderingVariantIndex = 4;
-		}
 	}
 
 //	if (uStart < 0.8 || vStart < 1.8) return;
@@ -513,6 +569,10 @@ void main()
 #endif
 	}
 
+#if GAP_DETECTION_ENABLED
+	gapDetected = false;
+#endif
+
 #if CONCURRENT_U_V_EVAL
 	memoryBarrier();
 	barrier();
@@ -541,6 +601,72 @@ void main()
 	if (!doVSplit && shallSplitV[0] != shallSplitV[1]) {
 		doUSplit = true;
 	}
+
+#if GAP_DETECTION_ENABLED
+	const float gapSafetyFactor = 1.3;
+//	if (3 == pushConstants.mPatchLodLevel && gl_WorkGroupID.x == 0) {
+//		debugPrintfEXT("maxTapDistU[%f], maxTapDistV[%f], prevMaxTapDists[%f, %f]", maxTapDistU, maxTapDistV, prevMaxTapDists.x, prevMaxTapDists.y);
+//	}
+
+	if (doVSplit) {
+		float vStarts[2] = { paramsStart.y,                  paramsStart.y + halfParamsRange.y };
+		float vEnds[2]   = { vStarts[0] + halfParamsRange.y, vStarts[1] + halfParamsRange.y };
+		for (int i = 0; i < 2; ++i) {
+			if (shallSplitU[i]) {
+				vec2 minMax1 = getMinMaxAcrossSubgroup(false, paramsStart.x                    , paramsStart.x + halfParamsRange.x, vStarts[i], vEnds[i], vec2(t_u, t_v), curveIndex, userData, tM);
+				vec2 minMax2 = getMinMaxAcrossSubgroup(false, paramsStart.x + halfParamsRange.x, paramsStart.x + paramsRange.x    , vStarts[i], vEnds[i], vec2(t_u, t_v), curveIndex, userData, tM);
+				minMax1 *= gapSafetyFactor;
+				minMax2 *= gapSafetyFactor;
+				if (minMax1[0] >= maxTapDistU || minMax2[0] >= maxTapDistU) { // => splitting wouldn't help anything, ...
+					// ... therefore:
+					shallSplitU[i] = false;
+					gapDetected    = true;
+				}
+			}
+		}
+		if (!shallSplitU[0] && !shallSplitU[1]) {
+			vec2 minMax1 = getMinMaxAcrossSubgroup(true, paramsStart.x                    , paramsStart.x + paramsRange.x    , vStarts[0], vEnds[0], vec2(t_u, t_v), curveIndex, userData, tM);
+			vec2 minMax2 = getMinMaxAcrossSubgroup(true, paramsStart.x                    , paramsStart.x + paramsRange.x    , vStarts[1], vEnds[1], vec2(t_u, t_v), curveIndex, userData, tM);
+			minMax1 *= gapSafetyFactor;
+			minMax2 *= gapSafetyFactor;
+			if (minMax1[0] >= maxTapDistV || minMax2[0] >= maxTapDistV) { // => splitting wouldn't help anything, ...
+				// ... therefore:
+				doVSplit       = false;
+				gapDetected    = true;
+			}
+		}
+	}
+	if (doUSplit) {
+		float uStarts[2] = { paramsStart.x,                  paramsStart.x + halfParamsRange.x };
+		float uEnds[2]   = { uStarts[0] + halfParamsRange.x, uStarts[1] + halfParamsRange.x };
+		for (int i = 0; i < 2; ++i) {
+			if (shallSplitV[i]) {
+				vec2 minMax1 = getMinMaxAcrossSubgroup(true, uStarts[i], uEnds[i], paramsStart.y                    , paramsStart.y + halfParamsRange.y, vec2(t_u, t_v), curveIndex, userData, tM);
+				vec2 minMax2 = getMinMaxAcrossSubgroup(true, uStarts[i], uEnds[i], paramsStart.y + halfParamsRange.y, paramsStart.y + paramsRange.y    , vec2(t_u, t_v), curveIndex, userData, tM);
+				minMax1 *= gapSafetyFactor;
+				minMax2 *= gapSafetyFactor;
+				if (minMax1[0] >= maxTapDistV || minMax2[0] >= maxTapDistV) { // => splitting wouldn't help anything, ...
+					// ... therefore:
+					shallSplitV[i] = false;
+					gapDetected    = true;
+				}
+			}
+		}
+		if (!shallSplitV[0] && !shallSplitV[1]) {
+			vec2 minMax1 = getMinMaxAcrossSubgroup(false, uStarts[0], uEnds[0], paramsStart.y                    , paramsStart.y + paramsRange.y    , vec2(t_u, t_v), curveIndex, userData, tM);
+			vec2 minMax2 = getMinMaxAcrossSubgroup(false, uStarts[1], uEnds[1], paramsStart.y                    , paramsStart.y + paramsRange.y    , vec2(t_u, t_v), curveIndex, userData, tM);
+			minMax1 *= gapSafetyFactor;
+			minMax2 *= gapSafetyFactor;
+			if (minMax1[0] >= maxTapDistU || minMax2[0] >= maxTapDistU) { // => splitting wouldn't help anything, ...
+				// ... therefore:
+				doUSplit       = false;
+				gapDetected    = true;
+			}
+		}
+	}
+
+#endif 
+
 
 #if DO_ONE_TO_FOUR_SPLITS_ONLY
 	if (doVSplit || doUSplit) {

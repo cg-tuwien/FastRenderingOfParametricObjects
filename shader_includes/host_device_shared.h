@@ -10,8 +10,8 @@
 #define MAX_OBJECTS					100
 
 // Maximum number of subdivision steps that divides patches into smaller parts:
-// (8 steps are enough to subdivide 8192x8192 down into 32x32)
-#define MAX_PATCH_SUBDIV_STEPS		12
+// 12 steps to blow up a 1px wide patch -> 4k + 12 steps to subdivide it back down
+#define MAX_PATCH_SUBDIV_STEPS		32
 
 // Maximum number of LOD patches per "ping/pong" buffer:
 #define MAX_LOD_PATCHES				3000000
@@ -64,7 +64,7 @@
 #define TILE_PATCHES_BUFFER_ELEMENTS           MAX_PATCHES_PER_TILE * 20736
 
 // Draws points and lines, visualizing how pass2x evaluates the split decisions
-#define DRAW_PATCH_EVAL_DEBUG_VIS 0
+#define DRAW_PATCH_EVAL_DEBUG_VIS 1
 
 // Option to enable or disable the hybrid rendering technique.
 // Enabling it might lead to higher compile times for the pass2x_patch_lod.comp shader (not sure why).
@@ -74,3 +74,6 @@
 #define SH_BRAIN_DATA_SIZE_X      140
 #define SH_BRAIN_DATA_SIZE_Y      140
 #define SH_BRAIN_ELEMENT_OFFSET    25.0
+
+// Gap-detection in LOD Stage:
+#define GAP_DETECTION_ENABLED     1
