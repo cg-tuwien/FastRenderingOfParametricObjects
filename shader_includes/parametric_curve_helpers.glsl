@@ -9,6 +9,7 @@
 #include "parametric_functions/curtain_yarn_curve.glsl"
 #include "parametric_functions/curtain_fiber_curve.glsl"
 #include "parametric_functions/seashells.glsl"
+#include "parametric_functions/giant_worm.glsl"
 
 // +------------------------------------------------------------------------------+
 // |   Parametric Curve Helpers:                                                  |
@@ -122,6 +123,42 @@ vec4 paramToWS(float u, float v, int curveIndex, uvec3 userData)
             break;
 	    case 13: 
             object = get_seashell3(u, v);
+            break;
+        case 14: // Giant worm body 
+            {
+                vec3 notNeeded1, notNeeded2, notNeeded3;
+                object = get_giant_worm_body(u, v, userData, notNeeded1, notNeeded2, notNeeded3);
+            }
+            break;
+        case 15: // Giant worm mouth piece (inside)
+            object = get_giant_worm_jaws(u, TWO_PI - v, -TWO_PI/6.0 + float(userData.x) * TWO_PI/3.0, -0.7, 0.5, userData);
+            break;
+        case 16: // Giant worm mouth piece (outside)
+            object = get_giant_worm_jaws(u, v, -TWO_PI/6.0 + float(userData.x) * TWO_PI/3.0, 1.0, 0.0, userData);
+            break;
+        case 17: // Giant worm tongue
+            object = get_giant_worm_tongue(u, v, userData);
+            break;
+        case 18: // Giant worm teeth 
+            {
+                object  = to_cone(u * PI, v);
+                object.y = 1.0 - object.y;
+                object *= vec3(0.025, 0.1, 0.025);
+                //object = to_sphere(u * PI, v, 0.1f);
+                float eps = 0.01;
+                float discreteV = TWO_PI - 0.55 - TWO_PI / 22.0 * float(userData.y);
+                vec3 jaws0 = get_giant_worm_jaws(0.85 + 0.12 * sin(discreteV * 0.5)      , discreteV      , -TWO_PI/6.0 + float(userData.x) * TWO_PI/3.0, -0.7, 0.5, userData);
+                vec3 jawsU = get_giant_worm_jaws(0.85 + 0.12 * sin(discreteV * 0.5) - eps, discreteV      , -TWO_PI/6.0 + float(userData.x) * TWO_PI/3.0, -0.7, 0.5, userData);
+                vec3 jawsV = get_giant_worm_jaws(0.85 + 0.12 * sin(discreteV * 0.5)      , discreteV - eps, -TWO_PI/6.0 + float(userData.x) * TWO_PI/3.0, -0.7, 0.5, userData);
+                jawsU  = normalize(jawsU - jaws0);
+                jawsV  = normalize(jawsV - jaws0);
+                vec3 X = cross(jawsU, jawsV);
+                mat3 jawtrix = mat3(jawsU, X, jawsV);
+                // rotate with jaws:
+                object = jawtrix * object;
+                // translate to jaws:
+                object += jaws0 + X * 0.17;
+            }
             break;
     }
 

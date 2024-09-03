@@ -63,6 +63,7 @@
     <None Include="shader_includes\parametric_curve_helpers.glsl" />
     <None Include="shader_includes\parametric_functions\curtain_fiber_curve.glsl" />
     <None Include="shader_includes\parametric_functions\curtain_yarn_curve.glsl" />
+    <None Include="shader_includes\parametric_functions\giant_worm.glsl" />
     <None Include="shader_includes\parametric_functions\johis_heart.glsl" />
     <None Include="shader_includes\parametric_functions\palm_tree_trunk.glsl" />
     <None Include="shader_includes\parametric_functions\plane.glsl" />

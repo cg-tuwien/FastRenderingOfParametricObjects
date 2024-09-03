@@ -368,6 +368,22 @@ vec3 to_sphere(float u, float v, float r)
     );
 }
 
+/** Moves the points onto the cone surface
+ * \brief R2 -> R3 cone
+ * \param u Expected input range: [0, 1]
+ * \param v Expected input range: [0, 2*PI]
+ * \return Position according to the parametric cone equation
+ */
+vec3 to_cone(float u, float v)
+{
+    float r = u;
+    return vec3(
+        /* x: */ r * -cos(v),
+        /* y: */ r,
+        /* z: */ r * sin(v)
+    );
+}
+
 /** Creates an interval of a given width and offset.
  * \brief Step function which is 1 for width, and 0 in between
  * \param x Input variable
