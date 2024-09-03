@@ -67,7 +67,8 @@ enum struct parametric_object_type : int32_t
     CurtainFiberCurves,
     Seashell1,
     Seashell2,
-    Seashell3
+    Seashell3,
+    GiantWorm
 };
 
 enum struct rendering_variant : int
@@ -122,7 +123,7 @@ static float get_screen_space_threshold_divisor(rendering_variant aRenderMethod)
 
 // ATTENTION: Whenever you add a new enum item  ^^^  here, also add it to the string  vvv  here!
 static const char* PARAMETRIC_OBJECT_TYPE_UI_STRING
-	= "Plane\0Sphere\0Palm Tree Trunk\0JohisHeart\0Spiky Heart\0SH Glyph\0SH Brain Dataset\0Single Yarn Curve\0Single Fiber Curve\0Curtain Yarn Curves\0Curtain Fiber Curves\0Seashell 1\0Seashell 2\0Seashell 3\0";
+	= "Plane\0Sphere\0Palm Tree Trunk\0JohisHeart\0Spiky Heart\0SH Glyph\0SH Brain Dataset\0Single Yarn Curve\0Single Fiber Curve\0Curtain Yarn Curves\0Curtain Fiber Curves\0Seashell 1\0Seashell 2\0Seashell 3\0Giant Worm\0";
 
 // Data about one parametric object:
 class parametric_object
@@ -224,6 +225,9 @@ struct object_data
     //  .z  ... screen-space distance for the LOD stage
     //  .w  ... sampling factor for point-based rendering (< 1.0 probably means too little samples, > 1.0 might mean oversampling but also filling holes) 
     glm::vec4  mLodAndRenderSettings;
+    // The first three values of user data are being passed-along and can be accessed:
+    // Note: SH glyphs and yarn/fiber curves get fixed user data (assigned in pass1_init_shbrain.comp or pass1_init_kityarn.comp, respectively).
+    glm::uvec4 mUserData;
 };
 
 struct px_fill_data

@@ -220,6 +220,7 @@ void evalSplitDecision(bool aTransposeEval, vec2 aParamsStart, vec2 aParamsRange
 	}
 }
 
+#if ENABLE_HYBRID_TECHNIQUE
 // This function measures if the parametric function varies strongly on a sub-pixel level:
 // (If it does, why not super-sample the patch?! If it doesn't no need for super sampling.)
 bool hasSubpixelFeatures(float uStart, float uEnd, float vStart, float vEnd, vec2 screenDists, const uint elementIdxIn)
@@ -305,10 +306,12 @@ bool hasSubpixelFeatures(float uStart, float uEnd, float vStart, float vEnd, vec
 
 	return (differentTotal * 15) > totalTotal;
 }
+#endif
 
 // renderingVariantIndex:  [0] = Tess_noAA, [1] = Tess_8xSS, [2] = Tess_4xSS_8xMS, [3] = PointRendered_direct, [4] = PointRendered_4xSS_local_fb, [5] = Hybrid
 void pxFillOut(int renderingVariantIndex, float uStart, float uEnd, float vStart, float vEnd, vec2 screenDists, const uint elementIdxIn) 
 {
+#if ENABLE_HYBRID_TECHNIQUE
 	// Before we decide about them splits, see if we must decide upon them different rendering variants (HYBRID METHOD):
 	if (HYBRID_VARIANT_INDEX == renderingVariantIndex) { 
 		if (gl_WorkGroupID.x % 2 == 0) {
@@ -322,6 +325,7 @@ void pxFillOut(int renderingVariantIndex, float uStart, float uEnd, float vStart
 		bool isBumpy = hasSubpixelFeatures(uStart, uEnd, vStart, vEnd, screenDists, elementIdxIn);
 		renderingVariantIndex = isBumpy ? 4 : 0;
 	}
+#endif
 
 	if (!subgroupElect() || gl_LocalInvocationID.z != 0) { // Only one thread is allowed to do that. // Only z==0 writes the split data
 		return;

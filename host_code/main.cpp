@@ -100,6 +100,8 @@
 //// Values: 0 = Uint64 image | 3 = framebuffer (must use that for SSAA or MSAA)
 //#define TEST_TARGET_IMAGE              0
 
+#define NUM_PREDEFINED_MATERIALS 5
+
 static std::array<parametric_object, 13> PredefinedParametricObjects {{
 	parametric_object{"Sphere"      , "assets/po-sphere-patches.png",     false, parametric_object_type::Sphere,                 0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>() , glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{ 0.f,  0.f,  0.f})},
 	parametric_object{"Johi's Heart", "assets/po-johis-heart.png",        false, parametric_object_type::JohisHeart,              0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>(), glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{ 0.f,  0.f, -2.f})},
@@ -111,7 +113,7 @@ static std::array<parametric_object, 13> PredefinedParametricObjects {{
 	parametric_object{"Fiber Curve" , "assets/po-fiber-curve-single.png", false, parametric_object_type::SingleFiberCurve,       1.0f, 1.0f,     /* <-- yarn dimensions | #fibers --> */ 6.f, /* thickness --> */ 0.3f, glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{-0.5f, 0.0f, 0.0f}) * glm::scale(glm::vec3{ 0.3f }), -3},
 	parametric_object{"Blue Curtain", "assets/po-blue-curtain.png",		  false, parametric_object_type::CurtainYarnCurves,      235.0f, 254.0f, /* <-- yarn dimensions | #fibers --> */ 6.f, /* thickness --> */ 0.8f, glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{-3.35f, 0.08f, 5.32f}) * glm::scale(glm::vec3{ 0.005f }), 19},
 	parametric_object{"Palm Tree"   , "assets/po-palm-tree.png",		  false, parametric_object_type::PalmTreeTrunk,          0.0f,   1.0f,            0.0f,  glm::two_pi<float>(), glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{ 0.f,  0.f, -4.f})},
-	parametric_object{"Giant Worm"  , "assets/po-giant-worm.png",		  false, parametric_object_type::PalmTreeTrunk,  235.0f, 254.0f, /* <-- yarn dimensions | #fibers --> */ 4.f, 1.f, glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{-3.35f, 0.08f, 5.32f}) * glm::scale(glm::vec3{ 0.005f }), 19},
+	parametric_object{"Giant Worm"  , "assets/po-giant-worm.png",		  false, parametric_object_type::GiantWorm,              0.0f,   1.0f,            0.0f,  glm::two_pi<float>(), glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{ 0.f,  0.f, -4.f}), -5},
 	parametric_object{"SH Glyph"    , "assets/po-single-sh-glyph.png",    false, parametric_object_type::SHGlyph,                0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>(),     glm::uvec2{ 1u, 1u }, glm::mat4{ 1.0f }, -2},
 	parametric_object{"Brain Scan"  , "assets/po-sh-brain.png",           false, parametric_object_type::SHBrain,                0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>(), glm::uvec2{ SH_BRAIN_DATA_SIZE_X, SH_BRAIN_DATA_SIZE_Y }, glm::mat4{ 1.0f }, -2}
 }};
@@ -718,6 +720,11 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 		return pot == parametric_object_type::SHBrain;
 	}
 
+	bool is_giant_worm(parametric_object_type pot)
+	{
+		return pot == parametric_object_type::GiantWorm;
+	}
+
 	void fill_object_data_buffer()
 	{
 		using namespace avk;
@@ -753,12 +760,59 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 				po.screen_distance_threshold() / get_screen_space_threshold_divisor(po.how_to_render()),
 				po.sampling_factor()
 			};
+			
+			tmp.mUserData = { 0, 0, 0, 0 };
 
 			if (is_knit_yarn(po.param_obj_type())) {
 				knitYarnSavedForLater.push_back(tmp);
 			}
 			else if (is_sh_brain(po.param_obj_type())) {
 				shBrainSavedForLater.push_back(tmp);
+			}
+			else if (is_giant_worm(po.param_obj_type())) {
+				auto get_material_idx = [baseMatIdx = po.material_index(), this](int offset) {
+					if (baseMatIdx <= -5 || (baseMatIdx >= 0 && baseMatIdx < mNumMaterials + NUM_PREDEFINED_MATERIALS - 3)) {
+						return baseMatIdx + offset; 
+					}
+					return baseMatIdx;
+				};
+				constexpr int red = 0, green = 1, blue = 2;
+				// Giant worm body:
+				tmp.mCurveIndex = 14;
+				tmp.mMaterialIndex = get_material_idx(blue);
+				mObjectData[i++] = tmp;
+				// Giant worm mouth piece (inside) x3:
+				tmp.mCurveIndex = 15;
+				tmp.mMaterialIndex = get_material_idx(red);
+				tmp.mUserData.x = 0;
+				mObjectData[i++] = tmp;
+				tmp.mUserData.x = 1;
+				mObjectData[i++] = tmp;
+				tmp.mUserData.x = 2;
+				mObjectData[i++] = tmp;
+				// Giant worm mouth piece (outside) x3:
+				tmp.mCurveIndex = 16;
+				tmp.mMaterialIndex = get_material_idx(blue);
+				tmp.mUserData.x = 0;
+				mObjectData[i++] = tmp;
+				tmp.mUserData.x = 1;
+				mObjectData[i++] = tmp;
+				tmp.mUserData.x = 2;
+				mObjectData[i++] = tmp;
+				// Giant worm tongue:
+				tmp.mCurveIndex = 17;
+				tmp.mMaterialIndex = get_material_idx(red);
+				mObjectData[i++] = tmp;
+				// Giant worm teeth:
+				tmp.mCurveIndex = 18;
+				tmp.mMaterialIndex = get_material_idx(green);
+				for (int a = 0; a < 3; ++a) {
+					for (int b = 0; b < 19; ++b) {
+						tmp.mUserData.x = a;
+						tmp.mUserData.y = b;
+						mObjectData[i++] = tmp;
+					}
+				}
 			}
 			else {
 				mObjectData[i] = tmp;
@@ -893,7 +947,11 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 				ImGui::TableNextColumn();
 				ImGui::PushID(poId);
 				auto howRendered = po.how_to_render();
+#if ENABLE_HYBRID_TECHNIQUE
 				if (ImGui::Combo("##renderingmethod", reinterpret_cast<int*>(&howRendered), "Tess. noAA\0Tess. 8xSS (sample shading)\0Tess. 4xSS+8xMS\0Point rendering ~1spp direct\0Point rendering ~4spp local fb.\0Hybrid\0")) {
+#else
+				if (ImGui::Combo("##renderingmethod", reinterpret_cast<int*>(&howRendered), "Tess. noAA\0Tess. 8xSS (sample shading)\0Tess. 4xSS+8xMS\0Point rendering ~1spp direct\0Point rendering ~4spp local fb.\0")) {
+#endif
 					po.set_how_to_render(howRendered);
 					updateObjects = true;
 				}
@@ -933,11 +991,10 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 			poId = 0;
 			for (auto& po : mParametricObjects) {
 				ImGui::TableNextColumn();
-				constexpr auto predefMats = 5;
-				auto matIndex = po.material_index() + predefMats;
+				auto matIndex = po.material_index() + NUM_PREDEFINED_MATERIALS;
 				ImGui::PushID(poId++);
-				if (ImGui::SliderInt("Material Index", &matIndex, 0, mNumMaterials + predefMats - 1)) {
-					const auto newActualMatIndex = matIndex - predefMats;
+				if (ImGui::SliderInt("Material Index", &matIndex, 0, mNumMaterials + NUM_PREDEFINED_MATERIALS - 1)) {
+					const auto newActualMatIndex = matIndex - NUM_PREDEFINED_MATERIALS;
 					LOG_INFO(std::format("Set {}'s (actual) material index to: {}", po.name(), newActualMatIndex));
 					po.set_material_index(newActualMatIndex);
 					updateObjects = true;

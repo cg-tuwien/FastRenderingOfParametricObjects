@@ -14,7 +14,7 @@ struct VkDrawIndirectCommand {
 struct object_data
 {
     vec4  mParams;
-    uvec4 mDetailEvalDims; // Think: Task Shader Dimensions
+    uvec4 mDetailEvalDims;
     mat4  mTransformationMatrix;
     int   mCurveIndex;
     int   mMaterialIndex;
@@ -26,6 +26,9 @@ struct object_data
     //  .z  ... screen-space threshold for the LOD stage
     //  .w  ... sampling factor for point-based rendering (< 1.0 probably means too little samples, > 1.0 might mean oversampling but also filling holes) 
     vec4  mLodAndRenderSettings;
+    // The first three values of user data are being passed-along and can be accessed:
+    // Note: SH glyphs and yarn/fiber curves get fixed user data (assigned in pass1_init_shbrain.comp or pass1_init_kityarn.comp, respectively).
+    uvec4 mUserData;
 };
 
 struct px_fill_data
