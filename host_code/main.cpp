@@ -1508,6 +1508,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 				        "#unique pixels written across the screen (not counting overdraw)",
 				        "#total pixels written (including overdraw)",
 				    }};
+					//mCounterValues[2] -= context().main_window()->resolution().x * context().main_window()->resolution().y;
 			        for (int i = 0; i < counterDescriptions.size(); ++i) {
 					    ImGui::Text(std::format("{:12L} {}", mCounterValues[i], counterDescriptions[i]).c_str());
 				    }

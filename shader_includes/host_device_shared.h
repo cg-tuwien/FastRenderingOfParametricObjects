@@ -76,4 +76,4 @@
 #define SH_BRAIN_ELEMENT_OFFSET    25.0
 
 // Gap-detection in LOD Stage:
-#define GAP_DETECTION_ENABLED     1
+#define GAP_DETECTION_ENABLED     0
