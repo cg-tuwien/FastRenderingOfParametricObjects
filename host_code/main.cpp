@@ -1451,16 +1451,6 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 				}
 				ImGui::Separator();
 
-				// Some parameters to pass to the GPU:
-                ImGui::TextColored(ImVec4(0.f, .6f, .8f, 1.f), "Pipeline Config:");
-                ImGui::TextColored(ImVec4(0.f, .6f, .8f, 1.f), "PxFill shader config params (besides ^ screen threshold)");
-					ImGui::Indent();
-                    ImGui::PushItemWidth(imGuiWindowWidth * 0.6f);
-					ImGui::SliderFloat2("target resolution scaler", mPxFillPatchTargetResolutionScaler.data(), 0.25f, 2.5f, "%.3f", ImGuiSliderFlags_Logarithmic);
-					ImGui::SliderFloat2("u/v param shift (in % of u/v deltas)", mPxFillParamShift.data(), 0.0f, 1.0f);
-					ImGui::SliderFloat2("u/v param stretch (in % of u/v deltas)", mPxFillParamStretch.data(), 0.0f, 1.0f);
-					ImGui::PopItemWidth();
-					ImGui::Unindent();
 				ImGui::Checkbox("Frustum Culling ON", &mFrustumCullingOn);
 				rasterPipesNeedRecreation = ImGui::Checkbox("Backface Culling ON", &mBackfaceCullingOn) || rasterPipesNeedRecreation;
 				rasterPipesNeedRecreation = ImGui::Checkbox("Disable Color Attachment Output" , &mDisableColorAttachmentOut) || rasterPipesNeedRecreation;
@@ -1668,8 +1658,6 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 			mRenderExtra3DModel = 1 == TEST_ENABLE_3D_MODEL;
 			mWhatToCopyToBackbuffer = TEST_TARGET_IMAGE;
 			mGatherPipelineStats = 1 == TEST_GATHER_PIPELINE_STATS;
-			mPxFillPatchTargetResolutionScaler[0] = POINT_RENDERIN_PATCH_RES_S_X;
-			mPxFillPatchTargetResolutionScaler[1] = POINT_RENDERIN_PATCH_RES_S_Y;
 #endif
 #if TEST_MODE_ON && !TEST_ALLOW_GATHER_STATS
 			if(mGatherPipelineStats) {
@@ -2323,10 +2311,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 					, descriptor_binding(4, 0, mBigDataset->as_storage_buffer())
 				})),
 				command::push_constants(mPxFillComputePipe->layout(), pass3_push_constants{
-					mGatherPipelineStats ? VK_TRUE : VK_FALSE,  /* padding: */ 0,
-					glm::vec2{ mPxFillPatchTargetResolutionScaler[0], mPxFillPatchTargetResolutionScaler[1] },
-					glm::vec2{ mPxFillParamShift[0], mPxFillParamShift[1] },
-					glm::vec2{ mPxFillParamStretch[0], mPxFillParamStretch[1] },
+					mGatherPipelineStats ? VK_TRUE : VK_FALSE
 				}),
 				command::dispatch_indirect(
 					mIndirectPxFillCountBuffer, 
@@ -2356,10 +2341,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 #endif
 				})),
 				command::push_constants(mPxFillLocalFbComputePipe->layout(), pass3_push_constants{
-					mGatherPipelineStats ? VK_TRUE : VK_FALSE,  /* padding: */ 0,
-					glm::vec2{ mPxFillPatchTargetResolutionScaler[0], mPxFillPatchTargetResolutionScaler[1] },
-					glm::vec2{ mPxFillParamShift[0], mPxFillParamShift[1] },
-					glm::vec2{ mPxFillParamStretch[0], mPxFillParamStretch[1] },
+					mGatherPipelineStats ? VK_TRUE : VK_FALSE
 				}),
 				command::dispatch((resolution.x + PX_FILL_LOCAL_FB_TILE_SIZE_X - 1) / PX_FILL_LOCAL_FB_TILE_SIZE_X, (resolution.y + PX_FILL_LOCAL_FB_TILE_SIZE_Y - 1) / PX_FILL_LOCAL_FB_TILE_SIZE_Y, 1),
 
@@ -2596,9 +2578,6 @@ private: // v== Member variables ==v
 
 	bool mFrustumCullingOn = true;
     bool mBackfaceCullingOn = true;
-	std::array<float, 2> mPxFillPatchTargetResolutionScaler {{ 1.2f, 1.2f }};
-	std::array<float, 2> mPxFillParamShift {{ 0.0f, 0.0f }};
-	std::array<float, 2> mPxFillParamStretch {{ 0.0f, 0.0f }};
 
 	int mNumMaterials = 1;
 	bool mRenderExtra3DModel = true;

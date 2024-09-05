@@ -316,10 +316,6 @@ struct pass2x_push_constants
 struct pass3_push_constants
 {
     vk::Bool32 mGatherPipelineStats;
-    int32_t    _padding;
-	glm::vec2  mPatchTargetResolutionScaler; // Scaler to increase/decrease point density
-	glm::vec2  mParamShift;   // Shift u/v params by amount of deltaU/deltaV (in order to fill holes to neighboring tiles)
-	glm::vec2  mParamStretch; // Stretch u/v params by amount of deltaU/deltaV (in order to fill holes to neighboring tiles)
 };
 
 // Push constants for standalone tessellation shaders

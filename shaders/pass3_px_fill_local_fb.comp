@@ -41,6 +41,9 @@ shared uint64_t LocalFramebuffer[LOCAL_FB_X][LOCAL_FB_Y];
 
 #define COOPERATIVE_GROUPS 4
 
+#define STEP_SCALE_U 1.25
+#define STEP_SCALE_V 1.25
+
 layout(local_size_x = 32, local_size_y = 1, local_size_z = COOPERATIVE_GROUPS) in;
 #include "../shader_includes/util/ui64_conv.glsl"
 #include "../shader_includes/util/glsl_helpers.glsl"
@@ -82,10 +85,6 @@ layout(set = 5, binding = 0) buffer TilePatchesBuffer { uint mPatchIndices[]; } 
 layout(push_constant) uniform PushConstants
 {
     bool mGatherPipelineStats;
-	int  _padding;
-	vec2 mPatchTargetResolutionScaler; // Scaler to increase/decrease point density
-	vec2 mParamShift;   // Shift u/v params by amount of deltaU/deltaV (in order to fill holes to neighboring tiles)
-	vec2 mParamStretch; // Stretch u/v params by amount of deltaU/deltaV (in order to fill holes to neighboring tiles)
 } pushConstants;
 
 // +------------------------------------------------------------------------------+
@@ -282,14 +281,6 @@ void main()
 #endif
 
 		// in: 
-		vec2 paramsStart = vec2(
-			uPxFillParams.mElements[pxFillId].mParams[0],
-			uPxFillParams.mElements[pxFillId].mParams[2]
-		);
-		const vec2 paramsRange = vec2(
-			uPxFillParams.mElements[pxFillId].mParams[1] - uPxFillParams.mElements[pxFillId].mParams[0],
-			uPxFillParams.mElements[pxFillId].mParams[3] - uPxFillParams.mElements[pxFillId].mParams[2]
-		);
 		const uint  objectId             = uPxFillParams.mElements[pxFillId].mObjectIdUserData[0];
 		const uvec3 userData             = uPxFillParams.mElements[pxFillId].mObjectIdUserData.yzw;
 		const mat4  tM                   = uObjectData.mElements[objectId].mTransformationMatrix;
@@ -297,26 +288,40 @@ void main()
 		const int   matIndex             = uObjectData.mElements[objectId].mMaterialIndex; 
 		const bool  useAdaptive          = uObjectData.mElements[objectId].mUseAdaptiveDetail == 1; 
 		const vec4  lodAndRenderSettings = uObjectData.mElements[objectId].mLodAndRenderSettings;
+		const vec2  epsilons             = uObjectData.mElements[objectId].mLodAndRenderSettings.xy;
+
+		vec2 paramsStart = vec2(
+			uPxFillParams.mElements[pxFillId].mParams[0],
+			uPxFillParams.mElements[pxFillId].mParams[2]
+		);
+
+		vec2 paramsTo = vec2(
+			uPxFillParams.mElements[pxFillId].mParams[1],
+			uPxFillParams.mElements[pxFillId].mParams[3]
+		);
+
+		vec2 paramsRange = paramsTo - paramsStart;
+		paramsStart -= epsilons * paramsRange;
+		paramsTo    += epsilons * paramsRange;
+		paramsRange = paramsTo - paramsStart;
+
 		const float screenSpaceThreshold = lodAndRenderSettings.z;
 
 		// Let's see how many iterations we need in each direction:
 		const float numPixelProducingInvocs = float(gl_WorkGroupSize.x - 1);
 		float numIterationsU = ubo.mUseMaxPatchResolutionDuringPxFill 
-			? max(floor((uPxFillParams.mElements[pxFillId].mScreenDists.x * float(TILE_FACTOR_X) * pushConstants.mPatchTargetResolutionScaler.x + numPixelProducingInvocs - 1) / numPixelProducingInvocs), 1.0)
-			:     floor((screenSpaceThreshold                             * float(TILE_FACTOR_X) * pushConstants.mPatchTargetResolutionScaler.x + numPixelProducingInvocs - 1) / numPixelProducingInvocs);
+			? max(floor((uPxFillParams.mElements[pxFillId].mScreenDists.x * float(TILE_FACTOR_X) * STEP_SCALE_U + numPixelProducingInvocs - 1) / numPixelProducingInvocs), 1.0)
+			:     floor((screenSpaceThreshold                             * float(TILE_FACTOR_X) * STEP_SCALE_U + numPixelProducingInvocs - 1) / numPixelProducingInvocs);
 	//	debugPrintfEXT("mPatchTargetResolution[%f], numPixelProducingInvocs[%f], numIterationsU[%f]", pushConstants.mPatchTargetResolution, numPixelProducingInvocs, numIterationsU);
 
 		// With that info, calc our deltas:
 		float iterationDeltaU = paramsRange[0] / numIterationsU;
 		float deltaU = iterationDeltaU / numPixelProducingInvocs;
 		float deltaV = ubo.mUseMaxPatchResolutionDuringPxFill 
-			? paramsRange[1] / max(uPxFillParams.mElements[pxFillId].mScreenDists.y * float(TILE_FACTOR_Y) * pushConstants.mPatchTargetResolutionScaler.y - 1.0, 1.0)  // -1.0 because we need to overshoot by one
-			: paramsRange[1] /    (screenSpaceThreshold                             * float(TILE_FACTOR_Y) * pushConstants.mPatchTargetResolutionScaler.y - 1.0); // -1.0 because we need to overshoot by one
+			? paramsRange[1] / max(uPxFillParams.mElements[pxFillId].mScreenDists.y * float(TILE_FACTOR_Y) * STEP_SCALE_V - 1.0, 1.0)  // -1.0 because we need to overshoot by one
+			: paramsRange[1] /    (screenSpaceThreshold                             * float(TILE_FACTOR_Y) * STEP_SCALE_V - 1.0); // -1.0 because we need to overshoot by one
 	//	debugPrintfEXT("iterationDeltaU[%f], deltaU[%f], deltaV[%f]", iterationDeltaU, deltaU, deltaV);
 
-		paramsStart -= vec2(deltaU, deltaV) * pushConstants.mParamShift;
-		deltaV += deltaV * pushConstants.mParamStretch.y;
-		deltaU += deltaU * pushConstants.mParamStretch.x;
 		iterationDeltaU = deltaU * numPixelProducingInvocs;
 
 		const float vTarget = paramsRange[1] + deltaV; // Gotta run for +1 because we're wasting te top-most row.
