@@ -79,7 +79,7 @@ layout(set = 5, binding = 1, r32ui) uniform restrict uimage2D uHeatmapImage;
 #define DEBUG_COLOR_Y         vec4(1.0, 0.3 , 0.0 , 1.0)
 #define DEBUG_COLOR_XTRA      vec4(1.0, 0.05, 0.05, 1.0)
 #define DEBUG_COLOR_SUBSAMPLE vec4(0.1, 0.6 , 1.0 , 1.0)
-#define DEBUG_VIS_WRAP_BEGIN  if (3 == pushConstants.mPatchLodLevel && gl_WorkGroupID.x == 0) {
+#define DEBUG_VIS_WRAP_BEGIN  if (3 == pushConstants.mPatchLodLevel && gl_WorkGroupID.x == 4) {
 #define DEBUG_VIS_WRAP_END    }
 
 #if DRAW_PATCH_EVAL_DEBUG_VIS_SCREEN_DISTANCES
@@ -134,9 +134,12 @@ shared uint  workgroupAnd[EVAL_GRID_Z];
 #endif
 
 #if GAP_DETECTION_ENABLED
-shared float maxTapDistU;	// maximum distance between two neighboring u taps during evalSplitDecision(false, ...) 
+shared float maxTapDistU;	// maximum distance between two neighboring u taps during evalSplitDecision(false, ...)
 shared float maxTapDistV;	// maximum distance between two neighboring v taps during evalSplitDecision(true , ...)
+shared float medianTapDistU;
+shared float medianTapDistV;
 shared bool  gapDetected;
+shared vec4  fuColor;
 #endif
 
 // Eval if this patch shall be split.
@@ -190,14 +193,29 @@ void evalSplitDecision(bool aTransposeEval, vec2 aParamsStart, vec2 aParamsRange
 	const float neighborDist = length(screenCoords - neighborScreenCoords); // TODO: Optimize performance with squared distance
 
 #if GAP_DETECTION_ENABLED
-	const float neighborDistForGapDetection = gl_SubgroupInvocationID % EVAL_GRID_X == 0 ? 0 : neighborDist;
-	const float maxNeighborDist             = subgroupMax(neighborDistForGapDetection);
+	float neighborDistForGapDetection = gl_SubgroupInvocationID % EVAL_GRID_X == 0 ? 0 : neighborDist;
+	float maxNeighborDist             = subgroupMax(neighborDistForGapDetection);
 	if (subgroupElect()) {
 		if (!aTransposeEval) {
 			maxTapDistU = maxNeighborDist;
 		}
 		else {
 			maxTapDistV = maxNeighborDist;
+		}
+	}
+	// We've got the max, now find the median
+	for (int i = 0; i < 28/2; ++i) {
+		if (neighborDistForGapDetection == maxNeighborDist) {
+			neighborDistForGapDetection = 0;
+			maxNeighborDist             = subgroupMax(neighborDistForGapDetection);
+		}
+	}
+	if (subgroupElect()) {
+		if (!aTransposeEval) {
+			medianTapDistU = maxNeighborDist;
+		}
+		else {
+			medianTapDistV = maxNeighborDist;
 		}
 	}
 #endif
@@ -270,21 +288,43 @@ vec2 getMaxExtentsAcrossSubgroup(bool aTransposeEval, float uStart, float uEnd, 
 	const vec2 neighborScreenCoords = subgroupShuffle(screenCoords, neighborIndex);
 	const float neighborDist = length(screenCoords - neighborScreenCoords); // TODO: Optimize performance with squared distance
 
-	const float neighborDistForGapDetection = gl_SubgroupInvocationID % EVAL_GRID_X == 0 ? 0 : neighborDist;
-	const float maxIndividualDist           = subgroupMax(neighborDistForGapDetection);
+	float neighborDistForGapDetection = gl_SubgroupInvocationID % EVAL_GRID_X == 0 ? 0 : neighborDist;
+	const float maxIndividualDist     = subgroupMax(neighborDistForGapDetection);
+	float medianIndividualDist        = maxIndividualDist;
+	// We've got the max, now find the median
+	for (int i = 0; i < 28/2; ++i) {
+		if (neighborDistForGapDetection == medianIndividualDist) {
+			neighborDistForGapDetection = 0;
+			medianIndividualDist        = subgroupMax(neighborDistForGapDetection);
+		}
+	}
 
-	// Also compute the patch extent:
-	// Sum them all distances:
-	float summedScreenDists      = subgroupInclusiveAdd(neighborDist);
-	const uint sumRefIndex       = gl_SubgroupInvocationID / EVAL_GRID_X; // <-- The row we are in (or column in case of aTransposeEval==true)
-	const uint sumRefInvocation  = sumRefIndex * EVAL_GRID_X;             // <-- Invocation index where a new row starts (or column in case of aTransposeEval==true)
-	summedScreenDists           -= subgroupShuffle(summedScreenDists, sumRefInvocation);
+//	// Also compute the patch extent:
+//	// Sum them all distances:
+//	float summedScreenDists      = subgroupInclusiveAdd(neighborDist);
+//	const uint sumRefIndex       = gl_SubgroupInvocationID / EVAL_GRID_X; // <-- The row we are in (or column in case of aTransposeEval==true)
+//	const uint sumRefInvocation  = sumRefIndex * EVAL_GRID_X;             // <-- Invocation index where a new row starts (or column in case of aTransposeEval==true)
+//	summedScreenDists           -= subgroupShuffle(summedScreenDists, sumRefInvocation);
+//
+//	const bool isDeciderInvocation = gl_SubgroupInvocationID == (sumRefInvocation + EVAL_GRID_X - 1);
+//	summedScreenDists            = isDeciderInvocation ? summedScreenDists : 0;
+//	const float maxScreenDist    = subgroupMax(summedScreenDists);
 
-	const bool isDeciderInvocation = gl_SubgroupInvocationID == (sumRefInvocation + EVAL_GRID_X - 1);
-	summedScreenDists            = isDeciderInvocation ? 0 : summedScreenDists;
-	const float maxScreenDist    = subgroupMax(summedScreenDists);
+	{ DEBUG_VIS_WRAP_BEGIN
+		for (int i = -DEBUG_POINT_HALF_SIZE; i <= DEBUG_POINT_HALF_SIZE; ++i) {
+			for (int j = -DEBUG_POINT_HALF_SIZE; j <= DEBUG_POINT_HALF_SIZE; ++j) {
+				writeToCombinedAttachment(ivec2(vpc.xy) + ivec2(i, j), 0.0001, fuColor);
+			}
+		}
+		DDA(ivec2(vpc.xy), ivec2(neighborScreenCoords), fuColor);
+	DEBUG_VIS_WRAP_END }
 
-	return vec2(maxIndividualDist, summedScreenDists);
+//	if (isDeciderInvocation) {
+//		debugPrintfEXT("maxIndividualDist[%f], summedScreenDists[%f]", maxIndividualDist, summedScreenDists);
+//	}
+
+//	return vec2(maxIndividualDist, maxScreenDist);
+	return vec2(maxIndividualDist, medianIndividualDist);
 }
 
 #if ENABLE_HYBRID_TECHNIQUE
@@ -399,7 +439,7 @@ void pxFillOut(int renderingVariantIndex, float uStart, float uEnd, float vStart
 		renderingVariantIndex = 0;
 	}
 #endif
-	if (!subgroupElect() || gl_LocalInvocationID.z != 0) { // Only one thread is allowed to do that. // Only z==0 writes the split data
+	if (!(subgroupElect() && gl_LocalInvocationID.z == 0)) { // Only one thread is allowed to do that. // Only z==0 writes the split data
 		return;
 	}
 
@@ -594,10 +634,95 @@ void main()
 //		return;
 //	}
 
+	const vec2 halfParamsRange = paramsRange * vec2(0.5, 0.5);
+
+#if GAP_DETECTION_ENABLED
+
+	float ratioBeforeV = maxTapDistV / medianTapDistV;
+	float ratioBeforeU = maxTapDistU / medianTapDistU;
+	float maxExtentU = max(max(max(screenDistsU[0], screenDistsU[1]), screenDistsU[2]), screenDistsU[3]);
+	float maxExtentV = max(max(max(screenDistsV[0], screenDistsV[1]), screenDistsV[2]), screenDistsV[3]);
+	// significance factor:
+	ratioBeforeV *= 0.7;
+	ratioBeforeU *= 0.7;
+
+
+	if ((maxExtentU > 2 * t_u || levelIn > 7) && (splitU[0] || splitU[1] || splitU[2] || splitU[3])) {
+		fuColor = vec4(0.0, 1.0, 0.0, 1.0);
+		subgroupMemoryBarrierShared();
+		vec2 first  = getMaxExtentsAcrossSubgroup(false, paramsStart.x                    , paramsStart.x + halfParamsRange.x, paramsStart.y, paramsEnd.y, vec2(t_u, t_v), curveIndex, userData, tM);
+		fuColor = vec4(0.0, 1.0, 0.5, 1.0);
+		subgroupMemoryBarrierShared();
+		vec2 second = getMaxExtentsAcrossSubgroup(false, paramsStart.x + halfParamsRange.x, paramsStart.x + paramsRange.x    , paramsStart.y, paramsEnd.y, vec2(t_u, t_v), curveIndex, userData, tM);
+
+		float firstRatioAfter  = first.y  / first.x;
+		float secondRatioAfter = second.y / second.x;
+
+		// If no improvement (meaning, ratio shrinks significantly) at all => don't split:
+		if (firstRatioAfter > ratioBeforeU) {
+			splitU[0] = false;
+			splitU[1] = false;
+			splitU[2] = false;
+			splitU[3] = false;
+			gapDetected = true;
+//					debugPrintfEXT("u: after1[%f], after2[%f], before[%f]", firstRatioAfter, secondRatioAfter, ratioBefore);
+		}
+	}
+
+
+//	{
+//		float vStarts[2] = { paramsStart.y,                  paramsStart.y + halfParamsRange.y };
+//		float vEnds[2]   = { vStarts[0] + halfParamsRange.y, vStarts[1] + halfParamsRange.y };
+//		for (int i = 0; i < 2; ++i) {
+//			if (shallSplitU[i]) {
+//				fuColor = vec4(0.0, 1.0, 0.0, 1.0);
+//				subgroupMemoryBarrierShared();
+//				vec2 first  = getMaxExtentsAcrossSubgroup(false, paramsStart.x                    , paramsStart.x + halfParamsRange.x, vStarts[i], vEnds[i], vec2(t_u, t_v), curveIndex, userData, tM);
+//				fuColor = vec4(0.0, 1.0, 0.5, 1.0);
+//				subgroupMemoryBarrierShared();
+//				vec2 second = getMaxExtentsAcrossSubgroup(false, paramsStart.x + halfParamsRange.x, paramsStart.x + paramsRange.x    , vStarts[i], vEnds[i], vec2(t_u, t_v), curveIndex, userData, tM);
+//
+//				float firstRatioAfter  = first.y  / first.x;
+//				float secondRatioAfter = second.y / second.x;
+//
+//				// If no improvement (meaning, ratio shrinks significantly) at all => don't split:
+//				if (firstRatioAfter < ratioBeforeU && secondRatioAfter < ratioBeforeU) {
+//					shallSplitU[i] = false;
+//					gapDetected = true;
+////					debugPrintfEXT("u: after1[%f], after2[%f], before[%f]", firstRatioAfter, secondRatioAfter, ratioBefore);
+//				}
+//			}
+//		}
+//	}
+//	{
+//		float uStarts[2] = { paramsStart.x,                  paramsStart.x + halfParamsRange.x };
+//		float uEnds[2]   = { uStarts[0] + halfParamsRange.x, uStarts[1] + halfParamsRange.x };
+//		for (int i = 0; i < 2; ++i) {
+//			if (shallSplitV[i]) {
+//				fuColor = vec4(0.0, 0.0, 1.0, 1.0);
+//				subgroupMemoryBarrierShared();
+//				vec2 first  = getMaxExtentsAcrossSubgroup(true, uStarts[i], uEnds[i], paramsStart.y                    , paramsStart.y + halfParamsRange.y, vec2(t_u, t_v), curveIndex, userData, tM);
+//				fuColor = vec4(0.0, 0.5, 1.0, 1.0);
+//				subgroupMemoryBarrierShared();
+//				vec2 second = getMaxExtentsAcrossSubgroup(true, uStarts[i], uEnds[i], paramsStart.y + halfParamsRange.y, paramsStart.y + paramsRange.y    , vec2(t_u, t_v), curveIndex, userData, tM);
+//
+//				float firstRatioAfter  = first.y  / first.x;
+//				float secondRatioAfter = second.y / second.x;
+//
+//				// If no improvement at all => don't split :
+//				if (firstRatioAfter < ratioBeforeV && secondRatioAfter < ratioBeforeV) {
+//					shallSplitV[i] = false;
+//					gapDetected = true;
+////					debugPrintfEXT("v: after1[%f], after2[%f], before[%f]", firstRatioAfter, secondRatioAfter, ratioBefore);
+//				}
+//			}
+//		}
+//	}
+
+	subgroupMemoryBarrierShared();
+
 	bool shallSplitU[2] = { splitU[0] SPLIT_OP splitU[1], splitU[2] SPLIT_OP splitU[3] };
 	bool shallSplitV[2] = { splitV[0] SPLIT_OP splitV[1], splitV[2] SPLIT_OP splitV[3] };
-
-	const vec2 halfParamsRange = paramsRange * vec2(0.5, 0.5);
 
 	bool doVSplit = shallSplitV[0] && shallSplitV[1];
 	bool doUSplit = shallSplitU[0] && shallSplitU[1];
@@ -608,76 +733,64 @@ void main()
 		doUSplit = true;
 	}
 
-#if GAP_DETECTION_ENABLED
-#define GAP_DETECTION_FACTOR 0.95
-	if (doVSplit) {
-		// Check if a split would buy us something:
-		float maxExtentV = max(max(max(screenDistsV[0], screenDistsV[1]), screenDistsV[2]), screenDistsV[3]);
-		float ratioBefore = maxExtentV / maxTapDistV;
-		ratioBefore *= GAP_DETECTION_FACTOR; // <-- benefit of the doubt
-
-		 //                          bool aTransposeEval, float uStart, float uEnd, float vStart, float vEnd, vec2 screenThresholds, int aCurveIndex, uvec3 aUserData, mat4 aTM)
-		vec2 upperV = getMaxExtentsAcrossSubgroup(false, paramsStart.x, paramsStart.x + paramsRange.x, paramsStart.y                    , paramsStart.y + halfParamsRange.y, vec2(t_u, t_v), curveIndex, userData, tM);
-		vec2 lowerV = getMaxExtentsAcrossSubgroup(false, paramsStart.x, paramsStart.x + paramsRange.x, paramsStart.y + halfParamsRange.y, paramsStart.y + paramsRange.y    , vec2(t_u, t_v), curveIndex, userData, tM);
-		float ratioAfterUpper = upperV.y / upperV.x;
-		float ratioAfterLower = lowerV.y / lowerV.x;
-
-		// If no improvement at all => don't split 
-//		if (ratioAfterUpper > ratioBefore) {
-//			shallSplitV[0] = false;
+//#define GAP_DETECTION_FACTOR 0.95
+//	if (doVSplit) {
+//		// Check if a split would buy us something:
+//		float maxExtentV = max(max(max(screenDistsV[0], screenDistsV[1]), screenDistsV[2]), screenDistsV[3]);
+//		float ratioBefore = maxExtentV / maxTapDistV;
+//		ratioBefore *= GAP_DETECTION_FACTOR; // <-- benefit of the doubt
+//
+//		 //                          bool aTransposeEval, float uStart, float uEnd, float vStart, float vEnd, vec2 screenThresholds, int aCurveIndex, uvec3 aUserData, mat4 aTM)
+//		vec2 upperV = getMaxExtentsAcrossSubgroup(false, paramsStart.x, paramsStart.x + paramsRange.x, paramsStart.y                    , paramsStart.y + halfParamsRange.y, vec2(t_u, t_v), curveIndex, userData, tM);
+//		vec2 lowerV = getMaxExtentsAcrossSubgroup(false, paramsStart.x, paramsStart.x + paramsRange.x, paramsStart.y + halfParamsRange.y, paramsStart.y + paramsRange.y    , vec2(t_u, t_v), curveIndex, userData, tM);
+//		float ratioAfterUpper = upperV.y / upperV.x;
+//		float ratioAfterLower = lowerV.y / lowerV.x;
+//
+//		// If no improvement at all => don't split 
+////		if (ratioAfterUpper > ratioBefore) {
+////			shallSplitV[0] = false;
+////		}
+////		if (ratioAfterLower > ratioBefore) {
+////			shallSplitV[1] = false;
+////		}
+//		if (ratioAfterUpper > ratioBefore && ratioAfterLower > ratioBefore) {
+//			doVSplit = false;
+//			doUSplit = false;
+//			gapDetected = true;
 //		}
-//		if (ratioAfterLower > ratioBefore) {
-//			shallSplitV[1] = false;
+//	}
+//	if (doUSplit) {
+//		// Check if a split would buy us something:
+//		float maxExtentU = max(max(max(screenDistsU[0], screenDistsU[1]), screenDistsU[2]), screenDistsU[3]);
+//		float ratioBefore = maxExtentU / maxTapDistU;
+//		ratioBefore *= GAP_DETECTION_FACTOR; // <-- benefit of the doubt
+//
+//		 //                          bool aTransposeEval, float uStart, float uEnd, float vStart, float vEnd, vec2 screenThresholds, int aCurveIndex, uvec3 aUserData, mat4 aTM)
+//		vec2 upperU = getMaxExtentsAcrossSubgroup(true, paramsStart.x                    , paramsStart.x + halfParamsRange.x, paramsStart.y, paramsStart.y + paramsRange.y, vec2(t_u, t_v), curveIndex, userData, tM);
+//		vec2 lowerU = getMaxExtentsAcrossSubgroup(true, paramsStart.x + halfParamsRange.x, paramsStart.x + paramsRange.x    , paramsStart.y, paramsStart.y + paramsRange.y, vec2(t_u, t_v), curveIndex, userData, tM);
+//		float ratioAfterUpper = upperU.y / upperU.x;
+//		float ratioAfterLower = lowerU.y / lowerU.x;
+//
+//		// If no improvement at all => don't split 
+////		if (ratioAfterUpper > ratioBefore) {
+////			shallSplitU[0] = false;
+////		}
+////		if (ratioAfterLower > ratioBefore) {
+////			shallSplitU[1] = false;
+////		}
+//		if (ratioAfterUpper > ratioBefore && ratioAfterLower > ratioBefore) {
+//			doVSplit = false;
+//			doUSplit = false;
+//			gapDetected = true;
 //		}
-		if (ratioAfterUpper > ratioBefore && ratioAfterLower > ratioBefore) {
-			splitV[0] = false;
-			splitV[1] = false;
-			splitV[2] = false;
-			splitV[3] = false;
-			shallSplitV[0] = false;
-			shallSplitV[1] = false;
-			gapDetected = true;
-		}
-	}
-	if (doUSplit) {
-		// Check if a split would buy us something:
-		float maxExtentU = max(max(max(screenDistsU[0], screenDistsU[1]), screenDistsU[2]), screenDistsU[3]);
-		float ratioBefore = maxExtentU / maxTapDistU;
-		ratioBefore *= GAP_DETECTION_FACTOR; // <-- benefit of the doubt
-
-		 //                          bool aTransposeEval, float uStart, float uEnd, float vStart, float vEnd, vec2 screenThresholds, int aCurveIndex, uvec3 aUserData, mat4 aTM)
-		vec2 upperU = getMaxExtentsAcrossSubgroup(true, paramsStart.x                    , paramsStart.x + halfParamsRange.x, paramsStart.y, paramsStart.y + paramsRange.y, vec2(t_u, t_v), curveIndex, userData, tM);
-		vec2 lowerU = getMaxExtentsAcrossSubgroup(true, paramsStart.x + halfParamsRange.x, paramsStart.x + paramsRange.x    , paramsStart.y, paramsStart.y + paramsRange.y, vec2(t_u, t_v), curveIndex, userData, tM);
-		float ratioAfterUpper = upperU.y / upperU.x;
-		float ratioAfterLower = lowerU.y / lowerU.x;
-
-		// If no improvement at all => don't split 
-//		if (ratioAfterUpper > ratioBefore) {
-//			shallSplitU[0] = false;
-//		}
-//		if (ratioAfterLower > ratioBefore) {
-//			shallSplitU[1] = false;
-//		}
-		if (ratioAfterUpper > ratioBefore && ratioAfterLower > ratioBefore) {
-			shallSplitU[0] = false;
-			shallSplitU[1] = false;
-			gapDetected = true;
-		}
-	}
-
-	memoryBarrier();
-	barrier();
-	doVSplit = shallSplitV[0] && shallSplitV[1];
-	doUSplit = shallSplitU[0] && shallSplitU[1];
-	if (!doUSplit && shallSplitU[0] != shallSplitU[1]) {
-		doVSplit = true;
-	}
-	if (!doVSplit && shallSplitV[0] != shallSplitV[1]) {
-		doUSplit = true;
-	}
+//	}
+//
+//	memoryBarrier();
+//	barrier();
 
 #endif 
 
+	subgroupMemoryBarrierShared();
 
 #if DO_ONE_TO_FOUR_SPLITS_ONLY
 	if (doVSplit || doUSplit) {
