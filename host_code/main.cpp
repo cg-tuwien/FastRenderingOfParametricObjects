@@ -544,19 +544,23 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 		using namespace avk;
 
 		return context().create_graphics_pipeline_for(
-                vertex_shader("shaders/ss_resolve.vert"),
-				fragment_shader("shaders/ss_resolve.frag"),
+                vertex_shader("shaders/full_screen_quad.vert"),
+				fragment_shader("shaders/full_screen_quad_from_combined_attachment.frag"),
                 cfg::front_face::define_front_faces_to_be_counter_clockwise(),
-			    mBackfaceCullingOn ? cfg::culling_mode::cull_back_faces : cfg::culling_mode::disabled,
+			    //mBackfaceCullingOn ? cfg::culling_mode::cull_back_faces : cfg::culling_mode::disabled,
+				cfg::culling_mode::disabled,
 
-				cfg::viewport_depth_scissors_config::from_framebuffer(mFramebufferNoAA.as_reference()),
+				cfg::viewport_depth_scissors_config::from_framebuffer(mFramebufferMS.as_reference()),
 				mRenderpassMS, cfg::subpass_index{ 0u }, 
 				cfg::shade_per_fragment(),
-			
+						
+				push_constant_binding_data{ shader_type::all, 0, sizeof(copy_to_backbuffer_push_constants) },
 				descriptor_binding(0, 0, mFsQuadColorSampler),
 				descriptor_binding(0, 1, mFsQuadDepthSampler),
-			    descriptor_binding(0, 2, mFramebufferNoAA->image_view_at(0)->as_sampled_image(layout::shader_read_only_optimal)),
-			    descriptor_binding(0, 3, mFramebufferNoAA->image_view_at(1)->as_sampled_image(layout::shader_read_only_optimal))
+				descriptor_binding(1, 0, mCombinedAttachmentView->as_storage_image(layout::general))
+#if STATS_ENABLED
+				, descriptor_binding(1, 1, mHeatMapImageView->as_storage_image(layout::general))
+#endif
 		);
 	}
 
@@ -565,10 +569,11 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 		using namespace avk;
 
 		return context().create_graphics_pipeline_for(
-                vertex_shader("shaders/ss_resolve.vert"),
-				fragment_shader("shaders/ss_resolve.frag"),
+                vertex_shader("shaders/full_screen_quad.vert"),
+				fragment_shader("shaders/full_screen_quad.frag"),
                 cfg::front_face::define_front_faces_to_be_counter_clockwise(),
-			    mBackfaceCullingOn ? cfg::culling_mode::cull_back_faces : cfg::culling_mode::disabled,
+			    //mBackfaceCullingOn ? cfg::culling_mode::cull_back_faces : cfg::culling_mode::disabled,
+				cfg::culling_mode::disabled,
 
 				cfg::viewport_depth_scissors_config::from_framebuffer(mFramebufferSSMS.as_reference()),
 				mRenderpassSSMS, cfg::subpass_index{ 0u }, 
@@ -628,10 +633,14 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
         auto resolution    = context().main_window()->resolution();
 		auto colorFormatMS = std::make_tuple(aAttachmentFormats[0], SAMPLE_COUNT);
 		auto depthFormatMS = std::make_tuple(aAttachmentFormats[1], SAMPLE_COUNT);
+        auto  tmpColorAttachment  = context().create_image(resolution.x, resolution.y, aAttachmentFormats[0], 1, memory_usage::device,
+                                                          image_usage::color_attachment | image_usage::input_attachment | image_usage::sampled | image_usage::tiling_optimal | image_usage::transfer_source);
         auto  colorAttachment     = context().create_image(resolution.x, resolution.y, aAttachmentFormats[0], 1, memory_usage::device,
                                                           image_usage::color_attachment | image_usage::input_attachment | image_usage::sampled | image_usage::tiling_optimal | image_usage::transfer_source);
 		auto  colorAttachmentMS   = context().create_image(resolution.x, resolution.y, colorFormatMS, 1, memory_usage::device,
                                                           image_usage::color_attachment | image_usage::input_attachment | image_usage::sampled | image_usage::tiling_optimal | image_usage::transfer_source);
+        auto  tmpDepthAttachment  = context().create_image(resolution.x, resolution.y, aAttachmentFormats[1], 1, memory_usage::device,
+                                                          image_usage::depth_stencil_attachment | image_usage::input_attachment | image_usage::sampled | image_usage::tiling_optimal | image_usage::transfer_source);
         auto  depthAttachment     = context().create_image(resolution.x, resolution.y, aAttachmentFormats[1], 1, memory_usage::device,
                                                           image_usage::depth_stencil_attachment | image_usage::input_attachment | image_usage::sampled | image_usage::tiling_optimal | image_usage::transfer_source);
         auto  depthAttachmentMS   = context().create_image(resolution.x, resolution.y, depthFormatMS, 1, memory_usage::device,
@@ -664,15 +673,17 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
         context().main_window()->add_present_dependency_for_frame(std::move(sem), currentFrameId + 1); 
 
         // Create views for all them images:
-        mColorAttachmentView       = context().create_image_view(std::move(colorAttachment));
-		auto colorAttachmentViewMS = context().create_image_view(std::move(colorAttachmentMS));
-		auto colorAttachmentViewSS = context().create_image_view(std::move(colorAttachmentSS));
-		auto colorAttachmentViewSSMS= context().create_image_view(std::move(colorAttachmentSSMS));
-        mDepthAttachmentView       = context().create_image_view(std::move(depthAttachment));
-        auto depthAttachmentViewMS = context().create_image_view(std::move(depthAttachmentMS));
-        auto depthAttachmentViewSS = context().create_image_view(std::move(depthAttachmentSS));
-        auto depthAttachmentViewSSMS= context().create_image_view(std::move(depthAttachmentSSMS));
-        mCombinedAttachmentView    = context().create_image_view(std::move(combinedAttachment));
+		auto tmpColorAttachmentView  = context().create_image_view(std::move(tmpColorAttachment));
+        auto colorAttachmentView     = context().create_image_view(std::move(colorAttachment));
+		auto colorAttachmentViewMS   = context().create_image_view(std::move(colorAttachmentMS));
+		auto colorAttachmentViewSS   = context().create_image_view(std::move(colorAttachmentSS));
+		auto colorAttachmentViewSSMS = context().create_image_view(std::move(colorAttachmentSSMS));
+        auto tmpDepthAttachmentView  = context().create_image_view(std::move(tmpDepthAttachment));
+        auto depthAttachmentView     = context().create_image_view(std::move(depthAttachment));
+        auto depthAttachmentViewMS   = context().create_image_view(std::move(depthAttachmentMS));
+        auto depthAttachmentViewSS   = context().create_image_view(std::move(depthAttachmentSS));
+        auto depthAttachmentViewSSMS = context().create_image_view(std::move(depthAttachmentSSMS));
+        mCombinedAttachmentView      = context().create_image_view(std::move(combinedAttachment));
 #if STATS_ENABLED
 		mHeatMapImageView          = context().create_image_view(std::move(heatMapImage));
 #endif
@@ -692,21 +703,21 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 			});
 
         mFramebufferNoAA = context().create_framebuffer(mRenderpassNoAA, make_vector(
-			mColorAttachmentView, 
-			mDepthAttachmentView
+			tmpColorAttachmentView, 
+			tmpDepthAttachmentView
 		));
 
         mRenderpassMS = context().create_renderpass({
-                attachment::declare(aAttachmentFormats[0], on_load::load.from_previous_layout(layout::shader_read_only_optimal), usage::preserve      >> usage::unused                              , on_store::store.in_layout(layout::shader_read_only_optimal)),
-                attachment::declare(aAttachmentFormats[1], on_load::load.from_previous_layout(layout::shader_read_only_optimal), usage::preserve      >> usage::unused                              , on_store::store.in_layout(layout::shader_read_only_optimal)),
-                attachment::declare(colorFormatMS        , on_load::clear.from_previous_layout(layout::undefined)              , usage::color(0)      >> usage::color(0)      + usage::resolve_to(0), on_store::dont_care),
-                attachment::declare(depthFormatMS        , on_load::clear.from_previous_layout(layout::undefined)              , usage::depth_stencil >> usage::depth_stencil + usage::resolve_to(1), on_store::dont_care)
+                attachment::declare(aAttachmentFormats[0], on_load::clear.from_previous_layout(layout::undefined), usage::unused        >> usage::unused                              , on_store::store.in_layout(layout::shader_read_only_optimal)),
+                attachment::declare(aAttachmentFormats[1], on_load::clear.from_previous_layout(layout::undefined), usage::unused        >> usage::unused                              , on_store::store.in_layout(layout::shader_read_only_optimal)),
+                attachment::declare(colorFormatMS        , on_load::clear.from_previous_layout(layout::undefined), usage::color(0)      >> usage::color(0)      + usage::resolve_to(0), on_store::dont_care),
+                attachment::declare(depthFormatMS        , on_load::clear.from_previous_layout(layout::undefined), usage::depth_stencil >> usage::depth_stencil + usage::resolve_to(1), on_store::dont_care)
             }, {
 				subpass_dependency{subpass::external >> subpass::index(0),
 					stage::none    >>   stage::all_graphics,
 					access::none   >>   access::color_attachment_write | access::depth_stencil_attachment_read | access::depth_stencil_attachment_write
 				},
-				subpass_dependency{subpass::index(0) >> subpass::index(1), // Full-screen quad NoAA -> MS
+				subpass_dependency{subpass::index(0) >> subpass::index(1),
 					stage::all_graphics                                                       >>   stage::all_graphics,
 					access::color_attachment_write | access::depth_stencil_attachment_write   >>   access::color_attachment_write | access::depth_stencil_attachment_read | access::depth_stencil_attachment_write
 				},
@@ -717,15 +728,15 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 			});
 
         mFramebufferMS = context().create_framebuffer(mRenderpassMS, make_vector(
-			mColorAttachmentView, 
-			mDepthAttachmentView,
+			colorAttachmentView, 
+			depthAttachmentView,
 			colorAttachmentViewMS,
 			depthAttachmentViewMS
 		));
 
         mRenderpassSSMS = context().create_renderpass({
-                attachment::declare(aAttachmentFormats[0], on_load::clear.from_previous_layout(layout::undefined), usage::unused        >> usage::unused                               , on_store::store.in_layout(layout::shader_read_only_optimal)),
-                attachment::declare(aAttachmentFormats[1], on_load::clear.from_previous_layout(layout::undefined), usage::unused        >> usage::unused                               , on_store::store.in_layout(layout::shader_read_only_optimal)),
+                attachment::declare(aAttachmentFormats[0], on_load::clear.from_previous_layout(layout::undefined), usage::unused        >> usage::unused                               , on_store::store.in_layout(layout::transfer_src)),
+                attachment::declare(aAttachmentFormats[1], on_load::clear.from_previous_layout(layout::undefined), usage::unused        >> usage::unused                               , on_store::store.in_layout(layout::transfer_src)),
                 attachment::declare(colorFormatMS        , on_load::clear.from_previous_layout(layout::undefined), usage::color(0)      >> usage::color(0)      + usage::resolve_to(0) , on_store::dont_care),
                 attachment::declare(depthFormatMS        , on_load::clear.from_previous_layout(layout::undefined), usage::depth_stencil >> usage::depth_stencil + usage::resolve_to(1) , on_store::dont_care)
             }, {
@@ -1325,8 +1336,8 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 		mCopyToCombinedAttachmentPipe = context().create_compute_pipeline_for(
 			"shaders/copy_to_combined_attachment.comp",
             descriptor_binding(0, 0, mCombinedAttachmentView->as_storage_image(layout::general)),
-			descriptor_binding(1, 0, mColorAttachmentView->as_sampled_image(layout::shader_read_only_optimal)),
-			descriptor_binding(1, 1, mDepthAttachmentView->as_sampled_image(layout::shader_read_only_optimal))
+			descriptor_binding(1, 0, mFramebufferNoAA->image_view_at(0)->as_sampled_image(layout::shader_read_only_optimal)),
+			descriptor_binding(1, 1, mFramebufferNoAA->image_view_at(1)->as_sampled_image(layout::shader_read_only_optimal))
 		);
         mUpdater->on(shader_files_changed_event(mCopyToCombinedAttachmentPipe.as_reference())).update(mCopyToCombinedAttachmentPipe);
 
@@ -2199,7 +2210,6 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 #if STATS_ENABLED
 				mTimestampPool->write_timestamp(firstQueryIndex + 4, stage::color_attachment_output), // measure after rendering sponza
 #endif
-
 				// 3.2) Render tessellated patches with noAA:
                 command::bind_pipeline(tessPipePxFillNoaaToBeUsed.as_reference()),
 				command::bind_descriptors(tessPipePxFillNoaaToBeUsed->layout(), mDescriptorCache->get_or_create_descriptor_sets({
@@ -2230,121 +2240,26 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 			)),
 
 #if STATS_ENABLED
-				mTimestampPool->write_timestamp(firstQueryIndex + 5, stage::color_attachment_output), // measure after Tess. noAA
-#endif
-			command::render_pass(mRenderpassMS.as_reference(), mFramebufferMS.as_reference(), command::gather(
-				// 3.3) Full-screen quad noAA->MS
-                command::bind_pipeline(mFsQuadNoAAtoMSPipe.as_reference()),
-				command::bind_descriptors(mFsQuadNoAAtoMSPipe->layout(), mDescriptorCache->get_or_create_descriptor_sets({
-					descriptor_binding(0, 0, mFsQuadColorSampler),
-					descriptor_binding(0, 1, mFsQuadDepthSampler),
-					descriptor_binding(0, 2, mFramebufferNoAA->image_view_at(0)->as_sampled_image(layout::shader_read_only_optimal)),
-					descriptor_binding(0, 3, mFramebufferNoAA->image_view_at(1)->as_sampled_image(layout::shader_read_only_optimal))
-				})),
-				// Draw a a full-screen quad:
-				command::draw(6, 1, 0, 1),
-				
-				command::next_subpass(),
-
-				// 3.4) Render tessellated patches with 8xMS + sample shading => i.e., actually this is 8xSS
-                command::bind_pipeline(tessPipePxFillMultisampledToBeUsed.as_reference()),
-				command::bind_descriptors(tessPipePxFillMultisampledToBeUsed->layout(), mDescriptorCache->get_or_create_descriptor_sets({
-					descriptor_binding(0, 0, mFrameDataBuffers[inFlightIndex]),
-			        descriptor_binding(0, 1, as_combined_image_samplers(mImageSamplers, layout::shader_read_only_optimal)),
-			        descriptor_binding(0, 2, mMaterialBuffer),
-					descriptor_binding(1, 0, mCombinedAttachmentView->as_storage_image(layout::general)),
-#if STATS_ENABLED
-					descriptor_binding(1, 1, mHeatMapImageView->as_storage_image(layout::general)),
-#endif
-			        descriptor_binding(2, 0, mCountersSsbo->as_storage_buffer()),
-				    descriptor_binding(3, 0, mObjectDataBuffer->as_storage_buffer()),
-					descriptor_binding(3, 1, mIndirectPxFillParamsBuffer->as_storage_buffer()),
-				    descriptor_binding(3, 2, mIndirectPxFillCountBuffer->as_storage_buffer()),
-					descriptor_binding(4, 0, mBigDataset->as_storage_buffer())
-				})),
-					
-				command::push_constants(tessPipePxFillMultisampledToBeUsed->layout(), patch_into_tess_push_constants{ 
-					mConstOuterTessLevel, mConstInnerTessLevel, 
-					get_rendering_variant_index(rendering_variant::Tess_8xSS) * MAX_INDIRECT_DISPATCHES 
-				}),
-				command::draw_vertices_indirect(
-					mIndirectPxFillCountBuffer.as_reference(), 
-					get_rendering_variant_index(rendering_variant::Tess_8xSS) * sizeof(VkDrawIndirectCommand), 
-					sizeof(VkDrawIndirectCommand), 
-					1u) // <-- Exactly ONE draw (but potentially a lot of instances), use the one at [1]
-
-			)),
-
-
-#if STATS_ENABLED
-			mTimestampPool->write_timestamp(firstQueryIndex + 6, stage::color_attachment_output), // measure after Tess. 8xSS
+			mTimestampPool->write_timestamp(firstQueryIndex + 5, stage::color_attachment_output), // measure after Tess. noAA
 #endif
 
 
 
 
 
-			command::render_pass(mRenderpassSSMS.as_reference(), mFramebufferSSMS.as_reference(), command::gather(
-
-				// 3.5) Full-screen quad noAA->MS
-                command::bind_pipeline(mFsQuadMStoSSPipe.as_reference()),
-				command::bind_descriptors(mFsQuadMStoSSPipe->layout(), mDescriptorCache->get_or_create_descriptor_sets({
-					descriptor_binding(0, 0, mFsQuadColorSampler),
-					descriptor_binding(0, 1, mFsQuadDepthSampler),
-					descriptor_binding(0, 2, mFramebufferMS->image_view_at(0)->as_sampled_image(layout::shader_read_only_optimal)),
-					descriptor_binding(0, 3, mFramebufferMS->image_view_at(1)->as_sampled_image(layout::shader_read_only_optimal))
-				})),
-				// Draw a a full-screen quad:
-				command::draw(6, 1, 0, 1),
-				
-				command::next_subpass(),
-
-				// 3.6) Render tessellated patches with SS
-                command::bind_pipeline(tessPipePxFillSupersampledToBeUsed.as_reference()),
-				command::bind_descriptors(tessPipePxFillSupersampledToBeUsed->layout(), mDescriptorCache->get_or_create_descriptor_sets({
-					descriptor_binding(0, 0, mFrameDataBuffers[inFlightIndex]),
-			        descriptor_binding(0, 1, as_combined_image_samplers(mImageSamplers, layout::shader_read_only_optimal)),
-			        descriptor_binding(0, 2, mMaterialBuffer),
-					descriptor_binding(1, 0, mCombinedAttachmentView->as_storage_image(layout::general)),
-#if STATS_ENABLED
-					descriptor_binding(1, 1, mHeatMapImageView->as_storage_image(layout::general)),
-#endif
-			        descriptor_binding(2, 0, mCountersSsbo->as_storage_buffer()),
-				    descriptor_binding(3, 0, mObjectDataBuffer->as_storage_buffer()),
-					descriptor_binding(3, 1, mIndirectPxFillParamsBuffer->as_storage_buffer()),
-				    descriptor_binding(3, 2, mIndirectPxFillCountBuffer->as_storage_buffer()),
-					descriptor_binding(4, 0, mBigDataset->as_storage_buffer())
-				})),
-
-				command::push_constants(tessPipePxFillSupersampledToBeUsed->layout(), patch_into_tess_push_constants{ 
-					mConstOuterTessLevel, mConstInnerTessLevel, 
-					get_rendering_variant_index(rendering_variant::Tess_4xSS_8xMS) * MAX_INDIRECT_DISPATCHES 
-				}),
-				command::draw_vertices_indirect(
-					mIndirectPxFillCountBuffer.as_reference(), 
-					get_rendering_variant_index(rendering_variant::Tess_4xSS_8xMS) * sizeof(VkDrawIndirectCommand), 
-					sizeof(VkDrawIndirectCommand), 
-					1u) // <-- Exactly ONE draw (but potentially a lot of instances), use the one at [1]
-
-			)),
 
 
 
-#if STATS_ENABLED
-			mTimestampPool->write_timestamp(firstQueryIndex + 7, stage::color_attachment_output), // measure after rendering with Tess. 4xSS+8xMS
-#endif
+
 			// 3.7) Color attachment has been resolved into non-super sampled image
 
 			sync::global_memory_barrier(stage::all_commands + access::memory_write >> stage::compute_shader + access::memory_read), // TODO: Barrier too heavy
 
-
-
-
 			command::bind_pipeline(mCopyToCombinedAttachmentPipe.as_reference()),
 				command::bind_descriptors(mCopyToCombinedAttachmentPipe->layout(), mDescriptorCache->get_or_create_descriptor_sets({
 					descriptor_binding(0, 0, mCombinedAttachmentView->as_storage_image(layout::general)),
-					descriptor_binding(1, 0, mColorAttachmentView->as_sampled_image(layout::shader_read_only_optimal)),
-					descriptor_binding(1, 1, mDepthAttachmentView->as_sampled_image(layout::shader_read_only_optimal))
+					descriptor_binding(1, 0, mFramebufferNoAA->image_view_at(0)->as_sampled_image(layout::shader_read_only_optimal)),
+					descriptor_binding(1, 1, mFramebufferNoAA->image_view_at(1)->as_sampled_image(layout::shader_read_only_optimal))
 				})),
 			command::dispatch((resolution.x + 15u) / 16u, (resolution.y + 15u) / 16u, 1u),
 
@@ -2439,7 +2354,138 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 			mTimestampPool->write_timestamp(firstQueryIndex + 9, stage::compute_shader), // measure after point rendering
 #endif
 
+			sync::global_memory_barrier(stage::all_commands + access::memory_write >> stage::all_commands + access::memory_read),// TODO: heavy barrier
 
+//			// Copy from Uint64 image into back buffer:
+//			sync::image_memory_barrier(context().main_window()->current_backbuffer()->image_at(0),  // Window's back buffer's color attachment
+//					                    stage::none          >>   stage::compute_shader,
+//					                    access::none         >>   access::shader_storage_write)
+//				.with_layout_transition(layout::undefined   >>   layout::general),                  // Don't care about the previous layout
+//						
+//			command::bind_pipeline(mCopyToBackufferPipe.as_reference()),
+//			command::push_constants(mCopyToBackufferPipe->layout(), copy_to_backbuffer_push_constants{ 
+//				mWhatToCopyToBackbuffer > 1 ? 0 : mWhatToCopyToBackbuffer // 0 => 0, 1 => 1, 2 => 0
+//			}),
+//			command::bind_descriptors(mCopyToBackufferPipe->layout(), mDescriptorCache->get_or_create_descriptor_sets({
+//				descriptor_binding(0, 0, mCombinedAttachmentView->as_storage_image(layout::general)),
+//#if STATS_ENABLED
+//				descriptor_binding(0, 1, mHeatMapImageView->as_storage_image(layout::general)),
+//#endif
+//				descriptor_binding(1, 0, context().main_window()->current_backbuffer()->image_view_at(0)->as_storage_image(layout::general))
+//			})),
+//			command::dispatch((resolution.x + 15u) / 16u, (resolution.y + 15u) / 16u, 1u),
+//
+//			sync::image_memory_barrier(context().main_window()->current_backbuffer()->image_at(0),  // Window's back buffer's color attachment
+//					                    stage::compute_shader          >>   stage::color_attachment_output, // <-- for ImGui, which draws afterwards
+//					                    access::shader_storage_write   >>   access::color_attachment_read | access::color_attachment_write)
+//				.with_layout_transition(            layout::general   >>   layout::color_attachment_optimal),
+
+
+			command::render_pass(mRenderpassMS.as_reference(), mFramebufferMS.as_reference(), command::gather(
+				// 3.3) Full-screen quad noAA->MS
+                command::bind_pipeline(mFsQuadNoAAtoMSPipe.as_reference()),
+				command::push_constants(mCopyToBackufferPipe->layout(), copy_to_backbuffer_push_constants{ 
+					mWhatToCopyToBackbuffer > 1 ? 0 : mWhatToCopyToBackbuffer // 0 => 0, 1 => 1, 2 => 0
+				}),
+				command::bind_descriptors(mFsQuadNoAAtoMSPipe->layout(), mDescriptorCache->get_or_create_descriptor_sets({
+					descriptor_binding(0, 0, mFsQuadColorSampler),
+					descriptor_binding(0, 1, mFsQuadDepthSampler),
+					descriptor_binding(1, 0, mCombinedAttachmentView->as_storage_image(layout::general))
+#if STATS_ENABLED
+					, descriptor_binding(1, 1, mHeatMapImageView->as_storage_image(layout::general))
+#endif
+				})),
+				// Draw a a full-screen quad:
+				command::draw(6, 1, 0, 1),
+				
+				command::next_subpass(),
+
+				// 3.4) Render tessellated patches with 8xMS + sample shading => i.e., actually this is 8xSS
+                command::bind_pipeline(tessPipePxFillMultisampledToBeUsed.as_reference()),
+				command::bind_descriptors(tessPipePxFillMultisampledToBeUsed->layout(), mDescriptorCache->get_or_create_descriptor_sets({
+					descriptor_binding(0, 0, mFrameDataBuffers[inFlightIndex]),
+			        descriptor_binding(0, 1, as_combined_image_samplers(mImageSamplers, layout::shader_read_only_optimal)),
+			        descriptor_binding(0, 2, mMaterialBuffer),
+					descriptor_binding(1, 0, mCombinedAttachmentView->as_storage_image(layout::general)), // <-------------------- WHAAAAAAAAAAAAAAAAAAAAAAAIIIIIIIIII is this bound here?
+#if STATS_ENABLED
+					descriptor_binding(1, 1, mHeatMapImageView->as_storage_image(layout::general)),
+#endif
+			        descriptor_binding(2, 0, mCountersSsbo->as_storage_buffer()),
+				    descriptor_binding(3, 0, mObjectDataBuffer->as_storage_buffer()),
+					descriptor_binding(3, 1, mIndirectPxFillParamsBuffer->as_storage_buffer()),
+				    descriptor_binding(3, 2, mIndirectPxFillCountBuffer->as_storage_buffer()),
+					descriptor_binding(4, 0, mBigDataset->as_storage_buffer())
+				})),
+					
+				command::push_constants(tessPipePxFillMultisampledToBeUsed->layout(), patch_into_tess_push_constants{ 
+					mConstOuterTessLevel, mConstInnerTessLevel, 
+					get_rendering_variant_index(rendering_variant::Tess_8xSS) * MAX_INDIRECT_DISPATCHES 
+				}),
+				command::draw_vertices_indirect(
+					mIndirectPxFillCountBuffer.as_reference(), 
+					get_rendering_variant_index(rendering_variant::Tess_8xSS) * sizeof(VkDrawIndirectCommand), 
+					sizeof(VkDrawIndirectCommand), 
+					1u) // <-- Exactly ONE draw (but potentially a lot of instances), use the one at [1]
+
+			)),
+
+
+#if STATS_ENABLED
+			mTimestampPool->write_timestamp(firstQueryIndex + 6, stage::color_attachment_output), // measure after Tess. 8xSS
+#endif
+
+
+
+
+
+			command::render_pass(mRenderpassSSMS.as_reference(), mFramebufferSSMS.as_reference(), command::gather(
+
+				// 3.5) Full-screen quad noAA->MS
+                command::bind_pipeline(mFsQuadMStoSSPipe.as_reference()),
+				command::bind_descriptors(mFsQuadMStoSSPipe->layout(), mDescriptorCache->get_or_create_descriptor_sets({
+					descriptor_binding(0, 0, mFsQuadColorSampler),
+					descriptor_binding(0, 1, mFsQuadDepthSampler),
+					descriptor_binding(0, 2, mFramebufferMS->image_view_at(0)->as_sampled_image(layout::shader_read_only_optimal)),
+					descriptor_binding(0, 3, mFramebufferMS->image_view_at(1)->as_sampled_image(layout::shader_read_only_optimal))
+				})),
+				// Draw a a full-screen quad:
+				command::draw(6, 1, 0, 1),
+				
+				command::next_subpass(),
+
+				// 3.6) Render tessellated patches with SS
+                command::bind_pipeline(tessPipePxFillSupersampledToBeUsed.as_reference()),
+				command::bind_descriptors(tessPipePxFillSupersampledToBeUsed->layout(), mDescriptorCache->get_or_create_descriptor_sets({
+					descriptor_binding(0, 0, mFrameDataBuffers[inFlightIndex]),
+			        descriptor_binding(0, 1, as_combined_image_samplers(mImageSamplers, layout::shader_read_only_optimal)),
+			        descriptor_binding(0, 2, mMaterialBuffer),
+					descriptor_binding(1, 0, mCombinedAttachmentView->as_storage_image(layout::general)),
+#if STATS_ENABLED
+					descriptor_binding(1, 1, mHeatMapImageView->as_storage_image(layout::general)),
+#endif
+			        descriptor_binding(2, 0, mCountersSsbo->as_storage_buffer()),
+				    descriptor_binding(3, 0, mObjectDataBuffer->as_storage_buffer()),
+					descriptor_binding(3, 1, mIndirectPxFillParamsBuffer->as_storage_buffer()),
+				    descriptor_binding(3, 2, mIndirectPxFillCountBuffer->as_storage_buffer()),
+					descriptor_binding(4, 0, mBigDataset->as_storage_buffer())
+				})),
+
+				command::push_constants(tessPipePxFillSupersampledToBeUsed->layout(), patch_into_tess_push_constants{ 
+					mConstOuterTessLevel, mConstInnerTessLevel, 
+					get_rendering_variant_index(rendering_variant::Tess_4xSS_8xMS) * MAX_INDIRECT_DISPATCHES 
+				}),
+				command::draw_vertices_indirect(
+					mIndirectPxFillCountBuffer.as_reference(), 
+					get_rendering_variant_index(rendering_variant::Tess_4xSS_8xMS) * sizeof(VkDrawIndirectCommand), 
+					sizeof(VkDrawIndirectCommand), 
+					1u) // <-- Exactly ONE draw (but potentially a lot of instances), use the one at [1]
+
+			)),
+
+
+#if STATS_ENABLED
+			mTimestampPool->write_timestamp(firstQueryIndex + 7, stage::color_attachment_output), // measure after rendering with Tess. 4xSS+8xMS
+#endif
 
 
 #if STATS_ENABLED
@@ -2450,47 +2496,20 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 			sync::global_memory_barrier(stage::fragment_shader | stage::compute_shader >> stage::compute_shader, access::shader_write >> access::shader_read),
 #endif
 		
-	
 
 			// //That worked:
-			//sync::image_memory_barrier(context().main_window()->current_backbuffer()->image_at(0),  // Window's back buffer's color attachment
-			//		                    stage::none          >>   stage::blit,
-			//		                    access::none         >>   access::transfer_write)
-			//	.with_layout_transition(layout::undefined   >>   layout::transfer_dst),             // Don't care about the previous layout
-
-			//blit_image(mFramebufferSS->image_at(0), layout::transfer_src, context().main_window()->current_backbuffer()->image_at(0), layout::transfer_dst, 
-			//			vk::ImageAspectFlagBits::eColor, vk::Filter::eLinear),
-
-			//sync::image_memory_barrier(context().main_window()->current_backbuffer()->image_at(0),  // Window's back buffer's color attachment
-			//		                    stage::blit                    >>   stage::color_attachment_output, // <-- for ImGui, which draws afterwards
-			//		                    access::transfer_write         >>   access::color_attachment_read | access::color_attachment_write)
-			//	.with_layout_transition(       layout::transfer_dst   >>   layout::color_attachment_optimal)
-
-
-			// Copy from Uint64 image into back buffer:
 			sync::image_memory_barrier(context().main_window()->current_backbuffer()->image_at(0),  // Window's back buffer's color attachment
-					                    stage::none          >>   stage::compute_shader,
-					                    access::none         >>   access::shader_storage_write)
-				.with_layout_transition(layout::undefined   >>   layout::general),                  // Don't care about the previous layout
-						
-			command::bind_pipeline(mCopyToBackufferPipe.as_reference()),
-			command::push_constants(mCopyToBackufferPipe->layout(), copy_to_backbuffer_push_constants{ 
-				mWhatToCopyToBackbuffer > 1 ? 0 : mWhatToCopyToBackbuffer // 0 => 0, 1 => 1, 2 => 0
-			}),
-			command::bind_descriptors(mCopyToBackufferPipe->layout(), mDescriptorCache->get_or_create_descriptor_sets({
-				descriptor_binding(0, 0, mCombinedAttachmentView->as_storage_image(layout::general)),
-#if STATS_ENABLED
-				descriptor_binding(0, 1, mHeatMapImageView->as_storage_image(layout::general)),
-#endif
-				descriptor_binding(1, 0, context().main_window()->current_backbuffer()->image_view_at(0)->as_storage_image(layout::general))
-			})),
-			command::dispatch((resolution.x + 15u) / 16u, (resolution.y + 15u) / 16u, 1u),
+					                    stage::none          >>   stage::blit,
+					                    access::none         >>   access::transfer_write)
+				.with_layout_transition(layout::undefined   >>   layout::transfer_dst),             // Don't care about the previous layout
+
+			blit_image(mFramebufferSSMS->image_at(0), layout::transfer_src, context().main_window()->current_backbuffer()->image_at(0), layout::transfer_dst, 
+						vk::ImageAspectFlagBits::eColor, vk::Filter::eLinear),
 
 			sync::image_memory_barrier(context().main_window()->current_backbuffer()->image_at(0),  // Window's back buffer's color attachment
-					                    stage::compute_shader          >>   stage::color_attachment_output, // <-- for ImGui, which draws afterwards
-					                    access::shader_storage_write   >>   access::color_attachment_read | access::color_attachment_write)
-				.with_layout_transition(            layout::general   >>   layout::color_attachment_optimal)
-
+					                    stage::blit                    >>   stage::color_attachment_output, // <-- for ImGui, which draws afterwards
+					                    access::transfer_write         >>   access::color_attachment_read | access::color_attachment_write)
+				.with_layout_transition(       layout::transfer_dst   >>   layout::color_attachment_optimal)
 
 		);
 
@@ -2595,8 +2614,6 @@ private: // v== Member variables ==v
 	avk::framebuffer mFramebufferNoAA;
 	avk::framebuffer mFramebufferMS;
 	avk::framebuffer mFramebufferSSMS;
-	avk::image_view  mColorAttachmentView;
-	avk::image_view  mDepthAttachmentView;
 	avk::image_view  mCombinedAttachmentView;
     avk::compute_pipeline mCopyToBackufferPipe;
     avk::compute_pipeline mClearCombinedAttachmentPipe;

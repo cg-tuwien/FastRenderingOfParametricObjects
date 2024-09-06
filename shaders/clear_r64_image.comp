@@ -41,7 +41,7 @@ void main()
 	ivec2 iuv = ivec2(gl_GlobalInvocationID.xy);
 	float clearDepth = 1.0;
 #if NICE_CLEAR_COLOR
-	float f = smoothstep(sin(float(iuv.x)*3.1415/float(resolution.x))*50.0 + float(resolution.y)*0.5       ,
+	float f = smoothstep(sin(float(iuv.x)*3.1415/float(resolution.x))*50.0 + float(resolution.y)*0.5        ,
 						 sin(float(iuv.x)*3.1415/float(resolution.x))*60.0 + float(resolution.y)*0.5 - 100.0,
 						 float(resolution.y - gl_GlobalInvocationID.y));
 	vec4  clearColor = mix(vec4(0.8, 0.8, 0.8, 1.0), vec4(0.6, 0.6, 0.6, 1.0), f);

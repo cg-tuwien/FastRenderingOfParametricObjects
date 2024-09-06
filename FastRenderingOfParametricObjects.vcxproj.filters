@@ -100,10 +100,10 @@
     <None Include="shaders\copy_to_combined_attachment.comp">
       <Filter>shaders</Filter>
     </None>
-    <None Include="shaders\ss_resolve.frag">
+    <None Include="shaders\full_screen_quad.frag">
       <Filter>shaders</Filter>
     </None>
-    <None Include="shaders\ss_resolve.vert">
+    <None Include="shaders\full_screen_quad.vert">
       <Filter>shaders</Filter>
     </None>
     <None Include="shader_includes\parametric_functions\shape_functions.glsl">
@@ -144,6 +144,9 @@
     </None>
     <None Include="shader_includes\parametric_functions\giant_worm.glsl">
       <Filter>shader_includes\parametric_functions</Filter>
+    </None>
+    <None Include="shaders\full_screen_quad_from_combined_attachment.frag">
+      <Filter>shaders</Filter>
     </None>
   </ItemGroup>
   <ItemGroup>

@@ -29,7 +29,12 @@ void main()
 {
 	ivec2 iuv = ivec2(gl_GlobalInvocationID.xy);
 
-	// Load color:
+	uvec2 imSize = imageSize(uCombinedAttachment);
+	if (iuv.x >= imSize.x || iuv.y >= imSize.y) {
+		return;
+	}
+
+	// Load:
 	vec4  color = texelFetch(uColorSrc, iuv, 0).rgba;
 	float depth = texelFetch(uDepthSrc, iuv, 0).r;
 
@@ -37,9 +42,6 @@ void main()
 //	uint64_t combinedValue = combine_depth_and_color(depth_to_ui64(depth), color_to_ui64(color));
 //	imageStore(uCombinedAttachment, iuv, combinedValue);
 
-	uvec2 imSize = imageSize(uCombinedAttachment);
-	if (iuv.x >= imSize.x || iuv.y >= imSize.y) {
-		return;
-	}
+	// Store:
 	imageAtomicMin(uCombinedAttachment, iuv, getUint64ForFramebuffer(depth, color));
 }
