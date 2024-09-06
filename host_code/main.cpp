@@ -2359,81 +2359,81 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 
 
 #if SEPARATE_PATCH_TILE_ASSIGNMENT_PASS
-				// Inject another intermediate pass:
-				command::bind_pipeline(mSelectTilePatchesPipe.as_reference()),
-				command::bind_descriptors(mSelectTilePatchesPipe->layout(), mDescriptorCache->get_or_create_descriptor_sets({
-				    descriptor_binding(0, 0, mFrameDataBuffers[inFlightIndex]), 
-			        descriptor_binding(0, 1, as_combined_image_samplers(mImageSamplers, layout::shader_read_only_optimal)),
-			        descriptor_binding(0, 2, mMaterialBuffer),
-			        descriptor_binding(1, 0, mCountersSsbo->as_storage_buffer()),
-				    descriptor_binding(2, 0, mObjectDataBuffer->as_storage_buffer()),
-				    descriptor_binding(2, 1, mIndirectPxFillParamsBuffer->as_storage_buffer()),
-				    descriptor_binding(2, 2, mIndirectPxFillCountBuffer->as_storage_buffer()),
-                    descriptor_binding(3, 0, mCombinedAttachmentView->as_storage_image(layout::general))
+			// Inject another intermediate pass:
+			command::bind_pipeline(mSelectTilePatchesPipe.as_reference()),
+			command::bind_descriptors(mSelectTilePatchesPipe->layout(), mDescriptorCache->get_or_create_descriptor_sets({
+				descriptor_binding(0, 0, mFrameDataBuffers[inFlightIndex]), 
+			    descriptor_binding(0, 1, as_combined_image_samplers(mImageSamplers, layout::shader_read_only_optimal)),
+			    descriptor_binding(0, 2, mMaterialBuffer),
+			    descriptor_binding(1, 0, mCountersSsbo->as_storage_buffer()),
+				descriptor_binding(2, 0, mObjectDataBuffer->as_storage_buffer()),
+				descriptor_binding(2, 1, mIndirectPxFillParamsBuffer->as_storage_buffer()),
+				descriptor_binding(2, 2, mIndirectPxFillCountBuffer->as_storage_buffer()),
+                descriptor_binding(3, 0, mCombinedAttachmentView->as_storage_image(layout::general))
 #if STATS_ENABLED
-                    , descriptor_binding(3, 1, mHeatMapImageView->as_storage_image(layout::general))
+                , descriptor_binding(3, 1, mHeatMapImageView->as_storage_image(layout::general))
 #endif
-					, descriptor_binding(4, 0, mTilePatchesBuffer->as_storage_buffer())
-				})),
+				, descriptor_binding(4, 0, mTilePatchesBuffer->as_storage_buffer())
+			})),
 
-				command::dispatch(128u /* <--- TODO: num tiles / 32 */, 1u, 1u),
+			command::dispatch(128u /* <--- TODO: num tiles / 32 */, 1u, 1u),
 
-				sync::global_memory_barrier(stage::compute_shader + access::memory_write >> stage::compute_shader + access::memory_read),
+			sync::global_memory_barrier(stage::compute_shader + access::memory_write >> stage::compute_shader + access::memory_read),
 #endif
 #if STATS_ENABLED
-				mTimestampPool->write_timestamp(firstQueryIndex + 8, stage::compute_shader), // measure after patch to tile step
+			mTimestampPool->write_timestamp(firstQueryIndex + 8, stage::compute_shader), // measure after patch to tile step
 #endif
 
-				// 3rd pass compute shaders (two variants): px fill PER DRAW PACKAGE directly from compute shaders
-                command::bind_pipeline(mPxFillComputePipe.as_reference()),
-				command::bind_descriptors(mPxFillComputePipe->layout(), mDescriptorCache->get_or_create_descriptor_sets({
-				    descriptor_binding(0, 0, mFrameDataBuffers[inFlightIndex]), 
-			        descriptor_binding(0, 1, as_combined_image_samplers(mImageSamplers, layout::shader_read_only_optimal)),
-			        descriptor_binding(0, 2, mMaterialBuffer),
-			        descriptor_binding(1, 0, mCountersSsbo->as_storage_buffer()),
-				    descriptor_binding(2, 0, mObjectDataBuffer->as_storage_buffer()),
-				    descriptor_binding(2, 1, mIndirectPxFillParamsBuffer->as_storage_buffer()),
-				    descriptor_binding(2, 2, mIndirectPxFillCountBuffer->as_storage_buffer()),
-                    descriptor_binding(3, 0, mCombinedAttachmentView->as_storage_image(layout::general))
+			// 3rd pass compute shaders (two variants): px fill PER DRAW PACKAGE directly from compute shaders
+            command::bind_pipeline(mPxFillComputePipe.as_reference()),
+			command::bind_descriptors(mPxFillComputePipe->layout(), mDescriptorCache->get_or_create_descriptor_sets({
+				descriptor_binding(0, 0, mFrameDataBuffers[inFlightIndex]), 
+			    descriptor_binding(0, 1, as_combined_image_samplers(mImageSamplers, layout::shader_read_only_optimal)),
+			    descriptor_binding(0, 2, mMaterialBuffer),
+			    descriptor_binding(1, 0, mCountersSsbo->as_storage_buffer()),
+				descriptor_binding(2, 0, mObjectDataBuffer->as_storage_buffer()),
+				descriptor_binding(2, 1, mIndirectPxFillParamsBuffer->as_storage_buffer()),
+				descriptor_binding(2, 2, mIndirectPxFillCountBuffer->as_storage_buffer()),
+                descriptor_binding(3, 0, mCombinedAttachmentView->as_storage_image(layout::general))
 #if STATS_ENABLED
-                    , descriptor_binding(3, 1, mHeatMapImageView->as_storage_image(layout::general))
+                , descriptor_binding(3, 1, mHeatMapImageView->as_storage_image(layout::general))
 #endif
-					, descriptor_binding(4, 0, mBigDataset->as_storage_buffer())
-				})),
-				command::push_constants(mPxFillComputePipe->layout(), pass3_push_constants{
-					mGatherPipelineStats ? VK_TRUE : VK_FALSE
-				}),
-				command::dispatch_indirect(
-					mIndirectPxFillCountBuffer, 
-					get_rendering_variant_index(rendering_variant::PointRendered_direct) * sizeof(VkDrawIndirectCommand) 
-					/* offset to the right struct member: */  + sizeof(VkDrawIndirectCommand::vertexCount)
-				), // => in order to use the instanceCount!
+				, descriptor_binding(4, 0, mBigDataset->as_storage_buffer())
+			})),
+			command::push_constants(mPxFillComputePipe->layout(), pass3_push_constants{
+				mGatherPipelineStats ? VK_TRUE : VK_FALSE
+			}),
+			command::dispatch_indirect(
+				mIndirectPxFillCountBuffer, 
+				get_rendering_variant_index(rendering_variant::PointRendered_direct) * sizeof(VkDrawIndirectCommand) 
+				/* offset to the right struct member: */  + sizeof(VkDrawIndirectCommand::vertexCount)
+			), // => in order to use the instanceCount!
 
 
 
-				// 3rd pass compute shaders (two variants): px fill PER DRAW PACKAGE directly from compute shaders
-                command::bind_pipeline(mPxFillLocalFbComputePipe.as_reference()),
-				command::bind_descriptors(mPxFillLocalFbComputePipe->layout(), mDescriptorCache->get_or_create_descriptor_sets({
-				    descriptor_binding(0, 0, mFrameDataBuffers[inFlightIndex]), 
-			        descriptor_binding(0, 1, as_combined_image_samplers(mImageSamplers, layout::shader_read_only_optimal)),
-			        descriptor_binding(0, 2, mMaterialBuffer),
-			        descriptor_binding(1, 0, mCountersSsbo->as_storage_buffer()),
-				    descriptor_binding(2, 0, mObjectDataBuffer->as_storage_buffer()),
-				    descriptor_binding(2, 1, mIndirectPxFillParamsBuffer->as_storage_buffer()),
-				    descriptor_binding(2, 2, mIndirectPxFillCountBuffer->as_storage_buffer()),
-                    descriptor_binding(3, 0, mCombinedAttachmentView->as_storage_image(layout::general))
+			// 3rd pass compute shaders (two variants): px fill PER DRAW PACKAGE directly from compute shaders
+            command::bind_pipeline(mPxFillLocalFbComputePipe.as_reference()),
+			command::bind_descriptors(mPxFillLocalFbComputePipe->layout(), mDescriptorCache->get_or_create_descriptor_sets({
+				descriptor_binding(0, 0, mFrameDataBuffers[inFlightIndex]), 
+			    descriptor_binding(0, 1, as_combined_image_samplers(mImageSamplers, layout::shader_read_only_optimal)),
+			    descriptor_binding(0, 2, mMaterialBuffer),
+			    descriptor_binding(1, 0, mCountersSsbo->as_storage_buffer()),
+				descriptor_binding(2, 0, mObjectDataBuffer->as_storage_buffer()),
+				descriptor_binding(2, 1, mIndirectPxFillParamsBuffer->as_storage_buffer()),
+				descriptor_binding(2, 2, mIndirectPxFillCountBuffer->as_storage_buffer()),
+                descriptor_binding(3, 0, mCombinedAttachmentView->as_storage_image(layout::general))
 #if STATS_ENABLED
-                    , descriptor_binding(3, 1, mHeatMapImageView->as_storage_image(layout::general))
+                , descriptor_binding(3, 1, mHeatMapImageView->as_storage_image(layout::general))
 #endif
-					, descriptor_binding(4, 0, mBigDataset->as_storage_buffer())
+				, descriptor_binding(4, 0, mBigDataset->as_storage_buffer())
 #if SEPARATE_PATCH_TILE_ASSIGNMENT_PASS
-					, descriptor_binding(5, 0, mTilePatchesBuffer->as_storage_buffer())
+				, descriptor_binding(5, 0, mTilePatchesBuffer->as_storage_buffer())
 #endif
-				})),
-				command::push_constants(mPxFillLocalFbComputePipe->layout(), pass3_push_constants{
-					mGatherPipelineStats ? VK_TRUE : VK_FALSE
-				}),
-				command::dispatch((resolution.x + PX_FILL_LOCAL_FB_TILE_SIZE_X - 1) / PX_FILL_LOCAL_FB_TILE_SIZE_X, (resolution.y + PX_FILL_LOCAL_FB_TILE_SIZE_Y - 1) / PX_FILL_LOCAL_FB_TILE_SIZE_Y, 1),
+			})),
+			command::push_constants(mPxFillLocalFbComputePipe->layout(), pass3_push_constants{
+				mGatherPipelineStats ? VK_TRUE : VK_FALSE
+			}),
+			command::dispatch((resolution.x + PX_FILL_LOCAL_FB_TILE_SIZE_X - 1) / PX_FILL_LOCAL_FB_TILE_SIZE_X, (resolution.y + PX_FILL_LOCAL_FB_TILE_SIZE_Y - 1) / PX_FILL_LOCAL_FB_TILE_SIZE_Y, 1),
 
 #if STATS_ENABLED
 			mTimestampPool->write_timestamp(firstQueryIndex + 9, stage::compute_shader), // measure after point rendering
@@ -2443,17 +2443,14 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 
 
 #if STATS_ENABLED
-			    commandsEndStats,
+			commandsEndStats,
 #else
-			    // Fascinating: Without that following barrier, we get rendering artifacts in the ABSENCE of the timestamp write!
-			    // TODO:            ^ investigate further!
-			    sync::global_memory_barrier(stage::fragment_shader | stage::compute_shader >> stage::compute_shader, access::shader_write >> access::shader_read),
+			// Fascinating: Without that following barrier, we get rendering artifacts in the ABSENCE of the timestamp write!
+			// TODO:            ^ investigate further!
+			sync::global_memory_barrier(stage::fragment_shader | stage::compute_shader >> stage::compute_shader, access::shader_write >> access::shader_read),
 #endif
 		
-			// 3.6) Copy combined attachment -> back buffer
-			
-
-
+	
 
 			// //That worked:
 			//sync::image_memory_barrier(context().main_window()->current_backbuffer()->image_at(0),  // Window's back buffer's color attachment
