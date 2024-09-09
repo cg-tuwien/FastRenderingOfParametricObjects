@@ -20,7 +20,7 @@
 #include "ImGuizmo.h"
 #include "big_dataset.hpp"
 
-#define NUM_TIMESTAMP_QUERIES 10
+#define NUM_TIMESTAMP_QUERIES 14
 
 #define NUM_DIFFERENT_RENDER_VARIANTS 5
 
@@ -1401,17 +1401,20 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 					auto props = context().physical_device().getProperties();
 					return static_cast<double>(props.limits.timestampPeriod);
 				}),
-				lastClearDuration = 0.0,
-				lastInitDuration = 0.0,
-				lastLodStageDuration = 0.0,
-				last3dModelDuration = 0.0,
-				lastTess4xSSand8xMSRenderDuration = 0.0,
-				lastTessNoaaRenderDuration = 0.0,
-				lastTess8xSSRenderDuration = 0.0,
-				lastTotalTessRenderDuration = 0.0,
-				lastPointRenderDuration = 0.0,
-				lastPatchToTileDuration = 0.0,
-				lastBeginToRenderEndDuration = 0.0
+				lastClearDuration				 = 0.0,
+				lastInitDuration				 = 0.0,
+				lastLodStageDuration			 = 0.0,
+				last3dModelsRenderDuration		 = 0.0,
+				lastTessNoaaDuration			 = 0.0,
+				lastCopyToCombinedAttachmentDur	 = 0.0,
+				lastPatchToTileStepDuration		 = 0.0,
+				lastPointRenderingNoaaDuration	 = 0.0,
+				lastPointRenderingLocalFbDur	 = 0.0,
+				lastFSQbefore8xSSDuration		 = 0.0,
+				lastTess8xSSDuration			 = 0.0,
+				lastFSQbefore4xSS8xMSDuration	 = 0.0,
+				lastTess4xSS8xMSDuration		 = 0.0,
+				lastTotalStepsDuration			 = 0.0
 			]() mutable {
 				if (mMeasurementInProgress) {
 					return;
@@ -1435,28 +1438,36 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 
 #if STATS_ENABLED
 				// Timestamps are gathered regardless of pipeline stats:
-				lastBeginToRenderEndDuration = glm::mix(lastBeginToRenderEndDuration, mLastBeginToParametricDuration * 1e-6 * timestampPeriod, 0.05);
-				lastClearDuration =            glm::mix(lastClearDuration           , mLastClearDuration             * 1e-6 * timestampPeriod, 0.05);
-				lastInitDuration =             glm::mix(lastInitDuration            , mLastInitDuration              * 1e-6 * timestampPeriod, 0.05);
-				lastLodStageDuration =         glm::mix(lastLodStageDuration        , mLastLodStageDuration          * 1e-6 * timestampPeriod, 0.05);
-				last3dModelDuration =          glm::mix(last3dModelDuration         , mLast3dModelsRenderDuration    * 1e-6 * timestampPeriod, 0.05);
-				lastTess4xSSand8xMSRenderDuration =       glm::mix(lastTess4xSSand8xMSRenderDuration      , mLastTess4xSSand8xMSRenderDuration  * 1e-6 * timestampPeriod, 0.05);
-				lastTessNoaaRenderDuration =       glm::mix(lastTessNoaaRenderDuration      , mLastTessNoaaRenderDuration    * 1e-6 * timestampPeriod, 0.05);
-				lastTess8xSSRenderDuration =       glm::mix(lastTess8xSSRenderDuration      , mLastTess8xSSRenderDuration    * 1e-6 * timestampPeriod, 0.05);
-				lastTotalTessRenderDuration =       glm::mix(lastTotalTessRenderDuration      , mLastTotalTessRenderDuration   * 1e-6 * timestampPeriod, 0.05);
-				lastPointRenderDuration =      glm::mix(lastPointRenderDuration     , mLastPointRenderDuration       * 1e-6 * timestampPeriod, 0.05);
-				lastPatchToTileDuration =      glm::mix(lastPatchToTileDuration     , mLastPatchToTileDuration       * 1e-6 * timestampPeriod, 0.05);
-				ImGui::TextColored(ImVec4(.8f, .1f, .6f, 1.f), "Total frame time        : %.3lf ms (timer queries)", lastBeginToRenderEndDuration);
+				lastClearDuration				= glm::mix(lastClearDuration				, mLastClearDuration				* 1e-6 * timestampPeriod, 0.05);
+				lastInitDuration				= glm::mix(lastInitDuration					, mLastInitDuration					* 1e-6 * timestampPeriod, 0.05);
+				lastLodStageDuration			= glm::mix(lastLodStageDuration				, mLastLodStageDuration				* 1e-6 * timestampPeriod, 0.05);
+				last3dModelsRenderDuration		= glm::mix(last3dModelsRenderDuration		, mLast3dModelsRenderDuration		* 1e-6 * timestampPeriod, 0.05);
+				lastTessNoaaDuration			= glm::mix(lastTessNoaaDuration				, mLastTessNoaaDuration				* 1e-6 * timestampPeriod, 0.05);
+				lastCopyToCombinedAttachmentDur	= glm::mix(lastCopyToCombinedAttachmentDur	, mLastCopyToCombinedAttachmentDur	* 1e-6 * timestampPeriod, 0.05);
+				lastPatchToTileStepDuration		= glm::mix(lastPatchToTileStepDuration		, mLastPatchToTileStepDuration		* 1e-6 * timestampPeriod, 0.05);
+				lastPointRenderingNoaaDuration	= glm::mix(lastPointRenderingNoaaDuration	, mLastPointRenderingNoaaDuration	* 1e-6 * timestampPeriod, 0.05);
+				lastPointRenderingLocalFbDur	= glm::mix(lastPointRenderingLocalFbDur		, mLastPointRenderingLocalFbDur		* 1e-6 * timestampPeriod, 0.05);
+				lastFSQbefore8xSSDuration		= glm::mix(lastFSQbefore8xSSDuration		, mLastFSQbefore8xSSDuration		* 1e-6 * timestampPeriod, 0.05);
+				lastTess8xSSDuration			= glm::mix(lastTess8xSSDuration				, mLastTess8xSSDuration				* 1e-6 * timestampPeriod, 0.05);
+				lastFSQbefore4xSS8xMSDuration	= glm::mix(lastFSQbefore4xSS8xMSDuration	, mLastFSQbefore4xSS8xMSDuration	* 1e-6 * timestampPeriod, 0.05);
+				lastTess4xSS8xMSDuration		= glm::mix(lastTess4xSS8xMSDuration			, mLastTess4xSS8xMSDuration			* 1e-6 * timestampPeriod, 0.05);
+				lastTotalStepsDuration			= glm::mix(lastTotalStepsDuration			, mLastTotalStepsDuration			* 1e-6 * timestampPeriod, 0.05);
+
+				ImGui::TextColored(ImVec4(.8f, .1f, .6f, 1.f), "Total frame time        : %.3lf ms (timer queries)", lastTotalStepsDuration);
 				ImGui::TextColored(ImVec4(.8f, .1f, .6f, 1.f), "Clearing                : %.3lf ms (timer queries)", lastClearDuration);
 				ImGui::TextColored(ImVec4(.8f, .1f, .6f, 1.f), "Initialization stage    : %.3lf ms (timer queries)", lastInitDuration);
 				ImGui::TextColored(ImVec4(.8f, .1f, .6f, 1.f), "LOD stage               : %.3lf ms (timer queries)", lastLodStageDuration);
-				ImGui::TextColored(ImVec4(.8f, .1f, .6f, 1.f), "Rendering Sponza        : %.3lf ms (timer queries)", last3dModelDuration);
-				ImGui::TextColored(ImVec4(.8f, .1f, .6f, 1.f), "Tess. 4xSS+8xMS         : %.3lf ms (timer queries)", lastTess4xSSand8xMSRenderDuration);
-				ImGui::TextColored(ImVec4(.8f, .1f, .6f, 1.f), "Tess. noAA              : %.3lf ms (timer queries)", lastTessNoaaRenderDuration);
-				ImGui::TextColored(ImVec4(.8f, .1f, .6f, 1.f), "Tess. 8xSS (sample shd.): %.3lf ms (timer queries)", lastTess8xSSRenderDuration);
-				ImGui::TextColored(ImVec4(.8f, .1f, .6f, 1.f), "Tess.-based TOTAL       : %.3lf ms (timer queries)", lastTotalTessRenderDuration);
-				ImGui::TextColored(ImVec4(.8f, .1f, .6f, 1.f), "Point-based rendering   : %.3lf ms (timer queries)", lastPointRenderDuration);
-				ImGui::TextColored(ImVec4(.8f, .1f, .6f, 1.f), "  -> thereof tile sel.  : %.3lf ms (timer queries)", lastPatchToTileDuration);
+				ImGui::TextColored(ImVec4(.8f, .1f, .6f, 1.f), "Rendering Sponza        : %.3lf ms (timer queries)", last3dModelsRenderDuration);
+				ImGui::TextColored(ImVec4(.8f, .1f, .6f, 1.f), "Tess. noAA              : %.3lf ms (timer queries)", lastTessNoaaDuration);
+				ImGui::TextColored(ImVec4(.8f, .1f, .6f, 1.f), "  -> FB -> combined att.: %.3lf ms (timer queries)", lastCopyToCombinedAttachmentDur);
+				ImGui::TextColored(ImVec4(.8f, .1f, .6f, 1.f), "(Assign to local tiles) : %.3lf ms (timer queries)", lastPatchToTileStepDuration);
+				ImGui::TextColored(ImVec4(.8f, .1f, .6f, 1.f), "Point rendering ~1spp   : %.3lf ms (timer queries)", lastPointRenderingNoaaDuration);
+				ImGui::TextColored(ImVec4(.8f, .1f, .6f, 1.f), "Point r. ~4spp local fb.: %.3lf ms (timer queries)", lastPointRenderingLocalFbDur);
+				ImGui::TextColored(ImVec4(.8f, .1f, .6f, 1.f), "   ^ TOTAL (with assign): %.3lf ms (timer queries)", lastPatchToTileStepDuration + lastPointRenderingLocalFbDur);
+				ImGui::TextColored(ImVec4(.8f, .1f, .6f, 1.f), "  -> results -> FSQ     : %.3lf ms (timer queries)", lastFSQbefore8xSSDuration);
+				ImGui::TextColored(ImVec4(.8f, .1f, .6f, 1.f), "Tess. 8xSS (sample shd.): %.3lf ms (timer queries)", lastTess8xSSDuration);
+				ImGui::TextColored(ImVec4(.8f, .1f, .6f, 1.f), "  -> results -> FSQ     : %.3lf ms (timer queries)", lastFSQbefore4xSS8xMSDuration);
+				ImGui::TextColored(ImVec4(.8f, .1f, .6f, 1.f), "Tess. 4xSS+8xMS         : %.3lf ms (timer queries)", lastTess4xSS8xMSDuration);
 
 				// ... pipeline statistics only if the option is ticked:
 			    if (ImGui::Checkbox("Gather pipeline stats.", &mGatherPipelineStats)) {
@@ -2056,17 +2067,24 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 				firstQueryIndex, NUM_TIMESTAMP_QUERIES, vk::QueryResultFlagBits::eWait // => ensure that the results are available
 			);
 
-			mLastClearDuration = timers[1] - timers[0];
-			mLastInitDuration = timers[2] - timers[1];
-			mLastLodStageDuration = timers[3] - timers[2];
-			mLast3dModelsRenderDuration = timers[4] - timers[3];
-			mLastTess4xSSand8xMSRenderDuration = timers[5] - timers[4];
-			mLastTessNoaaRenderDuration = timers[6] - timers[5];
-			mLastTess8xSSRenderDuration = timers[7] - timers[6];
-			mLastTotalTessRenderDuration = timers[7] - timers[4];
-			mLastPatchToTileDuration = timers[6] - timers[5];
-			mLastPointRenderDuration = timers[6] - timers[5]; // Over two timestamp queries
-			mLastBeginToParametricDuration = timers[6] - timers[0];
+			auto get_duration = [&timers](int index) {
+				return timers[index] - timers[index-1];
+			};
+
+			mLastClearDuration					= get_duration(1); // + 1, stage::compute_shader), // measure after clearing
+			mLastInitDuration					= get_duration(2); // + 2, stage::compute_shader), // measure after init
+			mLastLodStageDuration				= get_duration(3); // + 3, stage::compute_shader), // measure after LOD stage
+			mLast3dModelsRenderDuration			= get_duration(4); // + 4, stage::color_attachment_output), // measure after rendering sponza
+			mLastTessNoaaDuration				= get_duration(5); // + 5, stage::color_attachment_output), // measure after Tess. noAA
+			mLastCopyToCombinedAttachmentDur	= get_duration(6); // + 6, stage::compute_shader), // measure after copy-over to combined attachment
+			mLastPatchToTileStepDuration		= get_duration(7); // + 7, stage::compute_shader), // measure after patch to tile step
+			mLastPointRenderingNoaaDuration		= get_duration(8); // + 8, stage::compute_shader), // measure after px fill (the version with the holes ^^)
+			mLastPointRenderingLocalFbDur		= get_duration(9); // + 9, stage::compute_shader), // measure after point rendering into local fb
+			mLastFSQbefore8xSSDuration			= get_duration(10); // + 10, stage::color_attachment_output), // measure after copy-over combined attachment back into a framebuffer image
+			mLastTess8xSSDuration				= get_duration(11); // + 11, stage::color_attachment_output), // measure after Tess. 8xSS
+			mLastFSQbefore4xSS8xMSDuration		= get_duration(12); // + 12, stage::color_attachment_output), // measure after copy-over combined attachment back into a framebuffer image
+			mLastTess4xSS8xMSDuration			= get_duration(13); // + 13, stage::color_attachment_output), // measure after rendering with Tess. 4xSS+8xMS
+			mLastTotalStepsDuration				= timers[13] - timers[0];
 
 			if (mGatherPipelineStats) {
                 mPipelineStats = mPipelineStatsPool->get_results<uint64_t, 3>(inFlightIndex, 1, vk::QueryResultFlagBits::e64);
@@ -2162,13 +2180,6 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 			mTimestampPool->write_timestamp(firstQueryIndex + 3, stage::compute_shader), // measure after LOD stage
 #endif
 
-
-
-
-
-
-
-
 			// 3) Render patches:
 
 			command::render_pass(mRenderpassNoAA.as_reference(), mFramebufferNoAA.as_reference(), command::gather(
@@ -2243,17 +2254,12 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 			mTimestampPool->write_timestamp(firstQueryIndex + 5, stage::color_attachment_output), // measure after Tess. noAA
 #endif
 
+			// 3.3) Copy whatever was rendered in noAA-fashion so far into combined attachment, s.t. point rendering can be added:
 
-
-
-
-
-
-
-
-			// 3.7) Color attachment has been resolved into non-super sampled image
-
-			sync::global_memory_barrier(stage::all_commands + access::memory_write >> stage::compute_shader + access::memory_read), // TODO: Barrier too heavy
+			sync::global_memory_barrier(
+				stage::early_fragment_tests | stage::late_fragment_tests | stage::color_attachment_output  >>  stage::compute_shader,
+				access::depth_stencil_attachment_write                   | access::color_attachment_write  >>  access::shader_read
+			), 
 
 			command::bind_pipeline(mCopyToCombinedAttachmentPipe.as_reference()),
 				command::bind_descriptors(mCopyToCombinedAttachmentPipe->layout(), mDescriptorCache->get_or_create_descriptor_sets({
@@ -2263,16 +2269,14 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 				})),
 			command::dispatch((resolution.x + 15u) / 16u, (resolution.y + 15u) / 16u, 1u),
 
-			sync::global_memory_barrier(stage::compute_shader + access::memory_write >> stage::compute_shader + access::memory_read),
+			sync::global_memory_barrier(stage::compute_shader + access::shader_write >> stage::compute_shader + (access::shader_read | access::shader_write)),
 
+				
+#if STATS_ENABLED
+			mTimestampPool->write_timestamp(firstQueryIndex + 6, stage::compute_shader), // measure after copy-over to combined attachment
+#endif
 
-
-
-
-
-			// 3.8) Perform point rendering into combined attachment 
-
-
+			// => Perform point rendering into combined attachment 
 #if SEPARATE_PATCH_TILE_ASSIGNMENT_PASS
 			// Inject another intermediate pass:
 			command::bind_pipeline(mSelectTilePatchesPipe.as_reference()),
@@ -2296,10 +2300,10 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 			sync::global_memory_barrier(stage::compute_shader + access::memory_write >> stage::compute_shader + access::memory_read),
 #endif
 #if STATS_ENABLED
-			mTimestampPool->write_timestamp(firstQueryIndex + 8, stage::compute_shader), // measure after patch to tile step
+			mTimestampPool->write_timestamp(firstQueryIndex + 7, stage::compute_shader), // measure after patch to tile step
 #endif
 
-			// 3rd pass compute shaders (two variants): px fill PER DRAW PACKAGE directly from compute shaders
+			// 3.4) Pixel fill directly into combined attachment ~1spp
             command::bind_pipeline(mPxFillComputePipe.as_reference()),
 			command::bind_descriptors(mPxFillComputePipe->layout(), mDescriptorCache->get_or_create_descriptor_sets({
 				descriptor_binding(0, 0, mFrameDataBuffers[inFlightIndex]), 
@@ -2324,9 +2328,11 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 				/* offset to the right struct member: */  + sizeof(VkDrawIndirectCommand::vertexCount)
 			), // => in order to use the instanceCount!
 
+#if STATS_ENABLED
+			mTimestampPool->write_timestamp(firstQueryIndex + 8, stage::compute_shader), // measure after px fill (the version with the holes ^^)
+#endif
 
-
-			// 3rd pass compute shaders (two variants): px fill PER DRAW PACKAGE directly from compute shaders
+			// 3.5) Pixel fill into local framebuffers (~4spp) then into combined attachment
             command::bind_pipeline(mPxFillLocalFbComputePipe.as_reference()),
 			command::bind_descriptors(mPxFillLocalFbComputePipe->layout(), mDescriptorCache->get_or_create_descriptor_sets({
 				descriptor_binding(0, 0, mFrameDataBuffers[inFlightIndex]), 
@@ -2351,10 +2357,10 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 			command::dispatch((resolution.x + PX_FILL_LOCAL_FB_TILE_SIZE_X - 1) / PX_FILL_LOCAL_FB_TILE_SIZE_X, (resolution.y + PX_FILL_LOCAL_FB_TILE_SIZE_Y - 1) / PX_FILL_LOCAL_FB_TILE_SIZE_Y, 1),
 
 #if STATS_ENABLED
-			mTimestampPool->write_timestamp(firstQueryIndex + 9, stage::compute_shader), // measure after point rendering
+			mTimestampPool->write_timestamp(firstQueryIndex + 9, stage::compute_shader), // measure after point rendering into local fb
 #endif
 
-			sync::global_memory_barrier(stage::all_commands + access::memory_write >> stage::all_commands + access::memory_read),// TODO: heavy barrier
+			sync::global_memory_barrier(stage::compute_shader + access::shader_write >> stage::fragment_shader + access::shader_read),
 
 //			// Copy from Uint64 image into back buffer:
 //			sync::image_memory_barrier(context().main_window()->current_backbuffer()->image_at(0),  // Window's back buffer's color attachment
@@ -2382,7 +2388,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 
 
 			command::render_pass(mRenderpassMS.as_reference(), mFramebufferMS.as_reference(), command::gather(
-				// 3.3) Full-screen quad noAA->MS
+				// 3.6) Full-screen quad noAA->MS
                 command::bind_pipeline(mFsQuadNoAAtoMSPipe.as_reference()),
 				command::push_constants(mFsQuadNoAAtoMSPipe->layout(), copy_to_backbuffer_push_constants{ 
 					mWhatToCopyToBackbuffer > 1 ? 0 : mWhatToCopyToBackbuffer // 0 => 0, 1 => 1, 2 => 0
@@ -2400,7 +2406,11 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 				
 				command::next_subpass(),
 
-				// 3.4) Render tessellated patches with 8xMS + sample shading => i.e., actually this is 8xSS
+#if STATS_ENABLED
+				mTimestampPool->write_timestamp(firstQueryIndex + 10, stage::color_attachment_output), // measure after copy-over combined attachment back into a framebuffer image
+#endif
+
+				// 3.7) Render tessellated patches with 8xMS + sample shading => i.e., actually this is 8xSS
                 command::bind_pipeline(tessPipePxFillMultisampledToBeUsed.as_reference()),
 				command::bind_descriptors(tessPipePxFillMultisampledToBeUsed->layout(), mDescriptorCache->get_or_create_descriptor_sets({
 					descriptor_binding(0, 0, mFrameDataBuffers[inFlightIndex]),
@@ -2431,16 +2441,12 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 
 
 #if STATS_ENABLED
-			mTimestampPool->write_timestamp(firstQueryIndex + 6, stage::color_attachment_output), // measure after Tess. 8xSS
+			mTimestampPool->write_timestamp(firstQueryIndex + 11, stage::color_attachment_output), // measure after Tess. 8xSS
 #endif
-
-
-
-
 
 			command::render_pass(mRenderpassSSMS.as_reference(), mFramebufferSSMS.as_reference(), command::gather(
 
-				// 3.5) Full-screen quad noAA->MS
+				// 3.8) Full-screen quad noAA->MS
                 command::bind_pipeline(mFsQuadMStoSSPipe.as_reference()),
 				command::bind_descriptors(mFsQuadMStoSSPipe->layout(), mDescriptorCache->get_or_create_descriptor_sets({
 					descriptor_binding(0, 0, mFsQuadColorSampler),
@@ -2453,7 +2459,11 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 				
 				command::next_subpass(),
 
-				// 3.6) Render tessellated patches with SS
+#if STATS_ENABLED
+				mTimestampPool->write_timestamp(firstQueryIndex + 12, stage::color_attachment_output), // measure after copy-over combined attachment back into a framebuffer image
+#endif
+
+				// 3.9) Render tessellated patches with SS
                 command::bind_pipeline(tessPipePxFillSupersampledToBeUsed.as_reference()),
 				command::bind_descriptors(tessPipePxFillSupersampledToBeUsed->layout(), mDescriptorCache->get_or_create_descriptor_sets({
 					descriptor_binding(0, 0, mFrameDataBuffers[inFlightIndex]),
@@ -2482,20 +2492,15 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 
 			)),
 
-
 #if STATS_ENABLED
-			mTimestampPool->write_timestamp(firstQueryIndex + 7, stage::color_attachment_output), // measure after rendering with Tess. 4xSS+8xMS
-#endif
+			mTimestampPool->write_timestamp(firstQueryIndex + 13, stage::color_attachment_output), // measure after rendering with Tess. 4xSS+8xMS
 
-
-#if STATS_ENABLED
 			commandsEndStats,
 #else
 			// Fascinating: Without that following barrier, we get rendering artifacts in the ABSENCE of the timestamp write!
 			// TODO:            ^ investigate further!
 			sync::global_memory_barrier(stage::fragment_shader | stage::compute_shader >> stage::compute_shader, access::shader_write >> access::shader_read),
 #endif
-		
 
 			// //That worked:
 			sync::image_memory_barrier(context().main_window()->current_backbuffer()->image_at(0),  // Window's back buffer's color attachment
@@ -2591,18 +2596,21 @@ private: // v== Member variables ==v
 
 #if STATS_ENABLED
     avk::query_pool mTimestampPool;
-	uint64_t mLastClearDuration = 0;
-	uint64_t mLastInitDuration = 0;
-	uint64_t mLastLodStageDuration = 0;
-	uint64_t mLast3dModelsRenderDuration = 0;
-	uint64_t mLastTess4xSSand8xMSRenderDuration = 0;
-	uint64_t mLastTessNoaaRenderDuration = 0;
-	uint64_t mLastTess8xSSRenderDuration = 0;
-	uint64_t mLastTotalTessRenderDuration = 0;
-	uint64_t mLastPatchToTileDuration = 0;
-	uint64_t mLastPointRenderDuration = 0;
-	uint64_t mLastBeginToParametricDuration = 0;
-	uint64_t mLastFrameDuration = 0;
+
+	uint64_t mLastClearDuration = 0;				// + 1, stage::compute_shader), // measure after clearing
+	uint64_t mLastInitDuration = 0;					// + 2, stage::compute_shader), // measure after init
+	uint64_t mLastLodStageDuration = 0;				// + 3, stage::compute_shader), // measure after LOD stage
+	uint64_t mLast3dModelsRenderDuration = 0;		// + 4, stage::color_attachment_output), // measure after rendering sponza
+	uint64_t mLastTessNoaaDuration = 0;				// + 5, stage::color_attachment_output), // measure after Tess. noAA
+	uint64_t mLastCopyToCombinedAttachmentDur = 0;	// + 6, stage::compute_shader), // measure after copy-over to combined attachment
+	uint64_t mLastPatchToTileStepDuration = 0;		// + 7, stage::compute_shader), // measure after patch to tile step
+	uint64_t mLastPointRenderingNoaaDuration = 0;	// + 8, stage::compute_shader), // measure after px fill (the version with the holes ^^)
+	uint64_t mLastPointRenderingLocalFbDur = 0;		// + 9, stage::compute_shader), // measure after point rendering into local fb
+	uint64_t mLastFSQbefore8xSSDuration = 0;		// + 10, stage::color_attachment_output), // measure after copy-over combined attachment back into a framebuffer image
+	uint64_t mLastTess8xSSDuration = 0;				// + 11, stage::color_attachment_output), // measure after Tess. 8xSS
+	uint64_t mLastFSQbefore4xSS8xMSDuration = 0;	// + 12, stage::color_attachment_output), // measure after copy-over combined attachment back into a framebuffer image
+	uint64_t mLastTess4xSS8xMSDuration = 0;			// + 13, stage::color_attachment_output), // measure after rendering with Tess. 4xSS+8xMS
+	uint64_t mLastTotalStepsDuration = 0;
 
 	avk::query_pool mPipelineStatsPool;
 	std::array<uint64_t, 3> mPipelineStats;
