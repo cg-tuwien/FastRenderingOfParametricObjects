@@ -547,8 +547,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
                 vertex_shader("shaders/full_screen_quad.vert"),
 				fragment_shader("shaders/full_screen_quad_from_combined_attachment.frag"),
                 cfg::front_face::define_front_faces_to_be_counter_clockwise(),
-			    //mBackfaceCullingOn ? cfg::culling_mode::cull_back_faces : cfg::culling_mode::disabled,
-				cfg::culling_mode::disabled,
+			    cfg::culling_mode::cull_back_faces,
 
 				cfg::viewport_depth_scissors_config::from_framebuffer(mFramebufferMS.as_reference()),
 				mRenderpassMS, cfg::subpass_index{ 0u }, 
@@ -572,8 +571,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
                 vertex_shader("shaders/full_screen_quad.vert"),
 				fragment_shader("shaders/full_screen_quad.frag"),
                 cfg::front_face::define_front_faces_to_be_counter_clockwise(),
-			    //mBackfaceCullingOn ? cfg::culling_mode::cull_back_faces : cfg::culling_mode::disabled,
-				cfg::culling_mode::disabled,
+			    cfg::culling_mode::cull_back_faces,
 
 				cfg::viewport_depth_scissors_config::from_framebuffer(mFramebufferSSMS.as_reference()),
 				mRenderpassSSMS, cfg::subpass_index{ 0u }, 
@@ -697,8 +695,8 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 					access::none   >>   access::color_attachment_write | access::depth_stencil_attachment_read | access::depth_stencil_attachment_write
 				},
 				subpass_dependency{subpass::index(0) >> subpass::external, 
-					stage::fragment_shader       | stage::color_attachment_output  >>   stage::compute_shader                                      | stage::transfer,
-					access::shader_storage_write | access::color_attachment_write  >>   access::shader_storage_read | access::shader_storage_write | access::memory_read
+					stage::color_attachment_output | stage::early_fragment_tests | stage::late_fragment_tests                        >>  stage::compute_shader                                     ,
+					access::color_attachment_write | access::depth_stencil_attachment_read | access::depth_stencil_attachment_write  >>  access::shader_storage_read | access::shader_storage_write
 				}
 			});
 
@@ -714,16 +712,16 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
                 attachment::declare(depthFormatMS        , on_load::clear.from_previous_layout(layout::undefined), usage::depth_stencil >> usage::depth_stencil + usage::resolve_to(1), on_store::dont_care)
             }, {
 				subpass_dependency{subpass::external >> subpass::index(0),
-					stage::none    >>   stage::all_graphics,
+					stage::none    >>   stage::color_attachment_output | stage::early_fragment_tests | stage::late_fragment_tests,
 					access::none   >>   access::color_attachment_write | access::depth_stencil_attachment_read | access::depth_stencil_attachment_write
 				},
 				subpass_dependency{subpass::index(0) >> subpass::index(1),
-					stage::all_graphics                                                       >>   stage::all_graphics,
-					access::color_attachment_write | access::depth_stencil_attachment_write   >>   access::color_attachment_write | access::depth_stencil_attachment_read | access::depth_stencil_attachment_write
+					stage::color_attachment_output | stage::early_fragment_tests | stage::late_fragment_tests  >>   stage::color_attachment_output | stage::early_fragment_tests | stage::late_fragment_tests,
+					access::color_attachment_write | access::depth_stencil_attachment_write                    >>   access::color_attachment_write | access::depth_stencil_attachment_read | access::depth_stencil_attachment_write
 				},
 				subpass_dependency{subpass::index(1) >> subpass::external, // MS rendering
-					stage::fragment_shader       | stage::color_attachment_output  >>   stage::compute_shader                                      | stage::transfer,
-					access::shader_storage_write | access::color_attachment_write  >>   access::shader_storage_read | access::shader_storage_write | access::memory_read
+					stage::color_attachment_output | stage::early_fragment_tests | stage::late_fragment_tests   >>   stage::color_attachment_output | stage::early_fragment_tests | stage::late_fragment_tests,
+					access::color_attachment_write | access::depth_stencil_attachment_write                     >>   access::color_attachment_write | access::depth_stencil_attachment_read | access::depth_stencil_attachment_write
 				}
 			});
 
@@ -741,16 +739,16 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
                 attachment::declare(depthFormatMS        , on_load::clear.from_previous_layout(layout::undefined), usage::depth_stencil >> usage::depth_stencil + usage::resolve_to(1) , on_store::dont_care)
             }, {
 				subpass_dependency{subpass::external >> subpass::index(0),
-					stage::none    >>   stage::all_graphics,
-					access::none   >>   access::color_attachment_write | access::depth_stencil_attachment_read | access::depth_stencil_attachment_write
+					stage::color_attachment_output | stage::early_fragment_tests | stage::late_fragment_tests   >>   stage::color_attachment_output | stage::early_fragment_tests | stage::late_fragment_tests,
+					access::color_attachment_write | access::depth_stencil_attachment_write                     >>   access::color_attachment_write | access::depth_stencil_attachment_read | access::depth_stencil_attachment_write
 				},
 				subpass_dependency{subpass::index(0) >> subpass::index(1), // Full-screen quad NoAA -> MS
-					stage::all_graphics                                                       >>   stage::all_graphics,
-					access::color_attachment_write | access::depth_stencil_attachment_write   >>   access::color_attachment_write | access::depth_stencil_attachment_read | access::depth_stencil_attachment_write
+					stage::color_attachment_output | stage::early_fragment_tests | stage::late_fragment_tests   >>   stage::color_attachment_output | stage::early_fragment_tests | stage::late_fragment_tests,
+					access::color_attachment_write | access::depth_stencil_attachment_write                     >>   access::color_attachment_write | access::depth_stencil_attachment_read | access::depth_stencil_attachment_write
 				},
 				subpass_dependency{subpass::index(1) >> subpass::external,
-					stage::fragment_shader       | stage::color_attachment_output  >>   stage::compute_shader                                      | stage::transfer,
-					access::shader_storage_write | access::color_attachment_write  >>   access::shader_storage_read | access::shader_storage_write | access::memory_read
+					stage::color_attachment_output  >>  stage::transfer,
+					access::color_attachment_write  >>  access::memory_read
 				}
 			});
 
@@ -2441,7 +2439,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 
 
 #if STATS_ENABLED
-			mTimestampPool->write_timestamp(firstQueryIndex + 11, stage::color_attachment_output), // measure after Tess. 8xSS
+			mTimestampPool->write_timestamp(firstQueryIndex + 11, stage::all_commands), // measure after Tess. 8xSS
 #endif
 
 			command::render_pass(mRenderpassSSMS.as_reference(), mFramebufferSSMS.as_reference(), command::gather(
@@ -2460,7 +2458,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 				command::next_subpass(),
 
 #if STATS_ENABLED
-				mTimestampPool->write_timestamp(firstQueryIndex + 12, stage::color_attachment_output), // measure after copy-over combined attachment back into a framebuffer image
+				mTimestampPool->write_timestamp(firstQueryIndex + 12, stage::all_commands), // measure after copy-over combined attachment back into a framebuffer image
 #endif
 
 				// 3.9) Render tessellated patches with SS

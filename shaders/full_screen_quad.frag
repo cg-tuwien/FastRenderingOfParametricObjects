@@ -25,5 +25,6 @@ layout (location = 0) out vec4 fs_out;
 void main() 
 {
 	fs_out       = texture(sampler2D(uColorTex, uColorSampler), v_in.texCoords);
+//	gl_FragDepth = 0.9999;
 	gl_FragDepth = texture(sampler2D(uDepthTex, uDepthSampler), v_in.texCoords).r;
 }

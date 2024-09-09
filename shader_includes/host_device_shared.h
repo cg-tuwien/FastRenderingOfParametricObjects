@@ -32,7 +32,7 @@
 #define MAX_INDICES					134217728
 
 //// Whether statistics are enabled at all
-#define STATS_ENABLED               1
+#define STATS_ENABLED               0
 
 // Enable/disable local rasterization into shared memory in px fill shaders:
 #define SHARED_MEM_LOCAL_RASTER     0
