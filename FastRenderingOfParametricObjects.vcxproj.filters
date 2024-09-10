@@ -26,6 +26,9 @@
     <Filter Include="shader_includes\parametric_functions">
       <UniqueIdentifier>{f198a94d-488e-43d8-b4c6-7f874add684c}</UniqueIdentifier>
     </Filter>
+    <Filter Include="host_code\perf_tests">
+      <UniqueIdentifier>{b19b560e-20fb-48a9-a89d-fbfb113a3a68}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <None Include="shaders\frag_out.frag">
@@ -184,6 +187,15 @@
     </ClInclude>
     <ClInclude Include="host_code\big_dataset.hpp">
       <Filter>host_code</Filter>
+    </ClInclude>
+    <ClInclude Include="host_code\perf_tests\test_fiber_curves.hpp">
+      <Filter>host_code\perf_tests</Filter>
+    </ClInclude>
+    <ClInclude Include="host_code\perf_tests\test_knit_yarn.hpp">
+      <Filter>host_code\perf_tests</Filter>
+    </ClInclude>
+    <ClInclude Include="host_code\perf_tests\test_seashell.hpp">
+      <Filter>host_code\perf_tests</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

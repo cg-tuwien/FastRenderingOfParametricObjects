@@ -36,8 +36,6 @@ layout (location = 0) out PerVertexPayload
 
 layout(push_constant) uniform PushConstants
 {
-    float mConstOuterSubdivLevel;
-    float mConstInnerSubdivLevel;
     int   mPxFillParamsBufferOffset;
 }
 pushConstants;

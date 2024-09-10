@@ -20,8 +20,8 @@
 #include "ImGuizmo.h"
 #include "big_dataset.hpp"
 
+#define NUM_PREDEFINED_MATERIALS 5
 #define NUM_TIMESTAMP_QUERIES 14
-
 #define NUM_DIFFERENT_RENDER_VARIANTS 5
 
 // Sample count possible values:
@@ -37,70 +37,13 @@
 #define SSAA_ENABLED 1
 #define SSAA_FACTOR  glm::uvec2(2, 2)
 
-#define TEST_MODE_ON                   1
-#define TEST_GATHER_PIPELINE_STATS     1
-#define TEST_ALLOW_GATHER_STATS        1
-#define TEST_DURATION_PER_STEP          2.5f
-#define TEST_GATHER_TIMER_QUERIES      1
-
-// UNCOMMENT FOR KNIT YARN MEASUREMENT:
-#define TEST_CAMDIST                    0.4f
-#define TEST_CAMERA_DELTA_POW           2.2f
-#define TEST_TRANSLATE_Y               false
-#define TEST_TRANSLATE_Z               true
-#define TEST_CAM_Y_SHIFT               4.08f
-#define TEST_ENABLE_OBJ_IDX            18
-#define TEST_INNER_TESS_LEVEL          19
-#define TEST_OUTER_TESS_LEVEL          19
-#define TEST_SCREEN_DISTANCE_THRESHOLD 62
-#define TEST_USEINDIVIDUAL_PATCH_RES   1
-#define TEST_ENABLE_3D_MODEL           0
-#define POINT_RENDERIN_PATCH_RES_S_X   1.2f
-#define POINT_RENDERIN_PATCH_RES_S_Y   1.2f
-
-//// UNCOMMENT FOR FIBER CURVES MEASUREMENT:
-//#define TEST_CAMDIST                    0.4f
-//#define TEST_CAMERA_DELTA_POW           2.2f
-//#define TEST_TRANSLATE_Y               false
-//#define TEST_TRANSLATE_Z               true
-//#define TEST_CAM_Y_SHIFT               4.08f
-//#define TEST_ENABLE_OBJ_IDX            19
-//#define TEST_INNER_TESS_LEVEL          19
-//#define TEST_OUTER_TESS_LEVEL          19
-//#define TEST_SCREEN_DISTANCE_THRESHOLD 62
-//#define TEST_USEINDIVIDUAL_PATCH_RES   1
-//#define TEST_ENABLE_3D_MODEL           0
-//#define POINT_RENDERIN_PATCH_RES_S_X   1.2f
-//#define POINT_RENDERIN_PATCH_RES_S_Y   1.2f
-
-//// UNCOMMENT FOR SEASHELL MEASUREMENT:
-//#define TEST_CAMDIST                    4.0f
-//#define TEST_CAMERA_DELTA_POW           1.5f
-//#define TEST_TRANSLATE_Y               false
-//#define TEST_TRANSLATE_Z               true
-//#define TEST_CAM_Y_SHIFT               0.0f
-//#define TEST_ENABLE_OBJ_IDX            20
-//#define TEST_INNER_TESS_LEVEL          64
-//#define TEST_OUTER_TESS_LEVEL          64
-//#define TEST_SCREEN_DISTANCE_THRESHOLD 62
-//#define TEST_USEINDIVIDUAL_PATCH_RES   0
-//#define TEST_ENABLE_3D_MODEL           0
-//#define POINT_RENDERIN_PATCH_RES_S_X   1.5f
-//#define POINT_RENDERIN_PATCH_RES_S_Y   1.5f
-
-// ================= UNCOMMENT FOR PATCH->TESS RENDERING METHOD ======================
-// Values: rendering_variant::point_rendered | rendering_variant::tessellated_rasterized
+// TEST_MODE: Uncomment one of the following includes to load a specific configuration for test mode.
+//            It will then be tested with the rendering variant assigned to TEST_RENDERING_METHOD.
+//            Once the application has started, start the test with [Space].
+#include "perf_tests/test_knit_yarn.hpp"
+#include "perf_tests/test_fiber_curves.hpp"
+#include "perf_tests/test_seashell.hpp"
 #define TEST_RENDERING_METHOD          rendering_variant::tessellated_rasterized
-// Values: 0 = Uint64 image | 3 = framebuffer (must use that for SSAA or MSAA)
-#define TEST_TARGET_IMAGE              3
-
-//// ================= UNCOMMENT FOR POINT->PATCH RENDERING METHOD =====================
-//// Values: rendering_variant::point_rendered | rendering_variant::tessellated_rasterized
-//#define TEST_RENDERING_METHOD          rendering_variant::point_rendered
-//// Values: 0 = Uint64 image | 3 = framebuffer (must use that for SSAA or MSAA)
-//#define TEST_TARGET_IMAGE              0
-
-#define NUM_PREDEFINED_MATERIALS 5
 
 static std::array<parametric_object, 13> PredefinedParametricObjects {{
 	parametric_object{"Sphere"      , "assets/po-sphere-patches.png",     false, parametric_object_type::Sphere,                 0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>() , glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{ 0.f,  0.f,  0.f})},
@@ -805,13 +748,18 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 			}
             tmp.mTransformationMatrix = po.transformation_matrix();
 			tmp.mMaterialIndex = po.material_index();
-			tmp.mUseAdaptiveDetail = mAdaptivePxFill ? 1 : 0;
+			tmp.mUseAdaptiveDetail = po.adaptive_rendering_on() ? 1 : 0;
 			tmp.mRenderingVariantIndex = get_rendering_variant_index(po.how_to_render());
 
 			tmp.mLodAndRenderSettings = { 
 				po.parameters_epsilon()[0], po.parameters_epsilon()[1],
 				po.screen_distance_threshold() / get_screen_space_threshold_divisor(po.how_to_render()),
-				po.sampling_factor()
+				0xDAD
+			};
+
+			tmp.mTessAndSamplingSettings = {
+				po.tessellation_levels().x, po.tessellation_levels().y,
+				po.sampling_factors().x   , po.sampling_factors().y
 			};
 			
 			tmp.mUserData = { 0, 0, 0, 0 };
@@ -1054,6 +1002,28 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 				}
 				ImGui::PopID();
 			}
+
+			// One more row just for SH glyphs:
+			ImGui::TableNextRow();
+			poId = 0;
+			for (auto& po : mParametricObjects) {
+				ImGui::TableNextColumn();
+				ImGui::PushID(poId++);
+				if (po.param_obj_type() == parametric_object_type::SHGlyph) {
+					int tmpOrder = mDebugSlidersi[0];
+					ImGui::SliderInt("SH Order", &tmpOrder, 2, 12);
+					tmpOrder = (tmpOrder / 2) * 2;
+					mDebugSlidersi[0] = tmpOrder;
+				}
+				if (po.param_obj_type() == parametric_object_type::SHBrain) {
+					int tmpOrder = mDebugSlidersi[1];
+					ImGui::SliderInt("SH Order", &tmpOrder, 2, 12);
+					tmpOrder = (tmpOrder / 2) * 2;
+					mDebugSlidersi[1] = tmpOrder;
+				}
+				ImGui::PopID();
+			}
+
 			ImGui::EndTable();
 		}
 		ImGui::End();
@@ -1098,9 +1068,24 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 					updateObjects = true;
 				}
 
-				auto f = po.sampling_factor();
-				if (ImGui::DragFloat("Sampling Factor", &f, 0.01f)) {
-					po.set_sampling_factor(f);
+				ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "Tessellation variants only:");
+				auto tesslvls = po.tessellation_levels();
+				if (ImGui::SliderFloat2("Tess. levels: inner | outer", &tesslvls[0], 1.0f, 64.0f, "%.1f")) {
+					po.set_tessellation_levels(tesslvls);
+					updateObjects = true;
+				}
+
+				ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "Point rendering variants only:");
+				auto f = po.sampling_factors();
+				if (ImGui::DragFloat2("Sampling Factors (u, v)", &f[0], 0.01f)) {
+					po.set_sampling_factors(f);
+					updateObjects = true;
+				}
+
+				ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "Applies to all variants:");
+				auto adaptive = po.adaptive_rendering_on();
+				if (ImGui::Checkbox("Adaptive tessellation/sampling density", &adaptive)) {
+					po.set_adaptive_rendering_on(adaptive);
 					updateObjects = true;
 				}
 
@@ -1521,29 +1506,9 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 				rasterPipesNeedRecreation = ImGui::Checkbox("Backface Culling ON", &mBackfaceCullingOn) || rasterPipesNeedRecreation;
 				rasterPipesNeedRecreation = ImGui::Checkbox("Disable Color Attachment Output" , &mDisableColorAttachmentOut) || rasterPipesNeedRecreation;
 
-				ImGui::Text("[F6] ... toggle wireframe mode (currently %s)", mWireframeModeOn ? "ON" : "OFF");
+				ImGui::Checkbox("Render in wireframe mode ([F1] to toggle)", &mWireframeModeOn);
 
-				// Just some Debug stuff:
-				ImGui::Separator();
-				ImGui::Text("DEBUG SLIDERS:");
-                ImGui::PushItemWidth(imGuiWindowWidth * 0.6f);
-				ImGui::SliderFloat("LERP SH <-> Sphere (aka float dbg slider #1)", &mDebugSliders[0], 0.0f, 1.0f);
-				ImGui::SliderInt("SH Band           (aka int dbg slider #1)", &mDebugSlidersi[0],  0, 31);
-				ImGui::SliderInt("SH Basis Function (aka int dbg slider #2)", &mDebugSlidersi[1], -mDebugSlidersi[0], mDebugSlidersi[0]);
-				ImGui::Text("##lololo");
-				ImGui::SliderFloat("Terrain height (aka float dbg slider #2)", &mDebugSliders[1], 0.0f, 10.0f);
-				ImGui::PopItemWidth();
-
-				// Automatic performance measurement, camera flight:
-				ImGui::Separator();
-				ImGui::Checkbox("Start performance measurement 4s", &mStartMeasurement);
-				ImGui::SliderFloat("Camera distance from origin", &mDistanceFromOrigin, 5.0f, 100.0f, "%.0f");
-				ImGui::Checkbox("Move camera in steps during measurements", &mMoveCameraDuringMeasurements);
-				ImGui::SliderInt("#steps to move the camera closer/away", &mMeasurementMoveCameraSteps, 0, 10);
-				ImGui::DragFloat("Delta by how much to move the camera with each step", &mMeasurementMoveCameraDelta, 0.1f);
-
-				ImGui::Separator();
-                if (ImGui::Checkbox("Animations paused (freeze time)", &mAnimationPaused)) {
+				if (ImGui::Checkbox("Animations paused (freeze time)", &mAnimationPaused)) {
                     if (mAnimationPaused) {
                         mAnimationPauseTime = time().absolute_time();
                     }
@@ -1552,12 +1517,33 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
                     }
                 }
 
-				ImGui::Checkbox("Use individual patch resolution during px fill", &mUseMaxPatchResolutionDuringPxFill);
+				//// Just some Debug stuff:
+				//ImGui::Separator();
+				//ImGui::Text("DEBUG SLIDERS:");
+    //            ImGui::PushItemWidth(imGuiWindowWidth * 0.6f);
+				//ImGui::SliderFloat("LERP SH <-> Sphere (aka float dbg slider #1)", &mDebugSliders[0], 0.0f, 1.0f);
+				//ImGui::SliderInt("SH Band           (aka int dbg slider #1)", &mDebugSlidersi[0],  0, 31);
+				//ImGui::SliderInt("SH Basis Function (aka int dbg slider #2)", &mDebugSlidersi[1], -mDebugSlidersi[0], mDebugSlidersi[0]);
+				//ImGui::Text("##lololo");
+				//ImGui::SliderFloat("Terrain height (aka float dbg slider #2)", &mDebugSliders[1], 0.0f, 10.0f);
+				//ImGui::PopItemWidth();
 
-				ImGui::End();
+				// Automatic performance measurement, camera flight:
+				ImGui::Separator();
+#if TEST_MODE_ON 
+				ImGui::Checkbox("[Space] ... Start performance measurement (as configured with TEST_MODE_ON)", &mStartMeasurement);
+#else 
+				ImGui::Checkbox("Start performance measurement 4s", &mStartMeasurement);
+				ImGui::SliderFloat("Test duration per step", &mTestDurationPerStep, 0.5f, 5.0f, "%.2f");
+				ImGui::SliderFloat("Camera distance from origin", &mDistanceFromOrigin, 5.0f, 100.0f, "%.0f");
+				ImGui::Checkbox("Move camera in steps during measurements", &mMoveCameraDuringMeasurements);
+				ImGui::SliderInt("#steps to move the camera closer/away", &mMeasurementMoveCameraSteps, 0, 10);
+				ImGui::DragFloat("Delta by how much to move the camera with each step", &mMeasurementMoveCameraDelta, 0.1f);
+#endif
+
+				ImGui::Separator();
 
 				if (mGatherPipelineStats) {
-				    ImGui::Begin("Stats and Counters");
 			        ImGui::TextColored(ImVec4(.8f, .1f, .6f, 1.f), "Parametric func. evaluations and pixel writes:");
 				    std::array<std::string, 3> counterDescriptions = { {
 				        "total #parametric function evaluations (lod + culling + rendering)",
@@ -1583,8 +1569,10 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 					ImGui::Text(std::format("{:12L} pixel fill patches spawned[2]", mNumPxFillPatchesCreated[2]).c_str());
 					ImGui::Text(std::format("{:12L} pixel fill patches spawned[3]", mNumPxFillPatchesCreated[3]).c_str());
 					ImGui::Text(std::format("{:12L} pixel fill patches spawned[4]", mNumPxFillPatchesCreated[4]).c_str());
-					ImGui::End();
 				}
+
+				ImGui::End();
+
 
 				// Do we need to recreate the vertex pipe?
 				if (rasterPipesNeedRecreation) {
@@ -1632,7 +1620,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 							push_constant_binding_data{shader_type::all, 0, sizeof(patch_into_tess_push_constants)},
 							cfg::shade_per_sample(),
 							cfg::viewport_depth_scissors_config::from_framebuffer(mFramebufferMS.as_reference()),
-							mRenderpassMS, cfg::subpass_index{ 2 }
+							mRenderpassMS, cfg::subpass_index{ 1 }
 						);
 						std::swap(*mTessPipelinePxFillMultisampled, *newTessPipePxFillSpS);
 						context().main_window()->handle_lifetime(std::move(newTessPipePxFillSpS));
@@ -1693,20 +1681,20 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
         }
 
 		// F6 ... toggle wireframe mode
-		if (input().key_pressed(key_code::f6)) {
+		if (input().key_pressed(key_code::f1)) {
 			mWireframeModeOn = !mWireframeModeOn;
 		}
 
-		if (input().key_pressed(key_code::u)) {
+		if (input().key_pressed(key_code::f3)) {
 			mWhatToCopyToBackbuffer = 0;
         }
-		if (input().key_pressed(key_code::h)) {
+		if (input().key_pressed(key_code::f4)) {
 			mWhatToCopyToBackbuffer = 1;
         }
-		if (input().key_pressed(key_code::b)) {
+		if (input().key_pressed(key_code::f5)) {
 			mWhatToCopyToBackbuffer = 2;
         }
-		if (input().key_pressed(key_code::f)) {
+		if (input().key_pressed(key_code::f6)) {
 			mWhatToCopyToBackbuffer = 3;
         }
 
@@ -1727,14 +1715,15 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 		if (mStartMeasurement) {
 #if TEST_MODE_ON
 			for (int ii = 0; ii < mParametricObjects.size(); ++ii) {
-				mParametricObjects[ii].set_enabled(ii == TEST_ENABLE_OBJ_IDX);
+				if (ii == TEST_ENABLE_OBJ_IDX) {
+					mParametricObjects[ii].set_enabled(true);
+					mParametricObjects[ii].set_tessellation_levels({ static_cast<float>(TEST_INNER_TESS_LEVEL), static_cast<float>(TEST_OUTER_TESS_LEVEL) });
+					mParametricObjects[ii].set_adaptive_rendering_on(1 == TEST_USEINDIVIDUAL_PATCH_RES);
+					break;
+				}
 			}
 			fill_object_data_buffer();
-			mConstInnerTessLevel = static_cast<float>(TEST_INNER_TESS_LEVEL);
-			mConstOuterTessLevel = static_cast<float>(TEST_OUTER_TESS_LEVEL);
-			mUseMaxPatchResolutionDuringPxFill = 1 == TEST_USEINDIVIDUAL_PATCH_RES;
 			mRenderExtra3DModel = 1 == TEST_ENABLE_3D_MODEL;
-			mWhatToCopyToBackbuffer = TEST_TARGET_IMAGE;
 			mGatherPipelineStats = 1 == TEST_GATHER_PIPELINE_STATS;
 #endif
 #if TEST_MODE_ON && !TEST_ALLOW_GATHER_STATS
@@ -2039,7 +2028,6 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
         uboData.mDebugSliders                              = mDebugSliders;
         uboData.mDebugSlidersi                             = mDebugSlidersi;
 		uboData.mHeatMapEnabled                            = mWhatToCopyToBackbuffer == 1 || mWhatToCopyToBackbuffer == 2 ? VK_TRUE : VK_FALSE;
-        uboData.mUseMaxPatchResolutionDuringPxFill         = mUseMaxPatchResolutionDuringPxFill ? VK_TRUE : VK_FALSE;
 		uboData.mWriteToCombinedAttachmentInFragmentShader = 3 != mWhatToCopyToBackbuffer ? VK_TRUE : VK_FALSE;
         uboData.mGatherPipelineStats                       = mGatherPipelineStats;
         uboData.mAbsoluteTime                              = (mAnimationPaused ? mAnimationPauseTime : time().absolute_time()) - mTimeToSubtract;
@@ -2237,7 +2225,6 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 				})),
 					
 				command::push_constants(tessPipePxFillNoaaToBeUsed->layout(), patch_into_tess_push_constants{ 
-					mConstOuterTessLevel, mConstInnerTessLevel, 
 					get_rendering_variant_index(rendering_variant::Tess_noAA) * MAX_INDIRECT_DISPATCHES 
 				}),
 				command::draw_vertices_indirect(
@@ -2426,7 +2413,6 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 				})),
 					
 				command::push_constants(tessPipePxFillMultisampledToBeUsed->layout(), patch_into_tess_push_constants{ 
-					mConstOuterTessLevel, mConstInnerTessLevel, 
 					get_rendering_variant_index(rendering_variant::Tess_8xSS) * MAX_INDIRECT_DISPATCHES 
 				}),
 				command::draw_vertices_indirect(
@@ -2479,7 +2465,6 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 				})),
 
 				command::push_constants(tessPipePxFillSupersampledToBeUsed->layout(), patch_into_tess_push_constants{ 
-					mConstOuterTessLevel, mConstInnerTessLevel, 
 					get_rendering_variant_index(rendering_variant::Tess_4xSS_8xMS) * MAX_INDIRECT_DISPATCHES 
 				}),
 				command::draw_vertices_indirect(
@@ -2645,8 +2630,6 @@ private: // v== Member variables ==v
 	avk::graphics_pipeline mFsQuadMStoSSPipe;
 	avk::sampler mFsQuadColorSampler;
 	avk::sampler mFsQuadDepthSampler;
-	float mConstOuterTessLevel = 16.0;
-	float mConstInnerTessLevel = 16.0;
 
 #if STATS_ENABLED
     bool mGatherPipelineStats      = true;
@@ -2676,8 +2659,6 @@ private: // v== Member variables ==v
 
 	// Other, global settings, stored in common UBO:
     bool m2ndPassEnabled = false;
-    bool mAdaptivePxFill = false;
-    bool mUseMaxPatchResolutionDuringPxFill = true;
 
 	// Buffers for vertex pipelines:
 	avk::buffer mPositionsBuffer;

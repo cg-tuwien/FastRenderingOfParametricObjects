@@ -289,6 +289,7 @@ void main()
 		const bool  useAdaptive          = uObjectData.mElements[objectId].mUseAdaptiveDetail == 1; 
 		const vec4  lodAndRenderSettings = uObjectData.mElements[objectId].mLodAndRenderSettings;
 		const vec2  epsilons             = uObjectData.mElements[objectId].mLodAndRenderSettings.xy;
+		const vec2  samplingScalers      = uObjectData.mElements[objectId].mTessAndSamplingSettings.zw;
 
 		vec2 paramsStart = vec2(
 			uPxFillParams.mElements[pxFillId].mParams[0],
@@ -309,7 +310,7 @@ void main()
 
 		// Let's see how many iterations we need in each direction:
 		const float numPixelProducingInvocs = float(gl_WorkGroupSize.x - 1);
-		float numIterationsU = ubo.mUseMaxPatchResolutionDuringPxFill 
+		float numIterationsU = useAdaptive
 			? max(floor((uPxFillParams.mElements[pxFillId].mScreenDists.x * float(TILE_FACTOR_X) * STEP_SCALE_U + numPixelProducingInvocs - 1) / numPixelProducingInvocs), 1.0)
 			:     floor((screenSpaceThreshold                             * float(TILE_FACTOR_X) * STEP_SCALE_U + numPixelProducingInvocs - 1) / numPixelProducingInvocs);
 	//	debugPrintfEXT("mPatchTargetResolution[%f], numPixelProducingInvocs[%f], numIterationsU[%f]", pushConstants.mPatchTargetResolution, numPixelProducingInvocs, numIterationsU);
@@ -317,11 +318,13 @@ void main()
 		// With that info, calc our deltas:
 		float iterationDeltaU = paramsRange[0] / numIterationsU;
 		float deltaU = iterationDeltaU / numPixelProducingInvocs;
-		float deltaV = ubo.mUseMaxPatchResolutionDuringPxFill 
+		float deltaV = useAdaptive
 			? paramsRange[1] / max(uPxFillParams.mElements[pxFillId].mScreenDists.y * float(TILE_FACTOR_Y) * STEP_SCALE_V - 1.0, 1.0)  // -1.0 because we need to overshoot by one
 			: paramsRange[1] /    (screenSpaceThreshold                             * float(TILE_FACTOR_Y) * STEP_SCALE_V - 1.0); // -1.0 because we need to overshoot by one
 	//	debugPrintfEXT("iterationDeltaU[%f], deltaU[%f], deltaV[%f]", iterationDeltaU, deltaU, deltaV);
 
+		deltaU *= samplingScalers[0];
+		deltaV *= samplingScalers[1];
 		iterationDeltaU = deltaU * numPixelProducingInvocs;
 
 		const float vTarget = paramsRange[1] + deltaV; // Gotta run for +1 because we're wasting te top-most row.
@@ -355,20 +358,20 @@ void main()
 				vec3 vpcPong = calcPoint(u, v, curveIndex, userData, tM, /* out: */ wsPong_untranslated, /* out: */ wsPong, /* out: */ offPong);
 
 				bool tryAgain = false;
-				if (useAdaptive) {
-					// Adaptive deltaV:
-					float pxDist = dot(vpcPong.xy - vpcPing.xy, vpcPong.xy - vpcPing.xy);
-					if (isnan(pxDist)) pxDist = 0.0;
-					const float subgroupMaxDist = subgroupMax(pxDist);
-					const bool  distTooLarge    = subgroupMaxDist > 1.4 && deltaV > minDeltaV;
-					const bool  distABitSmall   = subgroupMaxDist < 0.7 && deltaV < maxDeltaV;
-					if (distTooLarge) {
-						iv -= deltaV; // Try again
-						deltaV = clamp(deltaV - deltaVDecrease, minDeltaV, maxDeltaV);
-						iv += deltaV; // ...but slower.
-						tryAgain = true;
-					}
-				}
+//				if (useAdaptive) { NOTE: The old meaning of "useAdaptive" was that step sizes would be adapted => TO BE REFACTORED!
+//					// Adaptive deltaV:
+//					float pxDist = dot(vpcPong.xy - vpcPing.xy, vpcPong.xy - vpcPing.xy);
+//					if (isnan(pxDist)) pxDist = 0.0;
+//					const float subgroupMaxDist = subgroupMax(pxDist);
+//					const bool  distTooLarge    = subgroupMaxDist > 1.4 && deltaV > minDeltaV;
+//					const bool  distABitSmall   = subgroupMaxDist < 0.7 && deltaV < maxDeltaV;
+//					if (distTooLarge) {
+//						iv -= deltaV; // Try again
+//						deltaV = clamp(deltaV - deltaVDecrease, minDeltaV, maxDeltaV);
+//						iv += deltaV; // ...but slower.
+//						tryAgain = true;
+//					}
+//				}
 
 				if (!tryAgain) {
 					// Attention: The very last invocations do NOT produce pixels!!!! (We have to "waste" them for calculating normals)
