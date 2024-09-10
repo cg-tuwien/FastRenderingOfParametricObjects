@@ -121,6 +121,26 @@ static float get_screen_space_threshold_divisor(rendering_variant aRenderMethod)
     }
 }
 
+static const char* get_rendering_variant_description(rendering_variant aRenderMethod)
+{
+    switch (aRenderMethod) {
+    case rendering_variant::Tess_noAA: 
+        return "Tess_noAA";
+    case rendering_variant::Tess_8xSS: 
+        return "Tess_8xSS";
+    case rendering_variant::Tess_4xSS_8xMS:
+        return "Tess_4xSS_8xMS";
+    case rendering_variant::PointRendered_direct:
+        return "PointRendered_direct";
+    case rendering_variant::PointRendered_4xSS_local_fb:
+        return "PointRendered_4xSS_local_fb";
+    case rendering_variant::Hybrid:
+        return "Hybrid";
+    default:
+        return "-ERROR-";
+    }
+}
+
 // ATTENTION: Whenever you add a new enum item  ^^^  here, also add it to the string  vvv  here!
 static const char* PARAMETRIC_OBJECT_TYPE_UI_STRING
 	= "Plane\0Sphere\0Palm Tree Trunk\0JohisHeart\0Spiky Heart\0SH Glyph\0SH Brain Dataset\0Single Yarn Curve\0Single Fiber Curve\0Curtain Yarn Curves\0Curtain Fiber Curves\0Seashell 1\0Seashell 2\0Seashell 3\0Giant Worm\0";

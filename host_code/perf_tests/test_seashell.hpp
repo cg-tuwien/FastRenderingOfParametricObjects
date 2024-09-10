@@ -11,7 +11,7 @@
 #define TEST_TRANSLATE_Y               false
 #define TEST_TRANSLATE_Z               true
 #define TEST_CAM_Y_SHIFT               0.0f
-#define TEST_ENABLE_OBJ_IDX            20
+#define TEST_ENABLE_OBJ_IDX            5
 #define TEST_INNER_TESS_LEVEL          64
 #define TEST_OUTER_TESS_LEVEL          64
 #define TEST_SCREEN_DISTANCE_THRESHOLD 62

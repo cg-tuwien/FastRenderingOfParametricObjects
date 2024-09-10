@@ -34,7 +34,7 @@
 // vk::SampleCountFlagBits::e64
 #define SAMPLE_COUNT vk::SampleCountFlagBits::e8
 
-#define SSAA_ENABLED 1
+#define SSAA_ENABLED 0
 #define SSAA_FACTOR  glm::uvec2(2, 2)
 
 // TEST_MODE: Uncomment one of the following includes to load a specific configuration for test mode.
@@ -43,22 +43,23 @@
 #include "perf_tests/test_knit_yarn.hpp"
 #include "perf_tests/test_fiber_curves.hpp"
 #include "perf_tests/test_seashell.hpp"
-#define TEST_RENDERING_METHOD          rendering_variant::tessellated_rasterized
+#define TEST_RENDERING_METHOD          rendering_variant::PointRendered_direct
 
-static std::array<parametric_object, 13> PredefinedParametricObjects {{
-	parametric_object{"Sphere"      , "assets/po-sphere-patches.png",     false, parametric_object_type::Sphere,                 0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>() , glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{ 0.f,  0.f,  0.f})},
-	parametric_object{"Johi's Heart", "assets/po-johis-heart.png",        false, parametric_object_type::JohisHeart,              0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>(), glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{ 0.f,  0.f, -2.f})},
-	parametric_object{"Plane" ,       "assets/po-johis-heart.png",        true,  parametric_object_type::Plane,                  1.0f,   0.0f,            0.0f,  1.0f},
-	parametric_object{"Seashell 1"  , "assets/po-seashell1.png",          false, parametric_object_type::Seashell1,              glm::two_pi<float>() * 8.0f,/* -> */0.0f,   0.0f,/* -> */glm::two_pi<float>(), glm::uvec2{ 1u, 1u }, glm::mat4{ 1.0f }, -5},
-	parametric_object{"Seashell 2"  , "assets/po-seashell2.png",          false, parametric_object_type::Seashell2,              glm::two_pi<float>() * 8.0f,/* -> */0.0f,   0.0f,/* -> */glm::two_pi<float>(), glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{-4.5f, 7.0f, 0.0f }), -4},
-	parametric_object{"Seashell 3"  , "assets/po-seashell3.png",          false, parametric_object_type::Seashell3,              glm::two_pi<float>() * 8.0f,/* -> */0.0f,   0.0f,/* -> */glm::two_pi<float>(), glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{ 4.5f, 7.0f, 0.0f }), -3},
-	parametric_object{"Yarn Curve"  , "assets/po-yarn-curve-single.png",  false, parametric_object_type::SingleYarnCurve,        1.0f, 1.0f,     /* <-- yarn dimensions | n/a yarn -> */ 0.f, /* thickness --> */ 0.8f, glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{-0.3f, 0.0f, 0.0f}) * glm::scale(glm::vec3{ 0.3f }), -3},
-	parametric_object{"Fiber Curve" , "assets/po-fiber-curve-single.png", false, parametric_object_type::SingleFiberCurve,       1.0f, 1.0f,     /* <-- yarn dimensions | #fibers --> */ 6.f, /* thickness --> */ 0.3f, glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{-0.5f, 0.0f, 0.0f}) * glm::scale(glm::vec3{ 0.3f }), -3},
-	parametric_object{"Blue Curtain", "assets/po-blue-curtain.png",		  false, parametric_object_type::CurtainYarnCurves,      235.0f, 254.0f, /* <-- yarn dimensions | #fibers --> */ 6.f, /* thickness --> */ 0.8f, glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{-3.35f, 0.08f, 5.32f}) * glm::scale(glm::vec3{ 0.005f }), 19},
-	parametric_object{"Palm Tree"   , "assets/po-palm-tree.png",		  false, parametric_object_type::PalmTreeTrunk,          0.0f,   1.0f,            0.0f,  glm::two_pi<float>(), glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{ 0.f,  0.f, -4.f})},
-	parametric_object{"Giant Worm"  , "assets/po-giant-worm.png",		  false, parametric_object_type::GiantWorm,              0.0f,   1.0f,            0.0f,  glm::two_pi<float>(), glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{ 0.f,  0.f, -4.f}), -5},
-	parametric_object{"SH Glyph"    , "assets/po-single-sh-glyph.png",    false, parametric_object_type::SHGlyph,                0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>(),     glm::uvec2{ 1u, 1u }, glm::mat4{ 1.0f }, -2},
-	parametric_object{"Brain Scan"  , "assets/po-sh-brain.png",           false, parametric_object_type::SHBrain,                0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>(), glm::uvec2{ SH_BRAIN_DATA_SIZE_X, SH_BRAIN_DATA_SIZE_Y }, glm::mat4{ 1.0f }, -2}
+static std::array<parametric_object, 14> PredefinedParametricObjects {{
+	parametric_object{"Sphere"       , "assets/po-sphere-patches.png",     false, parametric_object_type::Sphere,                 0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>() , glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{ 0.f,  0.f,  0.f})},
+	parametric_object{"Johi's Heart" , "assets/po-johis-heart.png",        false, parametric_object_type::JohisHeart,              0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>(), glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{ 0.f,  0.f, -2.f})},
+	parametric_object{"Plane"        , "assets/po-johis-heart.png",        true,  parametric_object_type::Plane,                  1.0f,   0.0f,            0.0f,  1.0f},
+	parametric_object{"Seashell 1"   , "assets/po-seashell1.png",          false, parametric_object_type::Seashell1,              glm::two_pi<float>() * 8.0f,/* -> */0.0f,   0.0f,/* -> */glm::two_pi<float>(), glm::uvec2{ 1u, 1u }, glm::mat4{ 1.0f }, -5},
+	parametric_object{"Seashell 2"   , "assets/po-seashell2.png",          false, parametric_object_type::Seashell2,              glm::two_pi<float>() * 8.0f,/* -> */0.0f,   0.0f,/* -> */glm::two_pi<float>(), glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{-4.5f, 7.0f, 0.0f }), -4},
+	parametric_object{"Seashell 3"   , "assets/po-seashell3.png",          false, parametric_object_type::Seashell3,              glm::two_pi<float>() * 8.0f,/* -> */0.0f,   0.0f,/* -> */glm::two_pi<float>(), glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{ 4.5f, 7.0f, 0.0f }), -3},
+	parametric_object{"Yarn Curve"   , "assets/po-yarn-curve-single.png",  false, parametric_object_type::SingleYarnCurve,        1.0f, 1.0f,     /* <-- yarn dimensions | n/a yarn -> */ 0.f, /* thickness --> */ 0.8f, glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{-0.3f, 0.0f, 0.0f}) * glm::scale(glm::vec3{ 0.3f }), -3},
+	parametric_object{"Fiber Curve"  , "assets/po-fiber-curve-single.png", false, parametric_object_type::SingleFiberCurve,       1.0f, 1.0f,     /* <-- yarn dimensions | #fibers --> */ 6.f, /* thickness --> */ 0.3f, glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{-0.5f, 0.0f, 0.0f}) * glm::scale(glm::vec3{ 0.3f }), -3},
+	parametric_object{"Yarn Curtain" , "assets/po-blue-curtain.png",       false, parametric_object_type::CurtainYarnCurves,      235.0f, 254.0f, /* <-- yarn dimensions | #fibers --> */ 6.f, /* thickness --> */ 0.8f, glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{-3.35f, 0.08f, 5.32f}) * glm::scale(glm::vec3{ 0.005f }), 19},
+	parametric_object{"Fiber Curtain", "assets/po-blue-curtain.png",       false, parametric_object_type::CurtainFiberCurves,     235.0f, 254.0f, /* <-- yarn dimensions | #fibers --> */ 6.f, /* thickness --> */ 0.8f, glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{-3.35f, 0.08f, 5.32f}) * glm::scale(glm::vec3{ 0.005f }), 19},
+	parametric_object{"Palm Tree"    , "assets/po-palm-tree.png",          false, parametric_object_type::PalmTreeTrunk,          0.0f,   1.0f,            0.0f,  glm::two_pi<float>(), glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{ 0.f,  0.f, -4.f})},
+	parametric_object{"Giant Worm"   , "assets/po-giant-worm.png",         false, parametric_object_type::GiantWorm,              0.0f,   1.0f,            0.0f,  glm::two_pi<float>(), glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{ 0.f,  0.f, -4.f}), -5},
+	parametric_object{"SH Glyph"     , "assets/po-single-sh-glyph.png",    false, parametric_object_type::SHGlyph,                0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>(),     glm::uvec2{ 1u, 1u }, glm::mat4{ 1.0f }, -2},
+	parametric_object{"Brain Scan"   , "assets/po-sh-brain.png",           false, parametric_object_type::SHBrain,                0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>(), glm::uvec2{ SH_BRAIN_DATA_SIZE_X, SH_BRAIN_DATA_SIZE_Y }, glm::mat4{ 1.0f }, -2}
 }};
 
 class vk_parametric_curves_app : public avk::invokee
@@ -649,7 +650,13 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 		));
 
         mRenderpassMS = context().create_renderpass({
-                attachment::declare(aAttachmentFormats[0], on_load::clear.from_previous_layout(layout::undefined), usage::unused        >> usage::unused                              , on_store::store.in_layout(layout::shader_read_only_optimal)),
+                attachment::declare(aAttachmentFormats[0], on_load::clear.from_previous_layout(layout::undefined), usage::unused        >> usage::unused                              , on_store::store
+#if SSAA_ENABLED
+					.in_layout(layout::shader_read_only_optimal)
+#else
+					.in_layout(layout::transfer_src)
+#endif
+				),
                 attachment::declare(aAttachmentFormats[1], on_load::clear.from_previous_layout(layout::undefined), usage::unused        >> usage::unused                              , on_store::store.in_layout(layout::shader_read_only_optimal)),
                 attachment::declare(colorFormatMS        , on_load::clear.from_previous_layout(layout::undefined), usage::color(0)      >> usage::color(0)      + usage::resolve_to(0), on_store::dont_care),
                 attachment::declare(depthFormatMS        , on_load::clear.from_previous_layout(layout::undefined), usage::depth_stencil >> usage::depth_stencil + usage::resolve_to(1), on_store::dont_care)
@@ -1531,9 +1538,9 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 				// Automatic performance measurement, camera flight:
 				ImGui::Separator();
 #if TEST_MODE_ON 
-				ImGui::Checkbox("[Space] ... Start performance measurement (as configured with TEST_MODE_ON)", &mStartMeasurement);
+				ImGui::Checkbox("Start performance measurement (as configured with TEST_MODE_ON) [Space]", &mStartMeasurement);
 #else 
-				ImGui::Checkbox("Start performance measurement 4s", &mStartMeasurement);
+				ImGui::Checkbox("Start performance measurement [Space]", &mStartMeasurement);
 				ImGui::SliderFloat("Test duration per step", &mTestDurationPerStep, 0.5f, 5.0f, "%.2f");
 				ImGui::SliderFloat("Camera distance from origin", &mDistanceFromOrigin, 5.0f, 100.0f, "%.0f");
 				ImGui::Checkbox("Move camera in steps during measurements", &mMoveCameraDuringMeasurements);
@@ -1718,8 +1725,32 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 				if (ii == TEST_ENABLE_OBJ_IDX) {
 					mParametricObjects[ii].set_enabled(true);
 					mParametricObjects[ii].set_tessellation_levels({ static_cast<float>(TEST_INNER_TESS_LEVEL), static_cast<float>(TEST_OUTER_TESS_LEVEL) });
+					mParametricObjects[ii].set_screen_distance_threshold(static_cast<float>(TEST_SCREEN_DISTANCE_THRESHOLD));
 					mParametricObjects[ii].set_adaptive_rendering_on(1 == TEST_USEINDIVIDUAL_PATCH_RES);
-					break;
+					mParametricObjects[ii].set_how_to_render(TEST_RENDERING_METHOD);
+
+					mParametricObjects[ii].set_transformation_matrix(glm::mat4{ 1.0f }); // TODO: Use an appropriate one
+
+					LOG_INFO("The following settings were active during the test:");
+					LOG_INFO(std::format(" - Rendering mode: '{}'", get_rendering_variant_description(mParametricObjects[ii].how_to_render())));
+					LOG_INFO(std::format(" - Adaptive fill mode: {}", mParametricObjects[ii].adaptive_rendering_on() ? std::string("ON") : std::string("OFF")));
+					switch (mParametricObjects[ii].how_to_render()) {
+					case rendering_variant::PointRendered_4xSS_local_fb: 
+						LOG_INFO(std::format(" - Tile size:     {}x{}", PX_FILL_LOCAL_FB_TILE_SIZE_X, PX_FILL_LOCAL_FB_TILE_SIZE_Y));
+						LOG_INFO(std::format(" - Tile factor:   {}x{}", TILE_FACTOR_X, TILE_FACTOR_Y));
+						LOG_INFO(std::format(" - Local FB size: {}x{}", LOCAL_FB_X, LOCAL_FB_Y));
+						break;
+					case rendering_variant::Tess_8xSS:
+					case rendering_variant::Tess_4xSS_8xMS:
+						LOG_INFO(std::format(" - SAMPLE_COUNT: {}", vk::to_string(SAMPLE_COUNT)));
+					case rendering_variant::Tess_noAA:
+						LOG_INFO(std::format(" - Inner Tessellation Level: {}", mParametricObjects[ii].tessellation_levels()[0]));
+						LOG_INFO(std::format(" - Outer Tessellation Level: {}", mParametricObjects[ii].tessellation_levels()[1]));
+						break;
+					}
+				}
+				else {
+					mParametricObjects[ii].set_enabled(false);
 				}
 			}
 			fill_object_data_buffer();
@@ -1762,32 +1793,12 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 			    mMeasurementInProgress = false;
 				std::string whichMethod = "TODO: not implemented yet";
 				LOG_INFO_EM(std::format("{} frames rendered during {} sec. measurement time frame with {} method.", std::get<int>(mMeasurementFrameCounters.back()), mMeasurementEndTime - mMeasurementStartTime, whichMethod));
-				LOG_INFO("The following settings were active:");
 #if STATS_ENABLED
 				LOG_INFO(std::format(" - mGatherPipelineStats: {}", mGatherPipelineStats));
 #else
 				LOG_INFO(            " - mGatherPipelineStats not included in build (!STATS_ENABLED)");
 #endif
-//                switch (mRenderingMethod) {
-//                case rendering_variant::point_rendered: 
-//					LOG_INFO(std::format(" - Use individual patch resolution during px fill: {}", mUseMaxPatchResolutionDuringPxFill));
-//					LOG_INFO(std::format(" - Adaptive pixel fill enabled:                    {}", mAdaptivePxFill));
-//					LOG_INFO(std::format(" - PX_FILL_LOCAL_FB enabled: {}", (0 != PX_FILL_LOCAL_FB)));
-//#if PX_FILL_LOCAL_FB
-//					LOG_INFO(std::format("   - Tile size:     {}x{}", PX_FILL_LOCAL_FB_TILE_SIZE_X, PX_FILL_LOCAL_FB_TILE_SIZE_Y));
-//					LOG_INFO(std::format("   - Tile factor:   {}x{}", TILE_FACTOR_X, TILE_FACTOR_Y));
-//					LOG_INFO(std::format("   - Local FB size: {}x{}", LOCAL_FB_X, LOCAL_FB_Y));
-//
-//#endif
-//                    break;
-//                case rendering_variant::tessellated_rasterized:
-//                case rendering_variant::tessellated_rasterized_wireframe:
-//					LOG_INFO(std::format(" - Constant Inner Tessellation Level: {}", mConstInnerTessLevel));
-//					LOG_INFO(std::format(" - Constant Outer Tessellation Level: {}", mConstOuterTessLevel));
-//					LOG_INFO(std::format(" - Use individual patch resolution during px fill: {}", mUseMaxPatchResolutionDuringPxFill));
-//					LOG_INFO(std::format(" - MSAA ENABLED {}, namely: {}", (0 != MSAA_ENABLED), vk::to_string(SAMPLE_COUNT)));
-//					break;
-//                }
+
 				LOG_INFO("Measurement results (elapsed time, camera distance, unique pixels (avg.), num patches out to render (avg.), FPS):");
 				for (int i = mMeasurementFrameCounters.size() - 1; i > 0; --i) {
 					std::get<double>(mMeasurementFrameCounters[i]) -= std::get<double>(mMeasurementFrameCounters[i - 1]);
@@ -2425,12 +2436,13 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 
 
 #if STATS_ENABLED
-			mTimestampPool->write_timestamp(firstQueryIndex + 11, stage::all_commands), // measure after Tess. 8xSS
+			mTimestampPool->write_timestamp(firstQueryIndex + 11, stage::color_attachment_output), // measure after Tess. 8xSS
 #endif
 
+#if SSAA_ENABLED
 			command::render_pass(mRenderpassSSMS.as_reference(), mFramebufferSSMS.as_reference(), command::gather(
 
-				// 3.8) Full-screen quad noAA->MS
+				// 3.8) Full-screen quad MS->SSMS
                 command::bind_pipeline(mFsQuadMStoSSPipe.as_reference()),
 				command::bind_descriptors(mFsQuadMStoSSPipe->layout(), mDescriptorCache->get_or_create_descriptor_sets({
 					descriptor_binding(0, 0, mFsQuadColorSampler),
@@ -2444,7 +2456,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 				command::next_subpass(),
 
 #if STATS_ENABLED
-				mTimestampPool->write_timestamp(firstQueryIndex + 12, stage::all_commands), // measure after copy-over combined attachment back into a framebuffer image
+				mTimestampPool->write_timestamp(firstQueryIndex + 12, stage::color_attachment_output), // measure after copy-over combined attachment back into a framebuffer image
 #endif
 
 				// 3.9) Render tessellated patches with SS
@@ -2474,6 +2486,11 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 					1u) // <-- Exactly ONE draw (but potentially a lot of instances), use the one at [1]
 
 			)),
+#else 
+#if STATS_ENABLED
+			mTimestampPool->write_timestamp(firstQueryIndex + 12, stage::color_attachment_output),
+#endif
+#endif
 
 #if STATS_ENABLED
 			mTimestampPool->write_timestamp(firstQueryIndex + 13, stage::color_attachment_output), // measure after rendering with Tess. 4xSS+8xMS
@@ -2491,8 +2508,13 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 					                    access::none         >>   access::transfer_write)
 				.with_layout_transition(layout::undefined   >>   layout::transfer_dst),             // Don't care about the previous layout
 
+#if SSAA_ENABLED
 			blit_image(mFramebufferSSMS->image_at(0), layout::transfer_src, context().main_window()->current_backbuffer()->image_at(0), layout::transfer_dst, 
 						vk::ImageAspectFlagBits::eColor, vk::Filter::eLinear),
+#else 
+			blit_image(mFramebufferMS->image_at(0), layout::transfer_src, context().main_window()->current_backbuffer()->image_at(0), layout::transfer_dst, 
+						vk::ImageAspectFlagBits::eColor, vk::Filter::eLinear),
+#endif
 
 			sync::image_memory_barrier(context().main_window()->current_backbuffer()->image_at(0),  // Window's back buffer's color attachment
 					                    stage::blit                    >>   stage::color_attachment_output, // <-- for ImGui, which draws afterwards
