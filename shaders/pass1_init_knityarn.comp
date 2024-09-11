@@ -77,7 +77,7 @@ void main()
 		for (uint fiberId = 0; fiberId < numFibers; ++fiberId) {
 			uPatchLodPing.mElements[insertIdx + fiberId].mParams                = vec4(paramsFrom[0], paramsTo[0], paramsFrom[1], paramsTo[1]);
 			uPatchLodPing.mElements[insertIdx + fiberId].mObjectIdUserData      = uvec4(pushConstants.mObjectId, loopsRows.y, fiberId, floatBitsToUint(threadRadius)); // Pack additional knit yarn data into UserData
-			uPatchLodPing.mElements[insertIdx + fiberId].mScreenDistsHybridData = vec4(0.0, 0.0, 0.0, 1.0);
+			uPatchLodPing.mElements[insertIdx + fiberId].mScreenDistsHybridData = vec4(0.0, 0.0, intBitsToFloat(0), 1.0);
 		}
 	}
 }

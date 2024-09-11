@@ -215,7 +215,7 @@ void evalSplitDecision(bool aTransposeEval, vec2 aParamsStart, vec2 aParamsRange
 #if ENABLE_HYBRID_TECHNIQUE
 // This function measures if the parametric function varies strongly on a sub-pixel level:
 // (If it does, why not super-sample the patch?! If it doesn't no need for super sampling.)
-bool hasSubpixelFeatures(float uStart, float uEnd, float vStart, float vEnd, vec2 screenDists, const uint elementIdxIn)
+bool hasSubpixelFeatures(float uStart, float uEnd, float vStart, float vEnd, vec2 screenDists, float divisor, const uint elementIdxIn)
 {
 	const uint  objectId              = uPatchLodPing.mElements[elementIdxIn].mObjectIdUserData[0];
 	const uvec3 userData              = uPatchLodPing.mElements[elementIdxIn].mObjectIdUserData.yzw;
@@ -224,7 +224,7 @@ bool hasSubpixelFeatures(float uStart, float uEnd, float vStart, float vEnd, vec
 
 	// Parameter ranges for ~1px:
 	vec2 parameterRange      = vec2(uEnd - uStart, vEnd - vStart);
-	vec2 onePxParamRange     = parameterRange / screenDists;
+	vec2 onePxParamRange     = parameterRange / screenDists / divisor; // Note: Due to divisor, this can also be sub-px 
 	vec2 middlePxStartParams = vec2(
 		uStart + parameterRange.x * 0.5 - onePxParamRange.x * 4.0,
 		vStart + parameterRange.y * 0.5 - onePxParamRange.y	* 4.0
@@ -275,12 +275,12 @@ bool hasSubpixelFeatures(float uStart, float uEnd, float vStart, float vEnd, vec
 			vec4 ssposV     = tM * paramToWS(uParam                               , vParam + onePxParamRange.y * curOff.y, curveIndex, userData);
 			vec3 ssnrm      = normalize(cross(ssposU.xyz - pos0WS.xyz, ssposV.xyz - pos0WS.xyz));
 
-//#if DRAW_PATCH_EVAL_DEBUG_VIS_BUMPINESS_EVAL
-//			if (i == 0) {
-//				writeToCombinedAttachment(ivec2(toScreen(toCS(pos0WS)).xy) + ivec2(-5, 10), 0.0001, lerpedNrm);
-//				writeToCombinedAttachment(ivec2(toScreen(toCS(pos0WS)).xy) + ivec2( 5, 10), 0.0001, ssnrm);
-//			}
-//#endif
+#if DRAW_PATCH_EVAL_DEBUG_VIS_BUMPINESS_EVAL
+			if (i == 0) {
+				writeToCombinedAttachment(ivec2(toScreen(toCS(pos0WS)).xy) + ivec2(-5, 10), 0.0001, lerpedNrm);
+				writeToCombinedAttachment(ivec2(toScreen(toCS(pos0WS)).xy) + ivec2( 5, 10), 0.0001, ssnrm);
+			}
+#endif
 
 			// Compare interpolated with subsampled normal:
 			float angleDiff = dot(normalize(lerpedNrm), ssnrm);
@@ -296,7 +296,7 @@ bool hasSubpixelFeatures(float uStart, float uEnd, float vStart, float vEnd, vec
 //	if (subgroupElect())
 //		debugPrintfEXT("differentTotal[%u], totalTotal[%u]", differentTotal, totalTotal);
 
-	return (differentTotal * 10) > totalTotal;
+	return (differentTotal * 15) > totalTotal;
 }
 #endif
 
@@ -306,31 +306,36 @@ void pxFillOut(int renderingVariantIndex, float uStart, float uEnd, float vStart
 #if ENABLE_HYBRID_TECHNIQUE
 	const uint maxLevel = MAX_PATCH_SUBDIV_STEPS-1;
 
+	const int maxDetailLvl = 2;
+	const int rendervariants[3] = { 0, 1, 2 };
+
 	// Before we decide about them splits, see if we must decide upon them different rendering variants (HYBRID METHOD):
 	if (HYBRID_VARIANT_INDEX == renderingVariantIndex) { 
-		vec2 hybridLevelAndDivisor = uPatchLodPing.mElements[elementIdxIn].mScreenDistsHybridData.xy;
-		bool needsSS = hasSubpixelFeatures(uStart, uEnd, vStart, vEnd, screenDists, elementIdxIn);
+		int curLvl    = floatBitsToInt(uPatchLodPing.mElements[elementIdxIn].mScreenDistsHybridData.z);
+		float divisor = uPatchLodPing.mElements[elementIdxIn].mScreenDistsHybridData.w;
+		bool needsSS  = hasSubpixelFeatures(uStart, uEnd, vStart, vEnd, screenDists, divisor, elementIdxIn);
 
-//		if (needsSS && hybridLevelAndDivisor[0] < 3.0) { // => reschedule...
-//			hybridLevelAndDivisor[0] += 1.0;
-//			hybridLevelAndDivisor[1] = 2.0 * hybridLevelAndDivisor[0] - 1.0; // level 2 => divisor 3, level 3 => divisor 5
-//			renderingVariantIndex    += 1;
-//		
-//			if (pushConstants.mPatchLodLevel != maxLevel) { // ...if not already max level.
-//				if (subgroupElect() && gl_LocalInvocationID.z == 0) { // Only one thread is allowed to do that. // Only z==0 writes the split data
-//					const uint levelOut = pushConstants.mPatchLodLevel + 1;
-//					const uint insertIdx = atomicAdd(uPatchLodCount.mDispatchCounts[levelOut].x, 1);
-//					uPatchLodPong.mElements[insertIdx].mParams                = vec4(uStart, uEnd, vStart, vEnd);
-//					uPatchLodPong.mElements[insertIdx].mObjectIdUserData      = uPatchLodPing.mElements[elementIdxIn].mObjectIdUserData;
-//					uPatchLodPong.mElements[insertIdx].mScreenDistsHybridData = vec4(screenDists, hybridLevelAndDivisor);
-//				}
-//				return;
-//			} 
-//			// else, just add pxFillOut
+//		if (subgroupElect()) {
+//			debugPrintfEXT("curLvl[%i], screenDists[%.1f, %.1f], uStart[%.1f], uEnd[%.1f]", curLvl, screenDists.x, screenDists.y, uStart, uEnd);
 //		}
 
-//		renderingVariantIndex = hybridLevelAndDivisor[0] < 1.0 ? 0 : hybridLevelAndDivisor[0] < 2.0 ? 1 : 2;
-		renderingVariantIndex = needsSS ? 0 : 3;
+		if (needsSS && curLvl < maxDetailLvl) { // => reschedule...
+			curLvl  += 1;
+			divisor = 2.0 * float(curLvl) - 1.0; // level 2 => divisor 3, level 3 => divisor 5
+			if (pushConstants.mPatchLodLevel != maxLevel) { // ...if not already max level.
+				if (subgroupElect() && gl_LocalInvocationID.z == 0) { // Only one thread is allowed to do that. // Only z==0 writes the split data
+					const uint levelOut = pushConstants.mPatchLodLevel + 1;
+					const uint insertIdx = atomicAdd(uPatchLodCount.mDispatchCounts[levelOut].x, 1);
+					uPatchLodPong.mElements[insertIdx].mParams                = vec4(uStart, uEnd, vStart, vEnd);
+					uPatchLodPong.mElements[insertIdx].mObjectIdUserData      = uPatchLodPing.mElements[elementIdxIn].mObjectIdUserData;
+					uPatchLodPong.mElements[insertIdx].mScreenDistsHybridData = vec4(screenDists, intBitsToFloat(curLvl), divisor);
+				}
+				return;
+			} 
+			// else, just add pxFillOut
+		}
+
+		renderingVariantIndex = rendervariants[curLvl];
 	}
 #endif
 
@@ -347,14 +352,14 @@ void pxFillOut(int renderingVariantIndex, float uStart, float uEnd, float vStart
 	uPxFillParams.mElements[insertIdx].mObjectIdUserData = uPatchLodPing.mElements[elementIdxIn].mObjectIdUserData;
 #if WRITE_OUT_MIN_MAX_SCREEN_COORDS
 #if CONCURRENT_U_V_EVAL
-	uPxFillParams.mElements[insertIdx].mScreenDistsHybridData.xy = screenDists;
+	uPxFillParams.mElements[insertIdx].mScreenDistsHybridData = vec4(screenDists, uPatchLodPing.mElements[elementIdxIn].mScreenDistsHybridData.zw);
 	uPxFillParams.mElements[insertIdx].mScreenMinMax = vec4(min(minScreenCoords[0], minScreenCoords[1]), max(maxScreenCoords[0], maxScreenCoords[1]));
 #else
-	uPxFillParams.mElements[insertIdx].mScreenDistsHybridData.xy = screenDists;
+	uPxFillParams.mElements[insertIdx].mScreenDistsHybridData = vec4(screenDists, uPatchLodPing.mElements[elementIdxIn].mScreenDistsHybridData.zw);
 	uPxFillParams.mElements[insertIdx].mScreenMinMax = vec4(minScreenCoords[0], maxScreenCoords[0]);
 #endif
 #else
-	uPxFillParams.mElements[insertIdx].mScreenDistsHybridData.xy = screenDists;
+	uPxFillParams.mElements[insertIdx].mScreenDistsHybridData = vec4(screenDists, uPatchLodPing.mElements[elementIdxIn].mScreenDistsHybridData.zw);
 #endif
 #if ENABLE_HYBRID_TECHNIQUE
 	uPxFillParams.mElements[insertIdx].mObjectIdUserData[3] = renderingVariantIndex;

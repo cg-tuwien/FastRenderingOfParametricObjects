@@ -111,7 +111,7 @@ vec3 shade(int matIndex, vec3 albedo, vec3 shadingUserParams, vec3 posWS, vec3 n
  //   }
 
 #if ENABLE_HYBRID_TECHNIQUE
-    matIndex += int(shadingUserParams.z);
+    //matIndex += int(shadingUserParams.z);
 #endif
 
     if (-1 == matIndex) { // ========== DEBUG VISUALIZATION BEGIN ============
