@@ -55,6 +55,7 @@ void main()
 
 	// out:
 	const uint insertIdx = atomicAdd(uPatchLodCount.mDispatchCounts[0].x, 1); // start with the first, a.k.a. "firstPing"
-	uPatchLodPing.mElements[insertIdx].mParams           = vec4(paramsFrom[0], paramsTo[0], paramsFrom[1], paramsTo[1]);
-	uPatchLodPing.mElements[insertIdx].mObjectIdUserData = uvec4(objectId, uObjectData.mElements[objectId].mUserData.xyz);
+	uPatchLodPing.mElements[insertIdx].mParams                = vec4(paramsFrom[0], paramsTo[0], paramsFrom[1], paramsTo[1]);
+	uPatchLodPing.mElements[insertIdx].mObjectIdUserData      = uvec4(objectId, uObjectData.mElements[objectId].mUserData.xyz);
+	uPatchLodPing.mElements[insertIdx].mScreenDistsHybridData = vec4(0.0, 0.0, 0.0, 1.0);
 }

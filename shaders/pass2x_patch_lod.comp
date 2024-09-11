@@ -284,7 +284,7 @@ bool hasSubpixelFeatures(float uStart, float uEnd, float vStart, float vEnd, vec
 
 			// Compare interpolated with subsampled normal:
 			float angleDiff = dot(normalize(lerpedNrm), ssnrm);
-			const float angleThreshold = 0.98; // 0.97 => ~14° | 0.98 => ~11° | 0.99 => ~8°
+			const float angleThreshold = 0.97; // 0.97 => ~14° | 0.98 => ~11° | 0.99 => ~8°
 			different += angleDiff < angleThreshold ? 1 : 0;
 			total += NumTests;
 		}
@@ -296,7 +296,7 @@ bool hasSubpixelFeatures(float uStart, float uEnd, float vStart, float vEnd, vec
 //	if (subgroupElect())
 //		debugPrintfEXT("differentTotal[%u], totalTotal[%u]", differentTotal, totalTotal);
 
-	return (differentTotal * 15) > totalTotal;
+	return (differentTotal * 10) > totalTotal;
 }
 #endif
 
@@ -304,33 +304,38 @@ bool hasSubpixelFeatures(float uStart, float uEnd, float vStart, float vEnd, vec
 void pxFillOut(int renderingVariantIndex, float uStart, float uEnd, float vStart, float vEnd, vec2 screenDists, const uint elementIdxIn) 
 {
 #if ENABLE_HYBRID_TECHNIQUE
+	const uint maxLevel = MAX_PATCH_SUBDIV_STEPS-1;
+
 	// Before we decide about them splits, see if we must decide upon them different rendering variants (HYBRID METHOD):
 	if (HYBRID_VARIANT_INDEX == renderingVariantIndex) { 
-		if (gl_WorkGroupID.x % 2 == 0) {
-			renderingVariantIndex = 0;
-		}
-		else {
-			renderingVariantIndex = 4;
-		}
-		// TODO:  ^ Implement a proper heuristic => see here v
+		vec2 hybridLevelAndDivisor = uPatchLodPing.mElements[elementIdxIn].mScreenDistsHybridData.xy;
+		bool needsSS = hasSubpixelFeatures(uStart, uEnd, vStart, vEnd, screenDists, elementIdxIn);
 
-		bool isBumpy = hasSubpixelFeatures(uStart, uEnd, vStart, vEnd, screenDists, elementIdxIn);
-		renderingVariantIndex = isBumpy ? 4 : 0;
+//		if (needsSS && hybridLevelAndDivisor[0] < 3.0) { // => reschedule...
+//			hybridLevelAndDivisor[0] += 1.0;
+//			hybridLevelAndDivisor[1] = 2.0 * hybridLevelAndDivisor[0] - 1.0; // level 2 => divisor 3, level 3 => divisor 5
+//			renderingVariantIndex    += 1;
+//		
+//			if (pushConstants.mPatchLodLevel != maxLevel) { // ...if not already max level.
+//				if (subgroupElect() && gl_LocalInvocationID.z == 0) { // Only one thread is allowed to do that. // Only z==0 writes the split data
+//					const uint levelOut = pushConstants.mPatchLodLevel + 1;
+//					const uint insertIdx = atomicAdd(uPatchLodCount.mDispatchCounts[levelOut].x, 1);
+//					uPatchLodPong.mElements[insertIdx].mParams                = vec4(uStart, uEnd, vStart, vEnd);
+//					uPatchLodPong.mElements[insertIdx].mObjectIdUserData      = uPatchLodPing.mElements[elementIdxIn].mObjectIdUserData;
+//					uPatchLodPong.mElements[insertIdx].mScreenDistsHybridData = vec4(screenDists, hybridLevelAndDivisor);
+//				}
+//				return;
+//			} 
+//			// else, just add pxFillOut
+//		}
+
+//		renderingVariantIndex = hybridLevelAndDivisor[0] < 1.0 ? 0 : hybridLevelAndDivisor[0] < 2.0 ? 1 : 2;
+		renderingVariantIndex = needsSS ? 0 : 3;
 	}
 #endif
 
 	if (!subgroupElect() || gl_LocalInvocationID.z != 0) { // Only one thread is allowed to do that. // Only z==0 writes the split data
 		return;
-	}
-		// Before we decide about them splits, see if we must decide upon them different rendering variants (HYBRID METHOD):
-	if (HYBRID_VARIANT_INDEX == renderingVariantIndex) { 
-		// TODO: Implement a proper heuristic
-		if (gl_WorkGroupID.x % 2 == 0) {
-			renderingVariantIndex = 0;
-		}
-		else {
-			renderingVariantIndex = 4;
-		}
 	}
 
 //	if (uStart < 0.8 || vStart < 1.8) return;
@@ -351,20 +356,24 @@ void pxFillOut(int renderingVariantIndex, float uStart, float uEnd, float vStart
 #else
 	uPxFillParams.mElements[insertIdx].mScreenDistsHybridData.xy = screenDists;
 #endif
+#if ENABLE_HYBRID_TECHNIQUE
+	uPxFillParams.mElements[insertIdx].mObjectIdUserData[3] = renderingVariantIndex;
+#endif
 }
 
 // renderingVariantIndex:  [0] = Tess_noAA, [1] = Tess_8xSS, [2] = Tess_4xSS_8xMS, [3] = PointRendered_direct, [4] = PointRendered_4xSS_local_fb, [5] = Hybrid
-void patchOut(int renderingVariantIndex, const uint levelIn, float uStart, float uEnd, float vStart, float vEnd, vec2 screenDists, const uint elementIdxIn) 
+void patchOut(int renderingVariantIndex, float uStart, float uEnd, float vStart, float vEnd, vec2 screenDists, const uint elementIdxIn) 
 {
 	// out (from ping->pong):
-	uint maxLevel = MAX_PATCH_SUBDIV_STEPS-1;
+	const uint maxLevel = MAX_PATCH_SUBDIV_STEPS-1;
 
-	if (levelIn != maxLevel) { // Split and continue with ping->pong
+	if (pushConstants.mPatchLodLevel != maxLevel) { // Split and continue with ping->pong
 		if (subgroupElect() && gl_LocalInvocationID.z == 0) { // Only one thread is allowed to do that. // Only z==0 writes the split data
-			const uint levelOut = levelIn + 1;
+			const uint levelOut = pushConstants.mPatchLodLevel + 1;
 			const uint insertIdx = atomicAdd(uPatchLodCount.mDispatchCounts[levelOut].x, 1);
-			uPatchLodPong.mElements[insertIdx].mParams           = vec4(uStart, uEnd, vStart, vEnd);
-			uPatchLodPong.mElements[insertIdx].mObjectIdUserData = uPatchLodPing.mElements[elementIdxIn].mObjectIdUserData;
+			uPatchLodPong.mElements[insertIdx].mParams                = vec4(uStart, uEnd, vStart, vEnd);
+			uPatchLodPong.mElements[insertIdx].mObjectIdUserData      = uPatchLodPing.mElements[elementIdxIn].mObjectIdUserData;
+			uPatchLodPong.mElements[insertIdx].mScreenDistsHybridData = vec4(screenDists, uPatchLodPing.mElements[elementIdxIn].mScreenDistsHybridData.zw);
 		}
 	} 
 	else { // We do not split OR we have reached max.level (i.e., no more patch lod calls afterwards):
@@ -385,7 +394,6 @@ void main()
 	subgroupMemoryBarrierShared();
 
 	// in:
-	const uint  levelIn = pushConstants.mPatchLodLevel;
 	const uint  elementIdxIn          = gl_WorkGroupID.x;
 	const vec2  paramsStart           = vec2(uPatchLodPing.mElements[elementIdxIn].mParams[0], uPatchLodPing.mElements[elementIdxIn].mParams[2]);
 	const vec2  paramsEnd             = vec2(uPatchLodPing.mElements[elementIdxIn].mParams[1], uPatchLodPing.mElements[elementIdxIn].mParams[3]);
@@ -397,7 +405,8 @@ void main()
 	const bool  useAdaptive           = uObjectData.mElements[objectId].mUseAdaptiveDetail == 1;
 	      int   renderingVariantIndex = uObjectData.mElements[objectId].mRenderingVariantIndex;
 	const vec4  lodAndRenderSettings  = uObjectData.mElements[objectId].mLodAndRenderSettings;
-	const float t_u                   = lodAndRenderSettings.z;
+	const float screenDistsDivisor    = uPatchLodPing.mElements[elementIdxIn].mScreenDistsHybridData[3];
+	const float t_u                   = lodAndRenderSettings.z / screenDistsDivisor;
 	const float t_v                   = t_u; // same same
 //	debugPrintfEXT("t_u=%f, t_v=%f", t_u, t_v);
 
@@ -516,10 +525,10 @@ void main()
 		float vStarts[2] = { paramsStart.y,                  paramsStart.y + halfParamsRange.y };
 		float vEnds[2]   = { vStarts[0] + halfParamsRange.y, vStarts[1] + halfParamsRange.y };
 		for (int i = 0; i < 2; ++i) {
-			patchOut(renderingVariantIndex, levelIn, paramsStart.x                    , paramsStart.x + halfParamsRange.x, vStarts[i], vEnds[i], 
+			patchOut(renderingVariantIndex, paramsStart.x                    , paramsStart.x + halfParamsRange.x, vStarts[i], vEnds[i], 
 				        vec2(max(screenDistsU[0], screenDistsU[1]), max(screenDistsV[i*2], screenDistsV[i*2 + 1])),
 				        elementIdxIn);
-			patchOut(renderingVariantIndex, levelIn, paramsStart.x + halfParamsRange.x, paramsStart.x + paramsRange.x    , vStarts[i], vEnds[i], 
+			patchOut(renderingVariantIndex, paramsStart.x + halfParamsRange.x, paramsStart.x + paramsRange.x    , vStarts[i], vEnds[i], 
 				        vec2(max(screenDistsU[2], screenDistsU[3]), max(screenDistsV[i*2], screenDistsV[i*2 + 1])),
 				        elementIdxIn);
 		}
@@ -530,15 +539,15 @@ void main()
 		float vEnds[2]   = { vStarts[0] + halfParamsRange.y, vStarts[1] + halfParamsRange.y };
 		for (int i = 0; i < 2; ++i) {
 			if (shallSplitU[i]) {
-				patchOut(renderingVariantIndex, levelIn, paramsStart.x                    , paramsStart.x + halfParamsRange.x, vStarts[i], vEnds[i], 
+				patchOut(renderingVariantIndex, paramsStart.x                    , paramsStart.x + halfParamsRange.x, vStarts[i], vEnds[i], 
 				         vec2(max(screenDistsU[0], screenDistsU[1]), max(screenDistsV[i*2], screenDistsV[i*2 + 1])),
 				         elementIdxIn);
-				patchOut(renderingVariantIndex, levelIn, paramsStart.x + halfParamsRange.x, paramsStart.x + paramsRange.x    , vStarts[i], vEnds[i], 
+				patchOut(renderingVariantIndex, paramsStart.x + halfParamsRange.x, paramsStart.x + paramsRange.x    , vStarts[i], vEnds[i], 
 				         vec2(max(screenDistsU[2], screenDistsU[3]), max(screenDistsV[i*2], screenDistsV[i*2 + 1])),
 				         elementIdxIn);
 			}
 			else {
-				patchOut(renderingVariantIndex, levelIn, paramsStart.x                    , paramsStart.x + paramsRange.x    , vStarts[i], vEnds[i], 
+				patchOut(renderingVariantIndex, paramsStart.x                    , paramsStart.x + paramsRange.x    , vStarts[i], vEnds[i], 
 				         vec2(max(max(max(screenDistsU[0], screenDistsU[1]), screenDistsU[2]), screenDistsU[3]), max(screenDistsV[i*2], screenDistsV[i*2 + 1])),
 				         elementIdxIn);
 			}
@@ -549,15 +558,15 @@ void main()
 		float uEnds[2]   = { uStarts[0] + halfParamsRange.x, uStarts[1] + halfParamsRange.x };
 		for (int i = 0; i < 2; ++i) {
 			if (shallSplitV[i]) {
-				patchOut(renderingVariantIndex, levelIn, uStarts[i], uEnds[i], paramsStart.y                    , paramsStart.y + halfParamsRange.y, 
+				patchOut(renderingVariantIndex, uStarts[i], uEnds[i], paramsStart.y                    , paramsStart.y + halfParamsRange.y, 
 				         vec2(max(screenDistsU[i*2], screenDistsU[i*2 + 1]), max(screenDistsV[0], screenDistsV[1])),
 				         elementIdxIn);
-				patchOut(renderingVariantIndex, levelIn, uStarts[i], uEnds[i], paramsStart.y + halfParamsRange.y, paramsStart.y + paramsRange.y    , 
+				patchOut(renderingVariantIndex, uStarts[i], uEnds[i], paramsStart.y + halfParamsRange.y, paramsStart.y + paramsRange.y    , 
 				         vec2(max(screenDistsU[i*2], screenDistsU[i*2 + 1]), max(screenDistsV[2], screenDistsV[3])),
 				         elementIdxIn);
 			}
 			else {
-				patchOut(renderingVariantIndex, levelIn, uStarts[i], uEnds[i], paramsStart.y                    , paramsStart.y + paramsRange.y    , 
+				patchOut(renderingVariantIndex, uStarts[i], uEnds[i], paramsStart.y                    , paramsStart.y + paramsRange.y    , 
 				         vec2(max(screenDistsU[i*2], screenDistsU[i*2 + 1]), max(max(max(screenDistsV[0], screenDistsV[1]), screenDistsV[2]), screenDistsV[3])),
 				         elementIdxIn);
 			}

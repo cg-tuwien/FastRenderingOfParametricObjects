@@ -32,7 +32,7 @@ vec2 getParamTexCoords(float u, float v, int curveIndex, uvec3 userData, vec3 po
 
 // Gets user parameters for shading
 vec3 getParamShadingUserParams(float u, float v, int curveIndex, uvec3 userData, vec3 posWS_untranslated, uint objectId) {
-    vec3 shadingUserParams = vec3(0.0);
+    vec3 shadingUserParams = vec3(userData);
     switch (curveIndex) {
         // +-------------------------------------------------+
         // |   SH Glyphs                                     |

@@ -110,6 +110,10 @@ vec3 shade(int matIndex, vec3 albedo, vec3 shadingUserParams, vec3 posWS, vec3 n
  //       return color;
  //   }
 
+#if ENABLE_HYBRID_TECHNIQUE
+    matIndex += int(shadingUserParams.z);
+#endif
+
     if (-1 == matIndex) { // ========== DEBUG VISUALIZATION BEGIN ============
 		float illu = max(0.2, dot(normalWS, normalize(vec3(1.0, 1.0, 1.0))));
 		return linear_rgb_to_srgb(albedo * illu);

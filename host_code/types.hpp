@@ -277,7 +277,7 @@ struct px_fill_data
 
     // [0]: max. screen dist u
     // [1]: max. screen dist v
-    // [2]: hybrid levels to go (counting down)
+    // [2]: hybrid levels (starting at 0, increasing)
     // [3]: hybrid screen threshold divisor
     glm::vec4 mScreenDistsHybridData;
 
