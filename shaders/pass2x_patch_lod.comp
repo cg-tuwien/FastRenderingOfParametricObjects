@@ -125,9 +125,7 @@ shared float screenDistsU[EVAL_GRID_Y];
 shared float screenDistsV[EVAL_GRID_Y];
 #if WRITE_OUT_MIN_MAX_SCREEN_COORDS
 shared vec2  minScreenCoords[EVAL_GRID_Z];
-#if WRITE_MAX_COORDS_IN_PASS2
 shared vec2  maxScreenCoords[EVAL_GRID_Z];
-#endif
 #endif
 #if CONCURRENT_U_V_EVAL
 shared uint  workgroupAnd[EVAL_GRID_Z];
@@ -139,11 +137,7 @@ shared uint  workgroupAnd[EVAL_GRID_Z];
 // @param aParamsStart     Where u and v params start
 // @param aParamsRange     The ranges for u and v, respectively, between their start and end values.
 #if WRITE_OUT_MIN_MAX_SCREEN_COORDS
-void evalSplitDecision(bool aTransposeEval, vec2 aParamsStart, vec2 aParamsRange, vec2 screenThresholds, int aCurveIndex, uvec3 aUserData, mat4 aTM, out vec4 posCS, out vec2 subgroupMinCoords
-#if WRITE_MAX_COORDS_IN_PASS2
-, out vec2 subgroupMaxCoords
-#endif
-)
+void evalSplitDecision(bool aTransposeEval, vec2 aParamsStart, vec2 aParamsRange, vec2 screenThresholds, int aCurveIndex, uvec3 aUserData, mat4 aTM, out vec4 posCS, out vec2 subgroupMinCoords, out vec2 subgroupMaxCoords)
 #else
 void evalSplitDecision(bool aTransposeEval, vec2 aParamsStart, vec2 aParamsRange, vec2 screenThresholds, int aCurveIndex, uvec3 aUserData, mat4 aTM, out vec4 posCS)
 #endif
@@ -173,9 +167,7 @@ void evalSplitDecision(bool aTransposeEval, vec2 aParamsStart, vec2 aParamsRange
 #if WRITE_OUT_MIN_MAX_SCREEN_COORDS
 	// Store the min/max screen coords for later
 	subgroupMinCoords = subgroupMin(screenCoords);
-#if WRITE_MAX_COORDS_IN_PASS2
 	subgroupMaxCoords = subgroupMax(screenCoords);
-#endif
 #endif
 
 	// What's the screen distance to the previous invocation?
@@ -350,18 +342,14 @@ void pxFillOut(int renderingVariantIndex, float uStart, float uEnd, float vStart
 	uPxFillParams.mElements[insertIdx].mObjectIdUserData = uPatchLodPing.mElements[elementIdxIn].mObjectIdUserData;
 #if WRITE_OUT_MIN_MAX_SCREEN_COORDS
 #if CONCURRENT_U_V_EVAL
-	uPxFillParams.mElements[insertIdx].mScreenDists = vec4(screenDists, min(minScreenCoords[0], minScreenCoords[1]));
-#if WRITE_MAX_COORDS_IN_PASS2
-	uPxFillParams.mElements[insertIdx].mScreenMax.xy = max(maxScreenCoords[0], maxScreenCoords[1]);
+	uPxFillParams.mElements[insertIdx].mScreenDistsHybridData.xy = screenDists;
+	uPxFillParams.mElements[insertIdx].mScreenMinMax = vec4(min(minScreenCoords[0], minScreenCoords[1]), max(maxScreenCoords[0], maxScreenCoords[1]));
+#else
+	uPxFillParams.mElements[insertIdx].mScreenDistsHybridData.xy = screenDists;
+	uPxFillParams.mElements[insertIdx].mScreenMinMax = vec4(minScreenCoords[0], maxScreenCoords[0]);
 #endif
 #else
-	uPxFillParams.mElements[insertIdx].mScreenDists = vec4(screenDists, minScreenCoords[0]);
-#if WRITE_MAX_COORDS_IN_PASS2
-	uPxFillParams.mElements[insertIdx].mScreenMax.xy = maxScreenCoords[0];
-#endif
-#endif
-#else
-	uPxFillParams.mElements[insertIdx].mScreenDists.xy = screenDists;
+	uPxFillParams.mElements[insertIdx].mScreenDistsHybridData.xy = screenDists;
 #endif
 }
 
@@ -419,31 +407,19 @@ void main()
 	// In this case, do only one direction, u or v, and sync via shared memory.
 	vec4 posCS;
 #if WRITE_OUT_MIN_MAX_SCREEN_COORDS
-#if WRITE_MAX_COORDS_IN_PASS2
 	vec2 minScreenC, maxScreenC;
 	evalSplitDecision(gl_LocalInvocationID.z == 0 ? false : true, paramsStart, paramsRange, vec2(t_u, t_v), curveIndex, translation, scale, posCS, minScreenC, maxScreenC);
-#else
-	vec2 minScreenC;
-	evalSplitDecision(gl_LocalInvocationID.z == 0 ? false : true, paramsStart, paramsRange, vec2(t_u, t_v), curveIndex, translation, scale, posCS, minScreenC);
-#endif
 #else
 	evalSplitDecision(gl_LocalInvocationID.z == 0 ? false : true, paramsStart, paramsRange, vec2(t_u, t_v), curveIndex, translation, scale, posCS);
 #endif
 #else
 	vec4 posCS_u, posCS_v;
 #if WRITE_OUT_MIN_MAX_SCREEN_COORDS
-#if WRITE_MAX_COORDS_IN_PASS2
 	vec2 minScreenC_u, minScreenC_v, maxScreenC_u, maxScreenC_v;
 	evalSplitDecision(false, paramsStart, paramsRange, vec2(t_u, t_v), curveIndex, userData, tM, posCS_u, minScreenC_u, maxScreenC_u);  // <-- for u
 	evalSplitDecision(true , paramsStart, paramsRange, vec2(t_u, t_v), curveIndex, userData, tM, posCS_v, minScreenC_v, maxScreenC_v);  // <-- for v
 	vec2 minScreenC = min(minScreenC_u, minScreenC_v);
 	vec2 maxScreenC = max(maxScreenC_u, maxScreenC_v);
-#else 
-	vec2 minScreenC_u, minScreenC_v;
-	evalSplitDecision(false, paramsStart, paramsRange, vec2(t_u, t_v), curveIndex, userData, tM, posCS_u, minScreenC_u);  // <-- for u
-	evalSplitDecision(true , paramsStart, paramsRange, vec2(t_u, t_v), curveIndex, userData, tM, posCS_v, minScreenC_v);  // <-- for v
-	vec2 minScreenC = min(minScreenC_u, minScreenC_v);
-#endif
 #else
 	evalSplitDecision(false, paramsStart, paramsRange, vec2(t_u, t_v), curveIndex, userData, tM, posCS_u);  // <-- for u
 	evalSplitDecision(true , paramsStart, paramsRange, vec2(t_u, t_v), curveIndex, userData, tM, posCS_v);  // <-- for v
@@ -476,19 +452,12 @@ void main()
 		
 #if WRITE_OUT_MIN_MAX_SCREEN_COORDS
 		vec2 screenCoords_xtra = toScreen(posCS_xtra).xy;
-#if WRITE_MAX_COORDS_IN_PASS2
 		vec2 minScreenC_xtra = subgroupMin(screenCoords_xtra);
 		vec2 maxScreenC_xtra = subgroupMax(screenCoords_xtra);
 		if (subgroupElect()) {
 			minScreenCoords[gl_LocalInvocationID.z] = min(minScreenC, minScreenC_xtra);
 			maxScreenCoords[gl_LocalInvocationID.z] = max(maxScreenC, maxScreenC_xtra);
 		}
-#else
-		vec2 minScreenC_xtra = subgroupMin(screenCoords_xtra);
-		if (subgroupElect()) {
-			minScreenCoords[gl_LocalInvocationID.z] = min(minScreenC, minScreenC_xtra);
-		}
-#endif
 
 		if (pushConstants.mPerformFrustumCulling) {
 #endif

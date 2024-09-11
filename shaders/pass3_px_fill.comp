@@ -189,8 +189,8 @@ void main()
 	// Let's see how many iterations we need in each direction:
 	const float numPixelProducingInvocs = float(gl_WorkGroupSize.x - 1);
 	float numIterationsU = useAdaptive
-		? max(floor((uPxFillParams.mElements[pxFillId].mScreenDists.x * STEP_SCALE_U + numPixelProducingInvocs - 1) / numPixelProducingInvocs), 1.0)
-		:     floor((screenSpaceThreshold                             * STEP_SCALE_U + numPixelProducingInvocs - 1) / numPixelProducingInvocs);
+		? max(floor((uPxFillParams.mElements[pxFillId].mScreenDistsHybridData.x * STEP_SCALE_U + numPixelProducingInvocs - 1) * samplingScalers[0] / numPixelProducingInvocs), 1.0)
+		:     floor((screenSpaceThreshold                                       * STEP_SCALE_U + numPixelProducingInvocs - 1) * samplingScalers[0] / numPixelProducingInvocs);
 	numIterationsU = max(float(COOPERATIVE_GROUPS), numIterationsU);
 //	debugPrintfEXT("mPatchTargetResolution[%f], numPixelProducingInvocs[%f], numIterationsU[%f]", pushConstants.mPatchTargetResolution, numPixelProducingInvocs, numIterationsU);
 
@@ -198,12 +198,11 @@ void main()
 	float iterationDeltaU = paramsRange[0] / numIterationsU;
 	float deltaU = iterationDeltaU / numPixelProducingInvocs;
 	float deltaV = useAdaptive
-		? paramsRange[1] / max(uPxFillParams.mElements[pxFillId].mScreenDists.y * STEP_SCALE_V - 1.0, 1.0)  // -1.0 because we need to overshoot by one
-		: paramsRange[1] /    (screenSpaceThreshold                             * STEP_SCALE_V - 1.0); // -1.0 because we need to overshoot by one
+		? paramsRange[1] / max(uPxFillParams.mElements[pxFillId].mScreenDistsHybridData.y * STEP_SCALE_V - 1.0, 1.0)  // -1.0 because we need to overshoot by one
+		: paramsRange[1] /    (screenSpaceThreshold                                       * STEP_SCALE_V - 1.0); // -1.0 because we need to overshoot by one
 //	debugPrintfEXT("iterationDeltaU[%f], deltaU[%f], deltaV[%f]", iterationDeltaU, deltaU, deltaV);
 
-	deltaU *= samplingScalers[0];
-	deltaV *= samplingScalers[1];
+	deltaV /= samplingScalers[1];
 	iterationDeltaU = deltaU * numPixelProducingInvocs;
 
 #if SHARED_MEM_LOCAL_RASTER

@@ -47,17 +47,17 @@ struct px_fill_data
     // [3]: unused
     uvec4 mObjectIdUserData;
 
-    // [0]: EITHER max screen dist u
-    // [1]: EITHER max screen dist v
-    // [2]: min screen coords of patch u (if WRITE_OUT_MIN_MAX_SCREEN_COORDS is enabled in pass2x_patch_lod.comp)
-    // [3]: min screen coords of patch v (if WRITE_OUT_MIN_MAX_SCREEN_COORDS is enabled in pass2x_patch_lod.comp)
-    vec4 mScreenDists;
+    // [0]: max. screen dist u
+    // [1]: max. screen dist v
+    // [2]: hybrid levels to go (counting down)
+    // [3]: hybrid screen threshold divisor
+    vec4 mScreenDistsHybridData;
 
-#if WRITE_MAX_COORDS_IN_PASS2
     // [0]: min screen coords of patch u (if WRITE_OUT_MIN_MAX_SCREEN_COORDS is enabled in pass2x_patch_lod.comp)
     // [1]: min screen coords of patch v (if WRITE_OUT_MIN_MAX_SCREEN_COORDS is enabled in pass2x_patch_lod.comp)
-    vec4 mScreenMax;
-#endif
+    // [2]: max screen coords of patch u (if WRITE_OUT_MIN_MAX_SCREEN_COORDS is enabled in pass2x_patch_lod.comp)
+    // [3]: max screen coords of patch v (if WRITE_OUT_MIN_MAX_SCREEN_COORDS is enabled in pass2x_patch_lod.comp)
+    vec4 mScreenMinMax;
 };
 
 void getParams(vec4 data, out float uFrom, out float uTo, out float vFrom, out float vTo)

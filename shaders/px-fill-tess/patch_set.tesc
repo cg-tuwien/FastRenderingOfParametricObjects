@@ -70,7 +70,7 @@ void main()
         if (useAdaptive) {
             const float absoluteMin =  8.0;
             const float absoluteMax = 64.0;
-            const vec2 screenDists = uPxFillParams.mElements[pxFillId].mScreenDists.xy;
+            const vec2 screenDists = uPxFillParams.mElements[pxFillId].mScreenDistsHybridData.xy;
             const float threshold  = uObjectData.mElements[objectId].mLodAndRenderSettings.z;
             const float innerTess = tessLevels[0];
             const float outerTess = tessLevels[1];

@@ -34,7 +34,7 @@
 // vk::SampleCountFlagBits::e64
 #define SAMPLE_COUNT vk::SampleCountFlagBits::e8
 
-#define SSAA_ENABLED 0
+#define SSAA_ENABLED 1
 #define SSAA_FACTOR  glm::uvec2(2, 2)
 
 // TEST_MODE: Uncomment one of the following includes to load a specific configuration for test mode.
@@ -1084,7 +1084,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 
 				ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "Point rendering variants only:");
 				auto f = po.sampling_factors();
-				if (ImGui::DragFloat2("Sampling Factors (u, v)", &f[0], 0.01f)) {
+				if (ImGui::DragFloat2("Sampling Factors (u, v)", &f[0], 0.01f, 0.1f, 10.0f)) {
 					po.set_sampling_factors(f);
 					updateObjects = true;
 				}

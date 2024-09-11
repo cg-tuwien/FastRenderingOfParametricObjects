@@ -15,6 +15,9 @@
 #define _unroll_ [[unroll]]
 #define _loop_   [[loop]]
 
+// Enable the following option to DISABLE the samplingScalers (effectively setting them to 1.0 each)
+#define DISABLE_SAMPLING_SCALERS 1
+
 // This is const (see static int get_px_fill_set_index(rendering_method aRenderMethod) -> case rendering_method::PointRendered_4xSS_local_fb):
 #define POINT_RENDERED_4XSS_LOCAL_FB_INDEX 4
 
@@ -236,9 +239,7 @@ void main()
 			// Bounds check: 
 			vec4 patchScreenInfo  = uPxFillParams.mElements[p + MAX_INDIRECT_DISPATCHES * POINT_RENDERED_4XSS_LOCAL_FB_INDEX].mScreenDists;
 			ivec2 minScreenCoords = ivec2(patchScreenInfo.zw);
-#if WRITE_MAX_COORDS_IN_PASS2
 			ivec2 maxScreenCoords = ivec2(uPxFillParams.mElements[p + MAX_INDIRECT_DISPATCHES * POINT_RENDERED_4XSS_LOCAL_FB_INDEX].mScreenMax.xy);
-#endif
 			if (!isOutside(minScreenCoords, maxScreenCoords, screenCoordsLB, screenCoordsUB)) {
 				const uint insertIndex = atomicAdd(NumTilePatches, 1);
 				TilePatches[insertIndex] = p;
@@ -289,7 +290,11 @@ void main()
 		const bool  useAdaptive          = uObjectData.mElements[objectId].mUseAdaptiveDetail == 1; 
 		const vec4  lodAndRenderSettings = uObjectData.mElements[objectId].mLodAndRenderSettings;
 		const vec2  epsilons             = uObjectData.mElements[objectId].mLodAndRenderSettings.xy;
+#if DISABLE_SAMPLING_SCALERS
+		const vec2  samplingScalers      = vec2(1.0, 1.0);
+#else
 		const vec2  samplingScalers      = uObjectData.mElements[objectId].mTessAndSamplingSettings.zw;
+#endif
 
 		vec2 paramsStart = vec2(
 			uPxFillParams.mElements[pxFillId].mParams[0],
@@ -311,20 +316,19 @@ void main()
 		// Let's see how many iterations we need in each direction:
 		const float numPixelProducingInvocs = float(gl_WorkGroupSize.x - 1);
 		float numIterationsU = useAdaptive
-			? max(floor((uPxFillParams.mElements[pxFillId].mScreenDists.x * float(TILE_FACTOR_X) * STEP_SCALE_U + numPixelProducingInvocs - 1) / numPixelProducingInvocs), 1.0)
-			:     floor((screenSpaceThreshold                             * float(TILE_FACTOR_X) * STEP_SCALE_U + numPixelProducingInvocs - 1) / numPixelProducingInvocs);
+			? max(floor((uPxFillParams.mElements[pxFillId].mScreenDistsHybridData.x * float(TILE_FACTOR_X) * STEP_SCALE_U + numPixelProducingInvocs - 1) * samplingScalers[0] / numPixelProducingInvocs), 1.0)
+			:     floor((screenSpaceThreshold                                       * float(TILE_FACTOR_X) * STEP_SCALE_U + numPixelProducingInvocs - 1) * samplingScalers[0] / numPixelProducingInvocs);
 	//	debugPrintfEXT("mPatchTargetResolution[%f], numPixelProducingInvocs[%f], numIterationsU[%f]", pushConstants.mPatchTargetResolution, numPixelProducingInvocs, numIterationsU);
 
 		// With that info, calc our deltas:
 		float iterationDeltaU = paramsRange[0] / numIterationsU;
 		float deltaU = iterationDeltaU / numPixelProducingInvocs;
 		float deltaV = useAdaptive
-			? paramsRange[1] / max(uPxFillParams.mElements[pxFillId].mScreenDists.y * float(TILE_FACTOR_Y) * STEP_SCALE_V - 1.0, 1.0)  // -1.0 because we need to overshoot by one
-			: paramsRange[1] /    (screenSpaceThreshold                             * float(TILE_FACTOR_Y) * STEP_SCALE_V - 1.0); // -1.0 because we need to overshoot by one
+			? paramsRange[1] / max(uPxFillParams.mElements[pxFillId].mScreenDistsHybridData.y * float(TILE_FACTOR_Y) * STEP_SCALE_V - 1.0, 1.0)  // -1.0 because we need to overshoot by one
+			: paramsRange[1] /    (screenSpaceThreshold                                       * float(TILE_FACTOR_Y) * STEP_SCALE_V - 1.0); // -1.0 because we need to overshoot by one
 	//	debugPrintfEXT("iterationDeltaU[%f], deltaU[%f], deltaV[%f]", iterationDeltaU, deltaU, deltaV);
 
-		deltaU *= samplingScalers[0];
-		deltaV *= samplingScalers[1];
+		deltaV /= samplingScalers[1];
 		iterationDeltaU = deltaU * numPixelProducingInvocs;
 
 		const float vTarget = paramsRange[1] + deltaV; // Gotta run for +1 because we're wasting te top-most row.

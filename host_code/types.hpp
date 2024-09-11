@@ -110,11 +110,11 @@ static float get_screen_space_threshold_divisor(rendering_variant aRenderMethod)
     case rendering_variant::Tess_noAA: 
     case rendering_variant::PointRendered_direct:
     case rendering_variant::Hybrid: // default to 0
-        return 1.0f;
     case rendering_variant::Tess_8xSS: 
     case rendering_variant::Tess_4xSS_8xMS:
     case rendering_variant::PointRendered_4xSS_local_fb:
-        return 2.0f;
+        return 1.0f;
+        //return 2.0f;
     default:
         assert (false);
         return 1.0f;
@@ -275,17 +275,17 @@ struct px_fill_data
     // [3]: unused
     glm::uvec4 mObjectIdUserData;
 
-    // [0]: EITHER max screen dist u
-    // [1]: EITHER max screen dist v
-    // [2]: min screen coords of patch u (if WRITE_OUT_MIN_MAX_SCREEN_COORDS is enabled in pass2x_patch_lod.comp)
-    // [3]: min screen coords of patch v (if WRITE_OUT_MIN_MAX_SCREEN_COORDS is enabled in pass2x_patch_lod.comp)
-    glm::vec4 mScreenDists;
+    // [0]: max. screen dist u
+    // [1]: max. screen dist v
+    // [2]: hybrid levels to go (counting down)
+    // [3]: hybrid screen threshold divisor
+    glm::vec4 mScreenDistsHybridData;
 
-#if WRITE_MAX_COORDS_IN_PASS2
     // [0]: min screen coords of patch u (if WRITE_OUT_MIN_MAX_SCREEN_COORDS is enabled in pass2x_patch_lod.comp)
     // [1]: min screen coords of patch v (if WRITE_OUT_MIN_MAX_SCREEN_COORDS is enabled in pass2x_patch_lod.comp)
-    glm::vec4 mScreenMax;
-#endif
+    // [2]: max screen coords of patch u (if WRITE_OUT_MIN_MAX_SCREEN_COORDS is enabled in pass2x_patch_lod.comp)
+    // [3]: max screen coords of patch v (if WRITE_OUT_MIN_MAX_SCREEN_COORDS is enabled in pass2x_patch_lod.comp)
+    glm::vec4 mScreenMinMax;
 };
 
 inline void getParams(const glm::vec4& data, float& uFrom, float& uTo, float& vFrom, float& vTo) 
