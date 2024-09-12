@@ -32,6 +32,7 @@ shared uint64_t LocalFramebuffer[LOCAL_FB_X][LOCAL_FB_Y];
 
 // Whether or not the debug clusters should be colored (background only):
 #define DEBUG_CLUSTER_VIS 0
+#define DEBUG_CLUSTER_VIS_LINES_ONLY 1
 #define MIX_CLUSTER_VIS_WITH_DRAW_COLOR 0
 
 // When enabled, does not render the parametric object but instead colors the tiles according to the #patches that were selected
@@ -513,7 +514,11 @@ void main()
 #else
 				float intensity = 0.8;
 #endif
-				writeToCombinedAttachment(globalFbCoords, getUint64ForFramebuffer(0.9999, intensity * debugTileBackgroundColor));
+#if DEBUG_CLUSTER_VIS_LINES_ONLY
+				debugTileBackgroundColor = vec4(0.0);
+				if (x < 1 || y < 1)
+#endif 
+					writeToCombinedAttachment(globalFbCoords, getUint64ForFramebuffer(0.9999, intensity * debugTileBackgroundColor));
 			}
 #endif
 		}
