@@ -110,11 +110,13 @@ static float get_screen_space_threshold_divisor(rendering_variant aRenderMethod)
     case rendering_variant::Tess_noAA: 
     case rendering_variant::PointRendered_direct:
     case rendering_variant::Hybrid: // default to 0
-    case rendering_variant::Tess_8xSS: 
-    case rendering_variant::Tess_4xSS_8xMS:
-    case rendering_variant::PointRendered_4xSS_local_fb:
         return 1.0f;
-        //return 2.0f;
+    case rendering_variant::Tess_8xSS: 
+        return 2.8f; // sqrt(8)
+    case rendering_variant::Tess_4xSS_8xMS:
+        return 5.6f; // sqrt(32)
+    case rendering_variant::PointRendered_4xSS_local_fb:
+        return 3.0f; // sqrt(9)
     default:
         assert (false);
         return 1.0f;
