@@ -315,14 +315,19 @@ void pxFillOut(int renderingVariantIndex, float uStart, float uEnd, float vStart
 		float divisor = uPatchLodPing.mElements[elementIdxIn].mScreenDistsHybridData.w;
 		bool needsSS  = hasSubpixelFeatures(uStart, uEnd, vStart, vEnd, screenDists, divisor, elementIdxIn);
 
-//		if (subgroupElect()) {
-//			debugPrintfEXT("curLvl[%i], screenDists[%.1f, %.1f], uStart[%.1f], uEnd[%.1f]", curLvl, screenDists.x, screenDists.y, uStart, uEnd);
+//		if (1 == curLvl && subgroupElect()) {
+//			debugPrintfEXT("curLvl[%i], screenDists[%.1f, %.1f], divisor[%.3f], uStart[%.1f], uEnd[%.1f]", curLvl, screenDists.x, screenDists.y, divisor, uStart, uEnd);
 //		}
 
 		if (needsSS && curLvl < maxDetailLvl) { // => reschedule...
 			curLvl  += 1;
-			divisor = 2.0 * float(curLvl) - 1.0; // level 2 => divisor 3, level 3 => divisor 5
+			divisor = 2.0 * float(curLvl+1) - 1.0; // level 2 => divisor 3, level 3 => divisor 5
 			if (pushConstants.mPatchLodLevel != maxLevel) { // ...if not already max level.
+
+//					if (2 == curLvl && subgroupElect()) {
+//						debugPrintfEXT("...aaaand scheduling it: curLvl[%i], divisor[%.3f], uStart[%.1f], uEnd[%.1f]", curLvl, divisor, uStart, uEnd);
+//					}
+
 				if (subgroupElect() && gl_LocalInvocationID.z == 0) { // Only one thread is allowed to do that. // Only z==0 writes the split data
 					const uint levelOut = pushConstants.mPatchLodLevel + 1;
 					const uint insertIdx = atomicAdd(uPatchLodCount.mDispatchCounts[levelOut].x, 1);
@@ -414,6 +419,12 @@ void main()
 	const float t_u                   = lodAndRenderSettings.z / screenDistsDivisor;
 	const float t_v                   = t_u; // same same
 //	debugPrintfEXT("t_u=%f, t_v=%f", t_u, t_v);
+
+//	if (floatBitsToInt(uPatchLodPing.mElements[elementIdxIn].mScreenDistsHybridData[2]) == 1)
+//		debugPrintfEXT("Lvl. %i patch at LOD step %u with divisor %.2f", 
+//			floatBitsToInt(uPatchLodPing.mElements[elementIdxIn].mScreenDistsHybridData[2]),
+//			pushConstants.mPatchLodLevel,
+//			screenDistsDivisor);
 
 	// Do we have to split? Or are we already good to go (to px fill)?
 
