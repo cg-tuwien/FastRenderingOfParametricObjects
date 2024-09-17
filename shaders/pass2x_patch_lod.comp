@@ -366,9 +366,6 @@ void pxFillOut(int renderingVariantIndex, float uStart, float uEnd, float vStart
 #else
 	uPxFillParams.mElements[insertIdx].mScreenDistsHybridData = vec4(screenDists, uPatchLodPing.mElements[elementIdxIn].mScreenDistsHybridData.zw);
 #endif
-#if ENABLE_HYBRID_TECHNIQUE
-	uPxFillParams.mElements[insertIdx].mObjectIdUserData[3] = renderingVariantIndex;
-#endif
 }
 
 // renderingVariantIndex:  [0] = Tess_noAA, [1] = Tess_8xSS, [2] = Tess_4xSS_8xMS, [3] = PointRendered_direct, [4] = PointRendered_4xSS_local_fb, [5] = Hybrid

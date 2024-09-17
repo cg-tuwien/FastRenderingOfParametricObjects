@@ -90,7 +90,7 @@ vec3 gltf_dielectric_brdf(vec3 incoming, vec3 outgoing, vec3 normal, float rough
     return mix(diffuse, vec3(specular), fresnel);
 }
 
-vec3 shade(int matIndex, vec3 albedo, vec3 shadingUserParams, vec3 posWS, vec3 normalWS, vec2 texCoords SHADE_ADDITIONAL_PARAMS)
+vec3 shade(int matIndex, int renderVariant, vec3 albedo, vec3 shadingUserParams, vec3 posWS, vec3 normalWS, vec2 texCoords SHADE_ADDITIONAL_PARAMS)
 {
     if (matIndex < -5 || matIndex > 1000) {
 		return linear_rgb_to_srgb(vec3(1.0, 0.0, 1.0));
@@ -111,7 +111,7 @@ vec3 shade(int matIndex, vec3 albedo, vec3 shadingUserParams, vec3 posWS, vec3 n
  //   }
 
 #if ENABLE_HYBRID_TECHNIQUE
-    //matIndex += int(shadingUserParams.z);
+    matIndex += renderVariant;
 #endif
 
     if (-1 == matIndex) { // ========== DEBUG VISUALIZATION BEGIN ============

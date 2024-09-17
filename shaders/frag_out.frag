@@ -32,6 +32,12 @@ layout(set = 2, binding = 0) buffer SsboCounters { uint mCounters[4]; } uCounter
 #define SAMPLE_ADDITIONAL_PARAMS
 #include "../shader_includes/shading_model.glsl"
 
+layout(push_constant) uniform PushConstants
+{
+    int   mPxFillParamsBufferOffset;
+}
+pushConstants;
+
 layout (location = 0) in PerVertexData
 {
 	vec3 positionWS;
@@ -47,7 +53,7 @@ void main()
 	vec3 c = v_in.color;
 //	c = vec3(1.0);
 	fs_out = vec4(
-		shade(v_in.matIndex, c, v_in.shadingUserParams, v_in.positionWS, normalize(v_in.normalWS), v_in.texCoords),
+		shade(v_in.matIndex, pushConstants.mPxFillParamsBufferOffset/MAX_INDIRECT_DISPATCHES, c, v_in.shadingUserParams, v_in.positionWS, normalize(v_in.normalWS), v_in.texCoords),
 		1.0
 	);
 

@@ -40,10 +40,11 @@
 // TEST_MODE: Uncomment one of the following includes to load a specific configuration for test mode.
 //            It will then be tested with the rendering variant assigned to TEST_RENDERING_METHOD.
 //            Once the application has started, start the test with [Space].
-#include "perf_tests/test_knit_yarn.hpp"
-#include "perf_tests/test_fiber_curves.hpp"
-#include "perf_tests/test_seashell.hpp"
-#define TEST_RENDERING_METHOD          rendering_variant::PointRendered_direct
+//#include "perf_tests/test_knit_yarn.hpp"
+//#include "perf_tests/test_fiber_curves.hpp"
+//#include "perf_tests/test_seashell.hpp"
+//#define TEST_RENDERING_METHOD          rendering_variant::PointRendered_direct
+#define TEST_GATHER_TIMER_QUERIES 1
 
 static std::array<parametric_object, 14> PredefinedParametricObjects {{
 	parametric_object{"Sphere"       , "assets/po-sphere-patches.png",     false, parametric_object_type::Sphere,                 0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>() , glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{ 0.f,  0.f,  0.f})},
@@ -1541,7 +1542,6 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 				ImGui::Checkbox("Start performance measurement (as configured with TEST_MODE_ON) [Space]", &mStartMeasurement);
 #else 
 				ImGui::Checkbox("Start performance measurement [Space]", &mStartMeasurement);
-				ImGui::SliderFloat("Test duration per step", &mTestDurationPerStep, 0.5f, 5.0f, "%.2f");
 				ImGui::SliderFloat("Camera distance from origin", &mDistanceFromOrigin, 5.0f, 100.0f, "%.0f");
 				ImGui::Checkbox("Move camera in steps during measurements", &mMoveCameraDuringMeasurements);
 				ImGui::SliderInt("#steps to move the camera closer/away", &mMeasurementMoveCameraSteps, 0, 10);
@@ -1718,7 +1718,11 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 		if (avk::input().key_pressed(avk::key_code::space)) {
 			mStartMeasurement = true;
 		}
+#if TEST_DURATION_PER_STEP
 		const float MeasureSecsPerStep = TEST_DURATION_PER_STEP;
+#else
+		const float MeasureSecsPerStep = 2.5f;
+#endif
 		if (mStartMeasurement) {
 #if TEST_MODE_ON
 			for (int ii = 0; ii < mParametricObjects.size(); ++ii) {
@@ -1791,15 +1795,13 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 			    //auto imguiManager = current_composition()->element_by_type<imgui_manager>();
 			    //imguiManager->enable();
 			    mMeasurementInProgress = false;
-				std::string whichMethod = "TODO: not implemented yet";
-				LOG_INFO_EM(std::format("{} frames rendered during {} sec. measurement time frame with {} method.", std::get<int>(mMeasurementFrameCounters.back()), mMeasurementEndTime - mMeasurementStartTime, whichMethod));
+				LOG_INFO_EM(std::format("{} frames rendered during {} sec. measurement time frame.", std::get<int>(mMeasurementFrameCounters.back()), mMeasurementEndTime - mMeasurementStartTime));
 #if STATS_ENABLED
 				LOG_INFO(std::format(" - mGatherPipelineStats: {}", mGatherPipelineStats));
 #else
 				LOG_INFO(            " - mGatherPipelineStats not included in build (!STATS_ENABLED)");
 #endif
 
-				LOG_INFO("Measurement results (elapsed time, camera distance, unique pixels (avg.), num patches out to render (avg.), FPS):");
 				for (int i = mMeasurementFrameCounters.size() - 1; i > 0; --i) {
 					std::get<double>(mMeasurementFrameCounters[i]) -= std::get<double>(mMeasurementFrameCounters[i - 1]);
 				}
@@ -1838,8 +1840,8 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 					std::get<float>(mMeasurementFrameCounters[curIdx]) = glm::length(glm::vec3{ mOrbitCam.translation().x, 0.0f, mOrbitCam.translation().z });
 				}
 #if TEST_GATHER_TIMER_QUERIES && STATS_ENABLED
-				//std::get<2>(mMeasurementFrameCounters[curIdx]) += mLastBeginToParametricDuration - mLastClearDuration; // <----- TODO after timer queries rework
-				//std::get<3>(mMeasurementFrameCounters[curIdx]) += mLastPatchLodDuration;                               // <----- TODO after timer queries rework
+				std::get<2>(mMeasurementFrameCounters[curIdx]) += mLastLodStageDuration - mLastClearDuration;
+				std::get<3>(mMeasurementFrameCounters[curIdx]) += mLastTotalRenderDuration;                  
 #else
 				std::get<2>(mMeasurementFrameCounters[curIdx]) += mCounterValues[1];
 				//                                                       TODO: Is that   vvv   the right way to handle [0], [1] and [2]?? 
@@ -2081,6 +2083,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 			mLastTess8xSSDuration				= get_duration(11); // + 11, stage::color_attachment_output), // measure after Tess. 8xSS
 			mLastFSQbefore4xSS8xMSDuration		= get_duration(12); // + 12, stage::color_attachment_output), // measure after copy-over combined attachment back into a framebuffer image
 			mLastTess4xSS8xMSDuration			= get_duration(13); // + 13, stage::color_attachment_output), // measure after rendering with Tess. 4xSS+8xMS
+			mLastTotalRenderDuration			= timers[13] - timers[4];
 			mLastTotalStepsDuration				= timers[13] - timers[0];
 
 			if (mGatherPipelineStats) {
@@ -2615,6 +2618,7 @@ private: // v== Member variables ==v
 	uint64_t mLastTess8xSSDuration = 0;				// + 11, stage::color_attachment_output), // measure after Tess. 8xSS
 	uint64_t mLastFSQbefore4xSS8xMSDuration = 0;	// + 12, stage::color_attachment_output), // measure after copy-over combined attachment back into a framebuffer image
 	uint64_t mLastTess4xSS8xMSDuration = 0;			// + 13, stage::color_attachment_output), // measure after rendering with Tess. 4xSS+8xMS
+	uint64_t mLastTotalRenderDuration = 0;
 	uint64_t mLastTotalStepsDuration = 0;
 
 	avk::query_pool mPipelineStatsPool;
@@ -2671,7 +2675,7 @@ private: // v== Member variables ==v
 	std::vector<std::tuple<double, float, uint64_t, uint64_t, int>> mMeasurementFrameCounters;
 	bool mMoveCameraDuringMeasurements = true;
 	int mMeasurementMoveCameraSteps = 6;
-	float mMeasurementMoveCameraDelta = -5.0f;
+	float mMeasurementMoveCameraDelta = -3.0f;
 	int mMeasurementIndexLastFrame = -1;
 
 	avk::buffer mCountersSsbo;
