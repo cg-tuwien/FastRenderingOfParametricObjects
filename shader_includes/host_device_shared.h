@@ -65,7 +65,7 @@
 
 // Option to enable or disable the hybrid rendering technique.
 // Enabling it might lead to higher compile times for the pass2x_patch_lod.comp shader (not sure why).
-#define ENABLE_HYBRID_TECHNIQUE 1
+#define ENABLE_HYBRID_TECHNIQUE 0
 
 // Data size of the big brain dataset to be loaded (note that only even numbers will be properly shaded (sorry!), i.e., e.g.: 10x10, 100x100, or the maximum of 140x140)
 #define SH_BRAIN_DATA_SIZE_X      140

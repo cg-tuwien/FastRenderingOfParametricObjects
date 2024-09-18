@@ -69,6 +69,10 @@ class vk_parametric_curves_app : public avk::invokee
 public: // v== avk::invokee overrides which will be invoked by the framework ==v
 	vk_parametric_curves_app(avk::queue& aQueue)
 		: mQueue{ &aQueue }
+		, mEnableSampleShadingFor8xMS{ false }
+		, mEnableSampleShadingFor4xSS8xMS{ false }
+		, mRenderVariantDataTransferEnabled { { true, true, true } }
+		, mOutputResultOfRenderVariantIndex{ 3 }
 	{
         for (const auto& po : PredefinedParametricObjects) {
             mParametricObjects.push_back(po);
@@ -1221,7 +1225,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 #else 
 			{},
 #endif
-			// NOTE: We're creating NUM_DIFFERENT_RENDER_VARIANTS-many such  vvv  entries, because: [0] = Tess_noAA, [1] = Tess_8xSS, [2] = Tess_4xSS_8xMS, [3] = PointRendered_direct, [4] = PointRendered_4xSS_local_fb
+			// NOTE: We're creating NUM_DIFFERENT_RENDER_VARIANTS-many such  vvv  entries, because: [0] = Tess_noAA, [1] = Tess_8xMS, [2] = Tess_4xSS_8xMS, [3] = PointRendered_direct, [4] = PointRendered_4xSS_local_fb
 			indirect_buffer_meta::create_from_num_elements(NUM_DIFFERENT_RENDER_VARIANTS,  sizeof(VkDrawIndirectCommand)),
 			storage_buffer_meta::create_from_size(         NUM_DIFFERENT_RENDER_VARIANTS * sizeof(VkDrawIndirectCommand))
 		);
@@ -1262,7 +1266,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 			"shaders/px-fill-tess/patch_set.tesc", 
 			"shaders/px-fill-tess/patch_go.tese",
 			push_constant_binding_data{shader_type::all, 0, sizeof(patch_into_tess_push_constants)},
-			cfg::shade_per_sample(),
+			mEnableSampleShadingFor8xMS ? cfg::shade_per_sample() : cfg::shade_per_fragment(),
 			cfg::viewport_depth_scissors_config::from_framebuffer(mFramebufferMS.as_reference()),
 			mRenderpassMS, cfg::subpass_index{ 1 }
 		);
@@ -1279,7 +1283,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 			"shaders/px-fill-tess/patch_set.tesc", 
 			"shaders/px-fill-tess/patch_go.tese",
 			push_constant_binding_data{shader_type::all, 0, sizeof(patch_into_tess_push_constants)},
-			cfg::shade_per_fragment(),
+			mEnableSampleShadingFor4xSS8xMS ? cfg::shade_per_sample() : cfg::shade_per_fragment(),
 			cfg::viewport_depth_scissors_config::from_framebuffer(mFramebufferSSMS.as_reference()),
 			mRenderpassSSMS, cfg::subpass_index{ 1 }
 		);
@@ -1425,7 +1429,103 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 				ImGui::Text("%.1f FPS", ImGui::GetIO().Framerate);
 				ImGui::Text("%.1lf ms/render() CPU time", mRenderDurationMs);
 				ImGui::Separator();
-				ImGui::TextColored(ImVec4(.5f, .3f, .4f, 1.f), "Timestamp Period: %.3f ns", timestampPeriod);
+				
+				if (!mDrawCalls.empty()) {
+				    ImGui::Separator();
+				    ImGui::Checkbox("Render Sponza + Terrain", &mRenderExtra3DModel);
+				}
+
+				ImGui::Separator();
+				bool quakeCamEnabled = mQuakeCam.is_enabled();
+				if (ImGui::Checkbox("Enable Quake Camera", &quakeCamEnabled)) {
+					if (quakeCamEnabled) { // => should be enabled
+						mQuakeCam.set_matrix(mOrbitCam.matrix());
+						mQuakeCam.enable();
+						mOrbitCam.disable();
+					}
+				}
+				if (quakeCamEnabled) {
+                    ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.3f, 1.0f), "[Esc] to exit Quake Camera navigation");
+					if (input().key_pressed(key_code::escape)) {
+						mOrbitCam.set_matrix(mQuakeCam.matrix());
+						mOrbitCam.enable();
+						mQuakeCam.disable();
+					}
+                }
+                else {
+                    ImGui::TextColored(ImVec4(.8f, .4f, .4f, 1.f), "[Esc] to exit application");
+                }
+				if (imguiManager->begin_wanting_to_occupy_mouse() && mOrbitCam.is_enabled()) {
+					mOrbitCam.disable();
+				}
+				if (imguiManager->end_wanting_to_occupy_mouse() && !mQuakeCam.is_enabled()) {
+					mOrbitCam.enable();
+				}
+				ImGui::Separator();
+
+				ImGui::Checkbox("Frustum Culling ON", &mFrustumCullingOn);
+				rasterPipesNeedRecreation = ImGui::Checkbox("Backface Culling ON", &mBackfaceCullingOn) || rasterPipesNeedRecreation;
+				rasterPipesNeedRecreation = ImGui::Checkbox("Disable Color Attachment Output" , &mDisableColorAttachmentOut) || rasterPipesNeedRecreation;
+
+				ImGui::Text("Enable/disable render result transfers:");
+				ImGui::Indent();
+				ImGui::Checkbox("Tess. noAA -> Point-based", &mRenderVariantDataTransferEnabled[0]);
+				ImGui::Checkbox("Point-based -> 8xMS", &mRenderVariantDataTransferEnabled[1]);
+				ImGui::Checkbox("8xMS -> 4xSS+8xMS", &mRenderVariantDataTransferEnabled[2]);
+				ImGui::Unindent();
+
+				ImGui::Combo("-> results -> backbuffer", &mOutputResultOfRenderVariantIndex, "After tess. noAA\0After point-based\0After 8xMS\0After 4xSS+8xMS\0");
+
+				ImGui::Text("Enable/disable sample shading:");
+				ImGui::Indent();
+				rasterPipesNeedRecreation = ImGui::Checkbox("Sample shading enabled for 8xMS", &mEnableSampleShadingFor8xMS) || rasterPipesNeedRecreation;
+				if (mEnableSampleShadingFor8xMS) {
+					ImGui::SameLine(); ImGui::TextColored(ImVec4(.4f, .4f, .8f, 1.f), "-> 8xSS");
+				}
+				rasterPipesNeedRecreation = ImGui::Checkbox("Sample shading enabled for 4xSS+8xMS", &mEnableSampleShadingFor4xSS8xMS) || rasterPipesNeedRecreation;
+				if (mEnableSampleShadingFor4xSS8xMS) {
+					ImGui::SameLine(); ImGui::TextColored(ImVec4(.4f, .4f, .8f, 1.f), "-> 32xSS");
+				}
+				ImGui::Unindent();
+
+				ImGui::Checkbox("Render in wireframe mode ([F1] to toggle)", &mWireframeModeOn);
+
+				if (ImGui::Checkbox("Animations paused (freeze time)", &mAnimationPaused)) {
+                    if (mAnimationPaused) {
+                        mAnimationPauseTime = time().absolute_time();
+                    }
+                    else {
+						mTimeToSubtract += time().absolute_time() - mAnimationPauseTime;
+                    }
+                }
+
+				//// Just some Debug stuff:
+				//ImGui::Separator();
+				//ImGui::Text("DEBUG SLIDERS:");
+    //            ImGui::PushItemWidth(imGuiWindowWidth * 0.6f);
+				//ImGui::SliderFloat("LERP SH <-> Sphere (aka float dbg slider #1)", &mDebugSliders[0], 0.0f, 1.0f);
+				//ImGui::SliderInt("SH Band           (aka int dbg slider #1)", &mDebugSlidersi[0],  0, 31);
+				//ImGui::SliderInt("SH Basis Function (aka int dbg slider #2)", &mDebugSlidersi[1], -mDebugSlidersi[0], mDebugSlidersi[0]);
+				//ImGui::Text("##lololo");
+				//ImGui::SliderFloat("Terrain height (aka float dbg slider #2)", &mDebugSliders[1], 0.0f, 10.0f);
+				//ImGui::PopItemWidth();
+
+				// Automatic performance measurement, camera flight:
+				ImGui::Separator();
+
+#if TEST_MODE_ON 
+				ImGui::Checkbox("Start performance measurement (as configured with TEST_MODE_ON) [Space]", &mStartMeasurement);
+#else 
+				ImGui::Checkbox("Start performance measurement [Space]", &mStartMeasurement);
+				ImGui::SliderFloat("Camera distance from origin", &mDistanceFromOrigin, 5.0f, 100.0f, "%.0f");
+				ImGui::Checkbox("Move camera in steps during measurements", &mMoveCameraDuringMeasurements);
+				ImGui::SliderInt("#steps to move the camera closer/away", &mMeasurementMoveCameraSteps, 0, 10);
+				ImGui::DragFloat("Delta by how much to move the camera with each step", &mMeasurementMoveCameraDelta, 0.1f);
+#endif
+
+				ImGui::Separator();
+
+ImGui::TextColored(ImVec4(.5f, .3f, .4f, 1.f), "Timestamp Period: %.3f ns", timestampPeriod);
 
 #if STATS_ENABLED
 				// Timestamps are gathered regardless of pipeline stats:
@@ -1475,77 +1575,6 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 #else
 				ImGui::TextColored(ImVec4(0.5, 0.5, 0.5, 1.0), "Pipeline stats disabled project-wide.");
 				ImGui::TextColored(ImVec4(0.5, 0.5, 0.5, 1.0), "Heat map write disabled project-wide too (just fyi).");
-#endif
-
-				if (!mDrawCalls.empty()) {
-				    ImGui::Separator();
-				    ImGui::Checkbox("Render Sponza + Terrain", &mRenderExtra3DModel);
-				}
-
-				ImGui::Separator();
-				bool quakeCamEnabled = mQuakeCam.is_enabled();
-				if (ImGui::Checkbox("Enable Quake Camera", &quakeCamEnabled)) {
-					if (quakeCamEnabled) { // => should be enabled
-						mQuakeCam.set_matrix(mOrbitCam.matrix());
-						mQuakeCam.enable();
-						mOrbitCam.disable();
-					}
-				}
-				if (quakeCamEnabled) {
-                    ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.3f, 1.0f), "[Esc] to exit Quake Camera navigation");
-					if (input().key_pressed(key_code::escape)) {
-						mOrbitCam.set_matrix(mQuakeCam.matrix());
-						mOrbitCam.enable();
-						mQuakeCam.disable();
-					}
-                }
-                else {
-                    ImGui::TextColored(ImVec4(.8f, .4f, .4f, 1.f), "[Esc] to exit application");
-                }
-				if (imguiManager->begin_wanting_to_occupy_mouse() && mOrbitCam.is_enabled()) {
-					mOrbitCam.disable();
-				}
-				if (imguiManager->end_wanting_to_occupy_mouse() && !mQuakeCam.is_enabled()) {
-					mOrbitCam.enable();
-				}
-				ImGui::Separator();
-
-				ImGui::Checkbox("Frustum Culling ON", &mFrustumCullingOn);
-				rasterPipesNeedRecreation = ImGui::Checkbox("Backface Culling ON", &mBackfaceCullingOn) || rasterPipesNeedRecreation;
-				rasterPipesNeedRecreation = ImGui::Checkbox("Disable Color Attachment Output" , &mDisableColorAttachmentOut) || rasterPipesNeedRecreation;
-
-				ImGui::Checkbox("Render in wireframe mode ([F1] to toggle)", &mWireframeModeOn);
-
-				if (ImGui::Checkbox("Animations paused (freeze time)", &mAnimationPaused)) {
-                    if (mAnimationPaused) {
-                        mAnimationPauseTime = time().absolute_time();
-                    }
-                    else {
-						mTimeToSubtract += time().absolute_time() - mAnimationPauseTime;
-                    }
-                }
-
-				//// Just some Debug stuff:
-				//ImGui::Separator();
-				//ImGui::Text("DEBUG SLIDERS:");
-    //            ImGui::PushItemWidth(imGuiWindowWidth * 0.6f);
-				//ImGui::SliderFloat("LERP SH <-> Sphere (aka float dbg slider #1)", &mDebugSliders[0], 0.0f, 1.0f);
-				//ImGui::SliderInt("SH Band           (aka int dbg slider #1)", &mDebugSlidersi[0],  0, 31);
-				//ImGui::SliderInt("SH Basis Function (aka int dbg slider #2)", &mDebugSlidersi[1], -mDebugSlidersi[0], mDebugSlidersi[0]);
-				//ImGui::Text("##lololo");
-				//ImGui::SliderFloat("Terrain height (aka float dbg slider #2)", &mDebugSliders[1], 0.0f, 10.0f);
-				//ImGui::PopItemWidth();
-
-				// Automatic performance measurement, camera flight:
-				ImGui::Separator();
-#if TEST_MODE_ON 
-				ImGui::Checkbox("Start performance measurement (as configured with TEST_MODE_ON) [Space]", &mStartMeasurement);
-#else 
-				ImGui::Checkbox("Start performance measurement [Space]", &mStartMeasurement);
-				ImGui::SliderFloat("Camera distance from origin", &mDistanceFromOrigin, 5.0f, 100.0f, "%.0f");
-				ImGui::Checkbox("Move camera in steps during measurements", &mMoveCameraDuringMeasurements);
-				ImGui::SliderInt("#steps to move the camera closer/away", &mMeasurementMoveCameraSteps, 0, 10);
-				ImGui::DragFloat("Delta by how much to move the camera with each step", &mMeasurementMoveCameraDelta, 0.1f);
 #endif
 
 				ImGui::Separator();
@@ -1625,7 +1654,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 							"shaders/px-fill-tess/patch_set.tesc", 
 							"shaders/px-fill-tess/patch_go.tese",
 							push_constant_binding_data{shader_type::all, 0, sizeof(patch_into_tess_push_constants)},
-							cfg::shade_per_sample(),
+							mEnableSampleShadingFor8xMS ? cfg::shade_per_sample() : cfg::shade_per_fragment(),
 							cfg::viewport_depth_scissors_config::from_framebuffer(mFramebufferMS.as_reference()),
 							mRenderpassMS, cfg::subpass_index{ 1 }
 						);
@@ -1645,7 +1674,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 							"shaders/px-fill-tess/patch_set.tesc", 
 							"shaders/px-fill-tess/patch_go.tese",
 							push_constant_binding_data{shader_type::all, 0, sizeof(patch_into_tess_push_constants)},
-							cfg::shade_per_fragment(),
+							mEnableSampleShadingFor4xSS8xMS ? cfg::shade_per_sample() : cfg::shade_per_fragment(),
 							cfg::viewport_depth_scissors_config::from_framebuffer(mFramebufferSSMS.as_reference()),
 							mRenderpassSSMS, cfg::subpass_index{ 1 }
 						);
@@ -2260,16 +2289,17 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 				access::depth_stencil_attachment_write                   | access::color_attachment_write  >>  access::shader_read
 			), 
 
-			command::bind_pipeline(mCopyToCombinedAttachmentPipe.as_reference()),
+			command::conditional([this] { return mRenderVariantDataTransferEnabled[0]; }, [this, resolution] { return command::gather(
+				command::bind_pipeline(mCopyToCombinedAttachmentPipe.as_reference()),
 				command::bind_descriptors(mCopyToCombinedAttachmentPipe->layout(), mDescriptorCache->get_or_create_descriptor_sets({
 					descriptor_binding(0, 0, mCombinedAttachmentView->as_storage_image(layout::general)),
 					descriptor_binding(1, 0, mFramebufferNoAA->image_view_at(0)->as_sampled_image(layout::shader_read_only_optimal)),
 					descriptor_binding(1, 1, mFramebufferNoAA->image_view_at(1)->as_sampled_image(layout::shader_read_only_optimal))
-				})),
-			command::dispatch((resolution.x + 15u) / 16u, (resolution.y + 15u) / 16u, 1u),
+					})),
+				command::dispatch((resolution.x + 15u) / 16u, (resolution.y + 15u) / 16u, 1u),
 
-			sync::global_memory_barrier(stage::compute_shader + access::shader_write >> stage::compute_shader + (access::shader_read | access::shader_write)),
-
+				sync::global_memory_barrier(stage::compute_shader + access::shader_write >> stage::compute_shader + (access::shader_read | access::shader_write))
+			); }),
 				
 #if STATS_ENABLED
 			mTimestampPool->write_timestamp(firstQueryIndex + 6, stage::compute_shader), // measure after copy-over to combined attachment
@@ -2361,47 +2391,25 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 
 			sync::global_memory_barrier(stage::compute_shader + access::shader_write >> stage::fragment_shader + access::shader_read),
 
-//			// Copy from Uint64 image into back buffer:
-//			sync::image_memory_barrier(context().main_window()->current_backbuffer()->image_at(0),  // Window's back buffer's color attachment
-//					                    stage::none          >>   stage::compute_shader,
-//					                    access::none         >>   access::shader_storage_write)
-//				.with_layout_transition(layout::undefined   >>   layout::general),                  // Don't care about the previous layout
-//						
-//			command::bind_pipeline(mCopyToBackufferPipe.as_reference()),
-//			command::push_constants(mCopyToBackufferPipe->layout(), copy_to_backbuffer_push_constants{ 
-//				mWhatToCopyToBackbuffer > 1 ? 0 : mWhatToCopyToBackbuffer // 0 => 0, 1 => 1, 2 => 0
-//			}),
-//			command::bind_descriptors(mCopyToBackufferPipe->layout(), mDescriptorCache->get_or_create_descriptor_sets({
-//				descriptor_binding(0, 0, mCombinedAttachmentView->as_storage_image(layout::general)),
-//#if STATS_ENABLED
-//				descriptor_binding(0, 1, mHeatMapImageView->as_storage_image(layout::general)),
-//#endif
-//				descriptor_binding(1, 0, context().main_window()->current_backbuffer()->image_view_at(0)->as_storage_image(layout::general))
-//			})),
-//			command::dispatch((resolution.x + 15u) / 16u, (resolution.y + 15u) / 16u, 1u),
-//
-//			sync::image_memory_barrier(context().main_window()->current_backbuffer()->image_at(0),  // Window's back buffer's color attachment
-//					                    stage::compute_shader          >>   stage::color_attachment_output, // <-- for ImGui, which draws afterwards
-//					                    access::shader_storage_write   >>   access::color_attachment_read | access::color_attachment_write)
-//				.with_layout_transition(            layout::general   >>   layout::color_attachment_optimal),
-
-
 			command::render_pass(mRenderpassMS.as_reference(), mFramebufferMS.as_reference(), command::gather(
-				// 3.6) Full-screen quad noAA->MS
-                command::bind_pipeline(mFsQuadNoAAtoMSPipe.as_reference()),
-				command::push_constants(mFsQuadNoAAtoMSPipe->layout(), copy_to_backbuffer_push_constants{ 
-					mWhatToCopyToBackbuffer > 1 ? 0 : mWhatToCopyToBackbuffer // 0 => 0, 1 => 1, 2 => 0
-				}),
-				command::bind_descriptors(mFsQuadNoAAtoMSPipe->layout(), mDescriptorCache->get_or_create_descriptor_sets({
-					descriptor_binding(0, 0, mFsQuadColorSampler),
-					descriptor_binding(0, 1, mFsQuadDepthSampler),
-					descriptor_binding(1, 0, mCombinedAttachmentView->as_storage_image(layout::general))
+
+				command::conditional([this] { return mRenderVariantDataTransferEnabled[1]; }, [this] { return command::gather(
+					// 3.6) Full-screen quad noAA->MS
+					command::bind_pipeline(mFsQuadNoAAtoMSPipe.as_reference()),
+					command::push_constants(mFsQuadNoAAtoMSPipe->layout(), copy_to_backbuffer_push_constants{
+						mWhatToCopyToBackbuffer > 1 ? 0 : mWhatToCopyToBackbuffer // 0 => 0, 1 => 1, 2 => 0
+						}),
+					command::bind_descriptors(mFsQuadNoAAtoMSPipe->layout(), mDescriptorCache->get_or_create_descriptor_sets({
+						descriptor_binding(0, 0, mFsQuadColorSampler),
+						descriptor_binding(0, 1, mFsQuadDepthSampler),
+						descriptor_binding(1, 0, mCombinedAttachmentView->as_storage_image(layout::general))
 #if STATS_ENABLED
-					, descriptor_binding(1, 1, mHeatMapImageView->as_storage_image(layout::general))
+						, descriptor_binding(1, 1, mHeatMapImageView->as_storage_image(layout::general))
 #endif
-				})),
-				// Draw a a full-screen quad:
-				command::draw(6, 1, 0, 1),
+						})),
+					// Draw a a full-screen quad:
+					command::draw(6, 1, 0, 1)
+				); }),
 				
 				command::next_subpass(),
 
@@ -2427,11 +2435,11 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 				})),
 					
 				command::push_constants(tessPipePxFillMultisampledToBeUsed->layout(), patch_into_tess_push_constants{ 
-					get_rendering_variant_index(rendering_variant::Tess_8xSS) * MAX_INDIRECT_DISPATCHES 
+					get_rendering_variant_index(rendering_variant::Tess_8xMS) * MAX_INDIRECT_DISPATCHES 
 				}),
 				command::draw_vertices_indirect(
 					mIndirectPxFillCountBuffer.as_reference(), 
-					get_rendering_variant_index(rendering_variant::Tess_8xSS) * sizeof(VkDrawIndirectCommand), 
+					get_rendering_variant_index(rendering_variant::Tess_8xMS) * sizeof(VkDrawIndirectCommand), 
 					sizeof(VkDrawIndirectCommand), 
 					1u) // <-- Exactly ONE draw (but potentially a lot of instances), use the one at [1]
 
@@ -2445,16 +2453,18 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 #if SSAA_ENABLED
 			command::render_pass(mRenderpassSSMS.as_reference(), mFramebufferSSMS.as_reference(), command::gather(
 
-				// 3.8) Full-screen quad MS->SSMS
-                command::bind_pipeline(mFsQuadMStoSSPipe.as_reference()),
-				command::bind_descriptors(mFsQuadMStoSSPipe->layout(), mDescriptorCache->get_or_create_descriptor_sets({
-					descriptor_binding(0, 0, mFsQuadColorSampler),
-					descriptor_binding(0, 1, mFsQuadDepthSampler),
-					descriptor_binding(0, 2, mFramebufferMS->image_view_at(0)->as_sampled_image(layout::shader_read_only_optimal)),
-					descriptor_binding(0, 3, mFramebufferMS->image_view_at(1)->as_sampled_image(layout::shader_read_only_optimal))
-				})),
-				// Draw a a full-screen quad:
-				command::draw(6, 1, 0, 1),
+				command::conditional([this] { return mRenderVariantDataTransferEnabled[2]; }, [this] { return command::gather(
+					// 3.8) Full-screen quad MS->SSMS
+					command::bind_pipeline(mFsQuadMStoSSPipe.as_reference()),
+					command::bind_descriptors(mFsQuadMStoSSPipe->layout(), mDescriptorCache->get_or_create_descriptor_sets({
+						descriptor_binding(0, 0, mFsQuadColorSampler),
+						descriptor_binding(0, 1, mFsQuadDepthSampler),
+						descriptor_binding(0, 2, mFramebufferMS->image_view_at(0)->as_sampled_image(layout::shader_read_only_optimal)),
+						descriptor_binding(0, 3, mFramebufferMS->image_view_at(1)->as_sampled_image(layout::shader_read_only_optimal))
+						})),
+					// Draw a a full-screen quad:
+					command::draw(6, 1, 0, 1)
+				); }),
 				
 				command::next_subpass(),
 
@@ -2512,8 +2522,50 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 				.with_layout_transition(layout::undefined   >>   layout::transfer_dst),             // Don't care about the previous layout
 
 #if SSAA_ENABLED
-			blit_image(mFramebufferSSMS->image_at(0), layout::transfer_src, context().main_window()->current_backbuffer()->image_at(0), layout::transfer_dst, 
-						vk::ImageAspectFlagBits::eColor, vk::Filter::eLinear),
+			command::conditional([this] { return mOutputResultOfRenderVariantIndex == 0; }, [this] { return 
+				sync::image_memory_barrier(mFramebufferNoAA->image_at(0),
+					                    stage::color_attachment_output     >>   stage::blit, 
+					                    access::color_attachment_write     >>   access::transfer_read | access::transfer_write)
+				.with_layout_transition(layout::shader_read_only_optimal   >>   layout::transfer_src);
+			}),
+			command::conditional([this] { return mOutputResultOfRenderVariantIndex == 2; }, [this] { return 
+				sync::image_memory_barrier(mFramebufferMS->image_at(0),
+					                    stage::color_attachment_output     >>   stage::blit, 
+					                    access::color_attachment_write     >>   access::transfer_read | access::transfer_write)
+				.with_layout_transition(layout::shader_read_only_optimal   >>   layout::transfer_src);
+			}),
+
+			command::conditional([this] { return mOutputResultOfRenderVariantIndex != 1; }, [this] { return command::gather(
+				blit_image(   mOutputResultOfRenderVariantIndex == 0 ? mFramebufferNoAA->image_at(0)
+							: mOutputResultOfRenderVariantIndex == 2 ? mFramebufferMS->image_at(0)  
+							:                                          mFramebufferSSMS->image_at(0), 
+							layout::transfer_src, context().main_window()->current_backbuffer()->image_at(0), layout::transfer_dst, 
+							vk::ImageAspectFlagBits::eColor, vk::Filter::eLinear)
+			); }, [this, resolution] { return command::gather(
+				// Copy from Uint64 image into back buffer:
+				sync::image_memory_barrier(context().main_window()->current_backbuffer()->image_at(0),  // Window's back buffer's color attachment
+											stage::none          >>   stage::compute_shader,
+											access::none         >>   access::shader_storage_write)
+					.with_layout_transition(layout::undefined   >>   layout::general),                  // Don't care about the previous layout
+						
+				command::bind_pipeline(mCopyToBackufferPipe.as_reference()),
+				command::push_constants(mCopyToBackufferPipe->layout(), copy_to_backbuffer_push_constants{ 
+					mWhatToCopyToBackbuffer > 1 ? 0 : mWhatToCopyToBackbuffer // 0 => 0, 1 => 1, 2 => 0
+				}),
+				command::bind_descriptors(mCopyToBackufferPipe->layout(), mDescriptorCache->get_or_create_descriptor_sets({
+					descriptor_binding(0, 0, mCombinedAttachmentView->as_storage_image(layout::general)),
+	#if STATS_ENABLED
+					descriptor_binding(0, 1, mHeatMapImageView->as_storage_image(layout::general)),
+	#endif
+					descriptor_binding(1, 0, context().main_window()->current_backbuffer()->image_view_at(0)->as_storage_image(layout::general))
+				})),
+				command::dispatch((resolution.x + 15u) / 16u, (resolution.y + 15u) / 16u, 1u),
+
+				sync::image_memory_barrier(context().main_window()->current_backbuffer()->image_at(0),  // Window's back buffer's color attachment
+											stage::compute_shader          >>   stage::color_attachment_output, // <-- for ImGui, which draws afterwards
+											access::shader_storage_write   >>   access::color_attachment_read | access::color_attachment_write)
+					.with_layout_transition(            layout::general   >>   layout::color_attachment_optimal)
+			); }),
 #else 
 			blit_image(mFramebufferMS->image_at(0), layout::transfer_src, context().main_window()->current_backbuffer()->image_at(0), layout::transfer_dst, 
 						vk::ImageAspectFlagBits::eColor, vk::Filter::eLinear),
@@ -2721,6 +2773,11 @@ private: // v== Member variables ==v
 
 	avk::buffer mBigDataset;
 	uint32_t mDatasetSize = 0;
+
+	bool mEnableSampleShadingFor8xMS;
+	bool mEnableSampleShadingFor4xSS8xMS;
+	std::array<bool, 3> mRenderVariantDataTransferEnabled;
+	int  mOutputResultOfRenderVariantIndex;
 
 }; // vk_parametric_curves_app
 

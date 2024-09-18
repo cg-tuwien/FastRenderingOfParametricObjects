@@ -74,7 +74,7 @@ enum struct parametric_object_type : int32_t
 enum struct rendering_variant : int
 {
     Tess_noAA = 0,
-    Tess_8xSS,
+    Tess_8xMS,
     Tess_4xSS_8xMS,
     PointRendered_direct,
     PointRendered_4xSS_local_fb,
@@ -86,7 +86,7 @@ static int get_rendering_variant_index(rendering_variant aRenderMethod)
     switch (aRenderMethod) {
     case rendering_variant::Tess_noAA: 
         return 0;
-    case rendering_variant::Tess_8xSS: 
+    case rendering_variant::Tess_8xMS: 
         return 1;
     case rendering_variant::Tess_4xSS_8xMS:
         return 2;
@@ -111,7 +111,7 @@ static float get_screen_space_threshold_divisor(rendering_variant aRenderMethod)
     case rendering_variant::PointRendered_direct:
     case rendering_variant::Hybrid: // default to 0
         return 1.0f;
-    case rendering_variant::Tess_8xSS: 
+    case rendering_variant::Tess_8xMS: 
         return 2.8f; // sqrt(8)
     case rendering_variant::Tess_4xSS_8xMS:
         return 5.6f; // sqrt(32)
@@ -128,7 +128,7 @@ static const char* get_rendering_variant_description(rendering_variant aRenderMe
     switch (aRenderMethod) {
     case rendering_variant::Tess_noAA: 
         return "Tess_noAA";
-    case rendering_variant::Tess_8xSS: 
+    case rendering_variant::Tess_8xMS: 
         return "Tess_8xSS";
     case rendering_variant::Tess_4xSS_8xMS:
         return "Tess_4xSS_8xMS";
