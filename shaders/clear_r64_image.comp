@@ -28,7 +28,7 @@ layout(set = 4, binding = 0) buffer TilePatchesBuffer { uint mPatchIndices[]; } 
 #endif
 // -------------------------------------------------------
 
-#define NICE_CLEAR_COLOR 1
+#define NICE_CLEAR_COLOR 0
 
 // ################## compute shader main ###################
 // Clears uImg to a depth of 1.0 and a clear color.

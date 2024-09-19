@@ -245,7 +245,10 @@ bool hasSubpixelFeatures(float uStart, float uEnd, float vStart, float vEnd, vec
 	vec3 nrmV   = subgroupShuffle(nrm0  , neighborY );
 	vec3 nrmUV  = subgroupShuffle(nrm0  , neighborXY);
 #if DRAW_PATCH_EVAL_DEBUG_VIS_BUMPINESS_EVAL
-	writeToCombinedAttachment(ivec2(toScreen(toCS(pos0WS)).xy), 0.0001, nrm0);
+	bool backfaceCull = ubo.mResolutionAndCulling.z == 1 && toNDC(toCS(vec4(nrm0, 0.0))).z < 0.0;
+	if (!backfaceCull) {
+		writeToCombinedAttachment(ivec2(toScreen(toCS(pos0WS)).xy), 0.0001, nrm0 * 0.5 + 0.5);
+	}
 #endif
 
 	uint different = 0;
@@ -274,13 +277,6 @@ bool hasSubpixelFeatures(float uStart, float uEnd, float vStart, float vEnd, vec
 			vec4 ssposU     = tM * paramToWS(uParam + onePxParamRange.x * curOff.x, vParam                               , curveIndex, userData);
 			vec4 ssposV     = tM * paramToWS(uParam                               , vParam + onePxParamRange.y * curOff.y, curveIndex, userData);
 			vec3 ssnrm      = normalize(cross(ssposU.xyz - pos0WS.xyz, ssposV.xyz - pos0WS.xyz));
-
-#if DRAW_PATCH_EVAL_DEBUG_VIS_BUMPINESS_EVAL
-			if (i == 0) {
-				writeToCombinedAttachment(ivec2(toScreen(toCS(pos0WS)).xy) + ivec2(-5, 10), 0.0001, lerpedNrm);
-				writeToCombinedAttachment(ivec2(toScreen(toCS(pos0WS)).xy) + ivec2( 5, 10), 0.0001, ssnrm);
-			}
-#endif
 
 			// Compare interpolated with subsampled normal:
 			float angleDiff = dot(normalize(lerpedNrm), ssnrm);

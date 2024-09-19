@@ -16,7 +16,7 @@ layout(set = 1, binding = 0) uniform texture2D uColorSrc;
 layout(set = 1, binding = 1) uniform texture2D uDepthSrc;
 // -------------------------------------------------------
 
-#define NICE_CLEAR_COLOR 1
+#define NICE_CLEAR_COLOR 0
 
 uint64_t getUint64ForFramebuffer(float depth, vec4 color)
 {

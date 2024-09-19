@@ -44,7 +44,8 @@
 //#include "perf_tests/test_fiber_curves.hpp"
 //#include "perf_tests/test_seashell.hpp"
 //#define TEST_RENDERING_METHOD          rendering_variant::PointRendered_direct
-#define TEST_GATHER_TIMER_QUERIES 1
+#define TEST_GATHER_TIMER_QUERIES 0
+#define TEST_GATHER_PATCH_COUNTS  0
 
 static std::array<parametric_object, 14> PredefinedParametricObjects {{
 	parametric_object{"Sphere"       , "assets/po-sphere-patches.png",     false, parametric_object_type::Sphere,                 0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>() , glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{ 0.f,  0.f,  0.f})},
@@ -1409,6 +1410,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 				lastTess8xSSDuration			 = 0.0,
 				lastFSQbefore4xSS8xMSDuration	 = 0.0,
 				lastTess4xSS8xMSDuration		 = 0.0,
+				lastTotalRenderDuration			 = 0.0,
 				lastTotalStepsDuration			 = 0.0
 			]() mutable {
 				if (mMeasurementInProgress) {
@@ -1542,6 +1544,7 @@ ImGui::TextColored(ImVec4(.5f, .3f, .4f, 1.f), "Timestamp Period: %.3f ns", time
 				lastTess8xSSDuration			= glm::mix(lastTess8xSSDuration				, mLastTess8xSSDuration				* 1e-6 * timestampPeriod, 0.05);
 				lastFSQbefore4xSS8xMSDuration	= glm::mix(lastFSQbefore4xSS8xMSDuration	, mLastFSQbefore4xSS8xMSDuration	* 1e-6 * timestampPeriod, 0.05);
 				lastTess4xSS8xMSDuration		= glm::mix(lastTess4xSS8xMSDuration			, mLastTess4xSS8xMSDuration			* 1e-6 * timestampPeriod, 0.05);
+				lastTotalRenderDuration			= glm::mix(lastTotalRenderDuration			, mLastTotalStepsDuration			* 1e-6 * timestampPeriod, 0.05);
 				lastTotalStepsDuration			= glm::mix(lastTotalStepsDuration			, mLastTotalStepsDuration			* 1e-6 * timestampPeriod, 0.05);
 
 				ImGui::TextColored(ImVec4(.8f, .1f, .6f, 1.f), "Total frame time        : %.3lf ms (timer queries)", lastTotalStepsDuration);
@@ -1559,6 +1562,7 @@ ImGui::TextColored(ImVec4(.5f, .3f, .4f, 1.f), "Timestamp Period: %.3f ns", time
 				ImGui::TextColored(ImVec4(.8f, .1f, .6f, 1.f), "Tess. 8xSS (sample shd.): %.3lf ms (timer queries)", lastTess8xSSDuration);
 				ImGui::TextColored(ImVec4(.8f, .1f, .6f, 1.f), "  -> results -> FSQ     : %.3lf ms (timer queries)", lastFSQbefore4xSS8xMSDuration);
 				ImGui::TextColored(ImVec4(.8f, .1f, .6f, 1.f), "Tess. 4xSS+8xMS         : %.3lf ms (timer queries)", lastTess4xSS8xMSDuration);
+				ImGui::TextColored(ImVec4(.8f, .1f, .6f, 1.f), "Total render duration   : %.3lf ms (timer queries)", lastTotalRenderDuration);
 
 				// ... pipeline statistics only if the option is ticked:
 			    if (ImGui::Checkbox("Gather pipeline stats.", &mGatherPipelineStats)) {
@@ -1804,6 +1808,15 @@ ImGui::TextColored(ImVec4(.5f, .3f, .4f, 1.f), "Timestamp Period: %.3f ns", time
 			mMeasurementFrameCounters.clear();
 			mMeasurementMoveCameraSteps = glm::max(mMeasurementMoveCameraSteps, 0);
 			mMeasurementFrameCounters.resize(mMeasurementMoveCameraSteps + 1, std::make_tuple(0.0, 0.0f, 0, 0, 0));
+#if TEST_GATHER_PATCH_COUNTS
+			mMeasurementPatchCounts.clear();
+			mMeasurementPatchCounts.resize(mMeasurementMoveCameraSteps + 1);
+			for (auto& a : mMeasurementPatchCounts) {
+				for (int b = 0; b < MAX_PATCH_SUBDIV_STEPS; ++b) {
+					a[b] = 0u;
+				}
+			}
+#endif
 			//auto imguiManager = current_composition()->element_by_type<imgui_manager>();
 			//imguiManager->disable();
 			mMeasurementInProgress = true;
@@ -1859,6 +1872,15 @@ ImGui::TextColored(ImVec4(.5f, .3f, .4f, 1.f), "Timestamp Period: %.3f ns", time
 					}
 			    }
 #endif 
+#if TEST_GATHER_PATCH_COUNTS
+				LOG_INFO_EM("Patch counts:");
+				for (int a = 0; a < mMeasurementPatchCounts.size(); ++a) {
+					LOG_INFO(std::format("Measurement #{}", a));
+					for (int b = 0; b < MAX_PATCH_SUBDIV_STEPS; ++b) {
+						LOG_INFO(std::format("    {:12}", mMeasurementPatchCounts[a][b] / static_cast<uint32_t>(std::get<int>(mMeasurementFrameCounters[a]))));
+					}
+				}
+#endif
 			}
             else {
 				// FLY & MEASURE!
@@ -1869,13 +1891,17 @@ ImGui::TextColored(ImVec4(.5f, .3f, .4f, 1.f), "Timestamp Period: %.3f ns", time
 					std::get<float>(mMeasurementFrameCounters[curIdx]) = glm::length(glm::vec3{ mOrbitCam.translation().x, 0.0f, mOrbitCam.translation().z });
 				}
 #if TEST_GATHER_TIMER_QUERIES && STATS_ENABLED
-				std::get<2>(mMeasurementFrameCounters[curIdx]) += mLastLodStageDuration - mLastClearDuration;
-				std::get<3>(mMeasurementFrameCounters[curIdx]) += mLastTotalRenderDuration;                  
+				std::get<2>(mMeasurementFrameCounters[curIdx]) += mLastTotalRenderDuration;
+				std::get<3>(mMeasurementFrameCounters[curIdx]) += mLastLodStageDuration;
 #else
 				std::get<2>(mMeasurementFrameCounters[curIdx]) += mCounterValues[1];
-				//                                                       TODO: Is that   vvv   the right way to handle [0], [1] and [2]?? 
-				std::get<3>(mMeasurementFrameCounters[curIdx]) += std::max({ mNumPxFillPatchesCreated[0], mNumPxFillPatchesCreated[1], mNumPxFillPatchesCreated[2] });
+				std::get<3>(mMeasurementFrameCounters[curIdx]) += mNumPxFillPatchesCreated[0] + mNumPxFillPatchesCreated[1] + mNumPxFillPatchesCreated[2] + mNumPxFillPatchesCreated[3] + mNumPxFillPatchesCreated[4];
 #endif 
+#if TEST_GATHER_PATCH_COUNTS
+				for (int b = 0; b < MAX_PATCH_SUBDIV_STEPS; ++b) {
+					mMeasurementPatchCounts[curIdx][b] += mPatchesCreatedPerLevel[b];
+				}
+#endif
 				std::get<int>(mMeasurementFrameCounters[curIdx]) += 1;
             	auto f = static_cast<float>((curTime - curIdx * MeasureSecsPerStep - mMeasurementStartTime) / MeasureSecsPerStep);
 
@@ -2423,7 +2449,7 @@ ImGui::TextColored(ImVec4(.5f, .3f, .4f, 1.f), "Timestamp Period: %.3f ns", time
 					descriptor_binding(0, 0, mFrameDataBuffers[inFlightIndex]),
 			        descriptor_binding(0, 1, as_combined_image_samplers(mImageSamplers, layout::shader_read_only_optimal)),
 			        descriptor_binding(0, 2, mMaterialBuffer),
-					descriptor_binding(1, 0, mCombinedAttachmentView->as_storage_image(layout::general)), // <-------------------- WHAAAAAAAAAAAAAAAAAAAAAAAIIIIIIIIII is this bound here?
+					descriptor_binding(1, 0, mCombinedAttachmentView->as_storage_image(layout::general)),
 #if STATS_ENABLED
 					descriptor_binding(1, 1, mHeatMapImageView->as_storage_image(layout::general)),
 #endif
@@ -2540,13 +2566,18 @@ ImGui::TextColored(ImVec4(.5f, .3f, .4f, 1.f), "Timestamp Period: %.3f ns", time
 							: mOutputResultOfRenderVariantIndex == 2 ? mFramebufferMS->image_at(0)  
 							:                                          mFramebufferSSMS->image_at(0), 
 							layout::transfer_src, context().main_window()->current_backbuffer()->image_at(0), layout::transfer_dst, 
-							vk::ImageAspectFlagBits::eColor, vk::Filter::eLinear)
+							vk::ImageAspectFlagBits::eColor, vk::Filter::eLinear),
+
+				sync::image_memory_barrier(context().main_window()->current_backbuffer()->image_at(0),  // Window's back buffer's color attachment
+											stage::blit                    >>   stage::color_attachment_output, // <-- for ImGui, which draws afterwards
+											access::transfer_write         >>   access::color_attachment_read | access::color_attachment_write)
+					.with_layout_transition(       layout::transfer_dst   >>   layout::color_attachment_optimal)
 			); }, [this, resolution] { return command::gather(
 				// Copy from Uint64 image into back buffer:
 				sync::image_memory_barrier(context().main_window()->current_backbuffer()->image_at(0),  // Window's back buffer's color attachment
-											stage::none          >>   stage::compute_shader,
-											access::none         >>   access::shader_storage_write)
-					.with_layout_transition(layout::undefined   >>   layout::general),                  // Don't care about the previous layout
+											stage::none                        >>   stage::compute_shader,
+											access::none                       >>   access::shader_storage_write)
+					.with_layout_transition(layout::transfer_dst               >>   layout::general),                  // Don't care about the previous layout
 						
 				command::bind_pipeline(mCopyToBackufferPipe.as_reference()),
 				command::push_constants(mCopyToBackufferPipe->layout(), copy_to_backbuffer_push_constants{ 
@@ -2554,9 +2585,9 @@ ImGui::TextColored(ImVec4(.5f, .3f, .4f, 1.f), "Timestamp Period: %.3f ns", time
 				}),
 				command::bind_descriptors(mCopyToBackufferPipe->layout(), mDescriptorCache->get_or_create_descriptor_sets({
 					descriptor_binding(0, 0, mCombinedAttachmentView->as_storage_image(layout::general)),
-	#if STATS_ENABLED
+#if STATS_ENABLED
 					descriptor_binding(0, 1, mHeatMapImageView->as_storage_image(layout::general)),
-	#endif
+#endif
 					descriptor_binding(1, 0, context().main_window()->current_backbuffer()->image_view_at(0)->as_storage_image(layout::general))
 				})),
 				command::dispatch((resolution.x + 15u) / 16u, (resolution.y + 15u) / 16u, 1u),
@@ -2565,16 +2596,16 @@ ImGui::TextColored(ImVec4(.5f, .3f, .4f, 1.f), "Timestamp Period: %.3f ns", time
 											stage::compute_shader          >>   stage::color_attachment_output, // <-- for ImGui, which draws afterwards
 											access::shader_storage_write   >>   access::color_attachment_read | access::color_attachment_write)
 					.with_layout_transition(            layout::general   >>   layout::color_attachment_optimal)
-			); }),
+			); })
 #else 
 			blit_image(mFramebufferMS->image_at(0), layout::transfer_src, context().main_window()->current_backbuffer()->image_at(0), layout::transfer_dst, 
 						vk::ImageAspectFlagBits::eColor, vk::Filter::eLinear),
-#endif
-
 			sync::image_memory_barrier(context().main_window()->current_backbuffer()->image_at(0),  // Window's back buffer's color attachment
 					                    stage::blit                    >>   stage::color_attachment_output, // <-- for ImGui, which draws afterwards
 					                    access::transfer_write         >>   access::color_attachment_read | access::color_attachment_write)
 				.with_layout_transition(       layout::transfer_dst   >>   layout::color_attachment_optimal)
+#endif
+
 
 		);
 
@@ -2720,7 +2751,7 @@ private: // v== Member variables ==v
 	std::vector<glm::vec3> mSpherePositions;
 
 	bool mStartMeasurement = false;
-	float mDistanceFromOrigin = 20.f;
+	float mDistanceFromOrigin = 22.0f;
 	bool mMeasurementInProgress = false;
 	double mMeasurementStartTime = 0.0;
 	double mMeasurementEndTime = 0.0;
@@ -2733,6 +2764,9 @@ private: // v== Member variables ==v
 	avk::buffer mCountersSsbo;
 	std::array<uint32_t, 4> mCounterValues;
 	std::array<uint32_t, MAX_PATCH_SUBDIV_STEPS> mPatchesCreatedPerLevel;
+#if TEST_GATHER_PATCH_COUNTS
+	std::vector<std::array<uint32_t, MAX_PATCH_SUBDIV_STEPS>> mMeasurementPatchCounts;
+#endif
 	std::array<uint32_t, NUM_DIFFERENT_RENDER_VARIANTS> mNumPxFillPatchesCreated;
 
 	// Other, global settings, stored in common UBO:

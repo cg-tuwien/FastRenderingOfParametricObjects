@@ -155,7 +155,7 @@ vec3 shade(int matIndex, int renderVariant, vec3 albedo, vec3 shadingUserParams,
     if (matIndex <= -3) { // ========== NICE AND RED|GREEN|BLUE MATERIAL BEGIN ============
         vec3 outgoing = normalize(normalWS);
         vec3 base_color = srgb_to_linear_rgb(
-            matIndex == -3 ? vec3(0.2, 0.5, 1.0) :
+            matIndex == -5 ? vec3(0.2, 0.5, 1.0) :
             matIndex == -4 ? vec3(0.2, 1.0, 0.5) : vec3(1.0, 0.2, 0.5)
         );
         const vec3 incoming = normalize(vec3(1.23, 7.89, 4.56));

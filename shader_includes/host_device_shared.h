@@ -45,13 +45,13 @@
 #define PX_FILL_LOCAL_FB_TILE_SIZE_Y    16
 
 // Set factor by how much LOCAL_FB_X is larger than PX_FILL_LOCAL_FB_TILE_SIZE_X:
-#define TILE_FACTOR_X                    3
+#define TILE_FACTOR_X                    2
 // Set factor by how much LOCAL_FB_Y is larger than PX_FILL_LOCAL_FB_TILE_SIZE_Y:
-#define TILE_FACTOR_Y                    3
+#define TILE_FACTOR_Y                    2
 
 // Local framebuffer's size (must be exactly PX_FILL_LOCAL_FB_TILE_SIZE_X*TILE_FACTOR_X, or PX_FILL_LOCAL_FB_TILE_SIZE_Y*TILE_FACTOR_Y, respectively):
-#define LOCAL_FB_X                      48
-#define LOCAL_FB_Y                      48
+#define LOCAL_FB_X                      32
+#define LOCAL_FB_Y                      32
 
 // If enabled, adds a new buffer and a new compute pass which goes over all patches and assigns them to screen tiles.
 // (Only relevant in conjunction with pass3_px_fill_local_fb.comp)
