@@ -2,6 +2,19 @@
 by Johannes Unterguggenberger, Lukas Lipp, Michael Wimmer, Bernhard Kerbl, and Markus Schütz      
 TU Wien
 
-# Coming Soon
+# Setup
 
-There are preliminary, non-cleaned up versions of the source code already available on the other branches in this repository. But it is recommended to wait on the cleaned up version.
+Requirements:
+- Visual Studio 2022
+- MSVC C++ compiler
+- Vulkan SDK with VMA header (optional component => select during SDK install)
+
+Setup:
+- Clone this repository
+- Pull submodules: `git submodule update --init --recursive`
+- Open `FastRenderingOfParametricObjects.sln`
+- Select the project `FastRenderingOfPaametricObjects` as the startup project
+- Build All and wait for the [Post Build Helper](https://github.com/cg-tuwien/Auto-Vk-Toolkit/tree/master/visual_studio#post-build-helper) to have deployed all the assets
+- Debug/Run the solution
+
+
