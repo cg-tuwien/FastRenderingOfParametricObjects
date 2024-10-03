@@ -247,5 +247,8 @@
     <Image Include="Auto-Vk-Toolkit\assets\3rd_party\textures\rough_cobblestones\brick_floor_tileable_Normal.jpg">
       <Filter>assets</Filter>
     </Image>
+    <Image Include="assets\po-spiky-heart.png">
+      <Filter>assets</Filter>
+    </Image>
   </ItemGroup>
 </Project>

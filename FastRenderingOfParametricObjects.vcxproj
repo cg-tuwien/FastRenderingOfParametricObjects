@@ -100,6 +100,7 @@
     <Image Include="assets\po-sh-brain.png" />
     <Image Include="assets\po-single-sh-glyph.png" />
     <Image Include="assets\po-sphere-patches.png" />
+    <Image Include="assets\po-spiky-heart.png" />
     <Image Include="assets\po-yarn-curve-single.png" />
     <Image Include="Auto-Vk-Toolkit\assets\3rd_party\textures\rough_cobblestones\brick_floor_tileable_Ambient_Occlusion.jpg" />
     <Image Include="Auto-Vk-Toolkit\assets\3rd_party\textures\rough_cobblestones\brick_floor_tileable_Base_Color.jpg" />
