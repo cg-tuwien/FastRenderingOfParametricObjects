@@ -44,7 +44,7 @@ struct frame_data_ubo
     // Common, global settings:
     VkBool32             mHeatMapEnabled;
     VkBool32             mGatherPipelineStats;
-    VkBool32             mUseMaxPatchResolutionDuringPxFill;
+    VkBool32             _unused;
     VkBool32             mWriteToCombinedAttachmentInFragmentShader;
     float                mAbsoluteTime;
     float                mDeltaTime;
@@ -74,7 +74,7 @@ enum struct parametric_object_type : int32_t
 enum struct rendering_variant : int
 {
     Tess_noAA = 0,
-    Tess_8xSS,
+    Tess_8xMS,
     Tess_4xSS_8xMS,
     PointRendered_direct,
     PointRendered_4xSS_local_fb,
@@ -86,7 +86,7 @@ static int get_rendering_variant_index(rendering_variant aRenderMethod)
     switch (aRenderMethod) {
     case rendering_variant::Tess_noAA: 
         return 0;
-    case rendering_variant::Tess_8xSS: 
+    case rendering_variant::Tess_8xMS: 
         return 1;
     case rendering_variant::Tess_4xSS_8xMS:
         return 2;
@@ -111,13 +111,35 @@ static float get_screen_space_threshold_divisor(rendering_variant aRenderMethod)
     case rendering_variant::PointRendered_direct:
     case rendering_variant::Hybrid: // default to 0
         return 1.0f;
-    case rendering_variant::Tess_8xSS: 
+    case rendering_variant::Tess_8xMS: 
+        return 2.8f; // sqrt(8)
     case rendering_variant::Tess_4xSS_8xMS:
+        return 5.6f; // sqrt(32)
     case rendering_variant::PointRendered_4xSS_local_fb:
-        return 2.0f;
+        return 2.0f; // sqrt(4)
     default:
         assert (false);
         return 1.0f;
+    }
+}
+
+static const char* get_rendering_variant_description(rendering_variant aRenderMethod)
+{
+    switch (aRenderMethod) {
+    case rendering_variant::Tess_noAA: 
+        return "Tess_noAA";
+    case rendering_variant::Tess_8xMS: 
+        return "Tess_8xSS";
+    case rendering_variant::Tess_4xSS_8xMS:
+        return "Tess_4xSS_8xMS";
+    case rendering_variant::PointRendered_direct:
+        return "PointRendered_direct";
+    case rendering_variant::PointRendered_4xSS_local_fb:
+        return "PointRendered_4xSS_local_fb";
+    case rendering_variant::Hybrid:
+        return "Hybrid";
+    default:
+        return "-ERROR-";
     }
 }
 
@@ -142,7 +164,9 @@ public:
         , mRenderingMethod{ rendering_variant::Tess_noAA }
         , mScreenDistanceThreshold{ 84.0f }
         , mParametersEpsilon{ 0.005f, 0.005f }
-        , mSamplingFactor{ 1.0f }
+        , mTessLevels{ 16.0f, 16.0f }
+        , mSamplingFactors{ 1.0f, 1.0f }
+        , mAdaptiveTessOrFill{ true }
     { }
 
     const char* name() const { return mName; }
@@ -161,7 +185,9 @@ public:
     glm::uvec2 num_elements() const { return glm::uvec2(mEvalDims[2], mEvalDims[3]); }
     float     screen_distance_threshold() const { return mScreenDistanceThreshold; }
     glm::vec2 parameters_epsilon() const { return mParametersEpsilon; }
-    float     sampling_factor() const { return mSamplingFactor; }
+    glm::vec2 tessellation_levels() const { return mTessLevels; }
+    glm::vec2 sampling_factors() const { return mSamplingFactors; }
+    bool      adaptive_rendering_on() const { return mAdaptiveTessOrFill; }
 
     void set_enabled(bool yesOrNo) { mEnabled = yesOrNo; }
     void set_modifying(bool yesOrNo) { mModifying = yesOrNo; }
@@ -176,7 +202,9 @@ public:
     void set_num_elements(uint32_t x, uint32_t y) { mEvalDims[2] = x; mEvalDims[3] = y; }
     void set_screen_distance_threshold(float t) { mScreenDistanceThreshold = t; }
     void set_parameters_epsilon(glm::vec2 epsilons) { mParametersEpsilon = epsilons; }
-    void set_sampling_factor(float percentage) { mSamplingFactor = percentage; }
+    void set_tessellation_levels(glm::vec2 innerOuterTessLevels) { mTessLevels = innerOuterTessLevels; }
+    void set_sampling_factors(glm::vec2 percentages) { mSamplingFactors = percentages; }
+    void set_adaptive_rendering_on(bool trueMeansOn) { mAdaptiveTessOrFill = trueMeansOn; }
 
 private:
     const char* mName;
@@ -191,7 +219,9 @@ private:
     rendering_variant mRenderingMethod;
     float mScreenDistanceThreshold;
     glm::vec2 mParametersEpsilon;
-    float mSamplingFactor;
+    glm::vec2 mTessLevels;
+    glm::vec2 mSamplingFactors;
+    bool mAdaptiveTessOrFill;
 };
 
 // +------------------------------------------------------------------------------+
@@ -209,7 +239,8 @@ struct object_data
         , mMaterialIndex{0}
         , mUseAdaptiveDetail{1}
         , mRenderingVariantIndex{ 0 }
-        , mLodAndRenderSettings{ 1.0f, 1.0f, 100.0f, 1.0f }
+        , mLodAndRenderSettings{ 1.0f, 1.0f, 100.0f, 0.0f }
+        , mTessAndSamplingSettings{ 16.0f, 16.0f, 1.0f, 1.0f }
     {}
 
     glm::vec4  mParams;
@@ -220,11 +251,15 @@ struct object_data
     // The following means "adaptive tessellation levels" (for tessellation-based rendering) or "adaptive sampling" (for point-based rendering)
     int32_t    mUseAdaptiveDetail;
     int32_t    mRenderingVariantIndex;
-    // The following settings are stored in the vec4:
+    // The following settings are stored in the vec4:s
     //  .xy ... Percent how much to increase patch parameters (s.t. neighboring patches overlap a bit)
     //  .z  ... screen-space distance for the LOD stage
-    //  .w  ... sampling factor for point-based rendering (< 1.0 probably means too little samples, > 1.0 might mean oversampling but also filling holes) 
+    //  .w  ... -unused-
     glm::vec4  mLodAndRenderSettings;
+    // .xy: Tessellation settings: constant inner (x) and outer (y) tessellation levels, i.e., IF mUseAdaptiveDetail == 1
+    // .zw: Sampling density for point-based rendering techniques in u (z) and v (w) directions.
+    //      (< 1.0 probably means too little samples, > 1.0 might mean oversampling but also filling holes) 
+    glm::vec4  mTessAndSamplingSettings;
     // The first three values of user data are being passed-along and can be accessed:
     // Note: SH glyphs and yarn/fiber curves get fixed user data (assigned in pass1_init_shbrain.comp or pass1_init_kityarn.comp, respectively).
     glm::uvec4 mUserData;
@@ -242,17 +277,17 @@ struct px_fill_data
     // [3]: unused
     glm::uvec4 mObjectIdUserData;
 
-    // [0]: EITHER max screen dist u
-    // [1]: EITHER max screen dist v
-    // [2]: min screen coords of patch u (if WRITE_OUT_MIN_MAX_SCREEN_COORDS is enabled in pass2x_patch_lod.comp)
-    // [3]: min screen coords of patch v (if WRITE_OUT_MIN_MAX_SCREEN_COORDS is enabled in pass2x_patch_lod.comp)
-    glm::vec4 mScreenDists;
+    // [0]: max. screen dist u
+    // [1]: max. screen dist v
+    // [2]: hybrid levels (starting at 0, increasing)
+    // [3]: hybrid screen threshold divisor
+    glm::vec4 mScreenDistsHybridData;
 
-#if WRITE_MAX_COORDS_IN_PASS2
     // [0]: min screen coords of patch u (if WRITE_OUT_MIN_MAX_SCREEN_COORDS is enabled in pass2x_patch_lod.comp)
     // [1]: min screen coords of patch v (if WRITE_OUT_MIN_MAX_SCREEN_COORDS is enabled in pass2x_patch_lod.comp)
-    glm::vec4 mScreenMax;
-#endif
+    // [2]: max screen coords of patch u (if WRITE_OUT_MIN_MAX_SCREEN_COORDS is enabled in pass2x_patch_lod.comp)
+    // [3]: max screen coords of patch v (if WRITE_OUT_MIN_MAX_SCREEN_COORDS is enabled in pass2x_patch_lod.comp)
+    glm::vec4 mScreenMinMax;
 };
 
 inline void getParams(const glm::vec4& data, float& uFrom, float& uTo, float& vFrom, float& vTo) 
@@ -327,7 +362,5 @@ struct standalone_tess_push_constants
 // Push constants for patch->tess method
 struct patch_into_tess_push_constants
 {
-    float   mConstOuterSubdivLevel;
-    float   mConstInnerSubdivLevel;
     int32_t mPxFillParamsBufferOffset;
 };

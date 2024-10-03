@@ -17,7 +17,7 @@ layout(set = 0, binding = 0) uniform FrameData
     // Common, global settings:
     bool    mHeatMapEnabled;
     bool    mGatherPipelineStats;
-    bool    mUseMaxPatchResolutionDuringPxFill;
+    bool    _unused;
     bool    mWriteToCombinedAttachmentInFragmentShader;
     float   mAbsoluteTime;
     float   mDeltaTime;

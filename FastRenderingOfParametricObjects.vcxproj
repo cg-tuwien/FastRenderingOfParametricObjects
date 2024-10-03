@@ -28,6 +28,9 @@
     <ClInclude Include="host_code\big_dataset.hpp" />
     <ClInclude Include="host_code\helpers.hpp" />
     <ClInclude Include="host_code\ImGuizmo.h" />
+    <ClInclude Include="host_code\perf_tests\test_fiber_curves.hpp" />
+    <ClInclude Include="host_code\perf_tests\test_knit_yarn.hpp" />
+    <ClInclude Include="host_code\perf_tests\test_seashell.hpp" />
     <ClInclude Include="host_code\types.hpp" />
     <ClInclude Include="precompiled_headers\cg_stdafx.hpp" />
     <ClInclude Include="precompiled_headers\cg_targetver.hpp" />
@@ -43,6 +46,7 @@
     <None Include="shaders\clear_r64_image.comp" />
     <None Include="shaders\copy_to_backbuffer.comp" />
     <None Include="shaders\copy_to_combined_attachment.comp" />
+    <None Include="shaders\full_screen_quad_from_combined_attachment.frag" />
     <None Include="shaders\pass1_init_knityarn.comp" />
     <None Include="shaders\pass1_init_patches.comp" />
     <None Include="shaders\pass1_init_shbrain.comp" />
@@ -55,8 +59,8 @@
     <None Include="shaders\px-fill-tess\patch_ready.vert" />
     <None Include="shaders\px-fill-tess\patch_set.tesc" />
     <None Include="shaders\simple.vert" />
-    <None Include="shaders\ss_resolve.frag" />
-    <None Include="shaders\ss_resolve.vert" />
+    <None Include="shaders\full_screen_quad.frag" />
+    <None Include="shaders\full_screen_quad.vert" />
     <None Include="shader_includes\combined_attachment_shared.glsl" />
     <None Include="shader_includes\common_ubo.glsl" />
     <None Include="shader_includes\material_handling.glsl" />
@@ -96,6 +100,7 @@
     <Image Include="assets\po-sh-brain.png" />
     <Image Include="assets\po-single-sh-glyph.png" />
     <Image Include="assets\po-sphere-patches.png" />
+    <Image Include="assets\po-spiky-heart.png" />
     <Image Include="assets\po-yarn-curve-single.png" />
     <Image Include="Auto-Vk-Toolkit\assets\3rd_party\textures\rough_cobblestones\brick_floor_tileable_Ambient_Occlusion.jpg" />
     <Image Include="Auto-Vk-Toolkit\assets\3rd_party\textures\rough_cobblestones\brick_floor_tileable_Base_Color.jpg" />

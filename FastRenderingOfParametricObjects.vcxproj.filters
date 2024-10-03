@@ -26,6 +26,9 @@
     <Filter Include="shader_includes\parametric_functions">
       <UniqueIdentifier>{f198a94d-488e-43d8-b4c6-7f874add684c}</UniqueIdentifier>
     </Filter>
+    <Filter Include="host_code\perf_tests">
+      <UniqueIdentifier>{b19b560e-20fb-48a9-a89d-fbfb113a3a68}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <None Include="shaders\frag_out.frag">
@@ -100,10 +103,10 @@
     <None Include="shaders\copy_to_combined_attachment.comp">
       <Filter>shaders</Filter>
     </None>
-    <None Include="shaders\ss_resolve.frag">
+    <None Include="shaders\full_screen_quad.frag">
       <Filter>shaders</Filter>
     </None>
-    <None Include="shaders\ss_resolve.vert">
+    <None Include="shaders\full_screen_quad.vert">
       <Filter>shaders</Filter>
     </None>
     <None Include="shader_includes\parametric_functions\shape_functions.glsl">
@@ -145,6 +148,9 @@
     <None Include="shader_includes\parametric_functions\giant_worm.glsl">
       <Filter>shader_includes\parametric_functions</Filter>
     </None>
+    <None Include="shaders\full_screen_quad_from_combined_attachment.frag">
+      <Filter>shaders</Filter>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="precompiled_headers\cg_stdafx.cpp">
@@ -181,6 +187,15 @@
     </ClInclude>
     <ClInclude Include="host_code\big_dataset.hpp">
       <Filter>host_code</Filter>
+    </ClInclude>
+    <ClInclude Include="host_code\perf_tests\test_fiber_curves.hpp">
+      <Filter>host_code\perf_tests</Filter>
+    </ClInclude>
+    <ClInclude Include="host_code\perf_tests\test_knit_yarn.hpp">
+      <Filter>host_code\perf_tests</Filter>
+    </ClInclude>
+    <ClInclude Include="host_code\perf_tests\test_seashell.hpp">
+      <Filter>host_code\perf_tests</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -230,6 +245,9 @@
       <Filter>assets</Filter>
     </Image>
     <Image Include="Auto-Vk-Toolkit\assets\3rd_party\textures\rough_cobblestones\brick_floor_tileable_Normal.jpg">
+      <Filter>assets</Filter>
+    </Image>
+    <Image Include="assets\po-spiky-heart.png">
       <Filter>assets</Filter>
     </Image>
   </ItemGroup>

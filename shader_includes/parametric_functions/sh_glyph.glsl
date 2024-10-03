@@ -2417,7 +2417,7 @@ vec3 get_translation(uvec2 datasetDims, uint glyphId)
 // |   u = [0, PI)                                   |
 // |   v = [0, TWO_PI)                               |
 // +-------------------------------------------------+
-vec3 get_sh_glyph(float u, float v, uvec3 userData)
+vec3 get_sh_glyph(float u, float v, uvec3 userData, int shOrderIndex)
 {
 	float out_shs[91];
 	int sh_count = 0;
@@ -2435,7 +2435,7 @@ vec3 get_sh_glyph(float u, float v, uvec3 userData)
     mat3 rot_z = mat3(cos(PI), sin(PI), 0.0, -sin(PI), cos(PI), 0.0, 0.0, 0.0, 1.0);
     mat3 rot_y = mat3(cos(PI), 0.0, sin(PI), 0.0, 1.0, 0.0, -sin(PI), 0.0, cos(PI));
 	
-	switch (ubo.mDebugSlidersi[0])
+	switch (ubo.mDebugSlidersi[shOrderIndex])
 	{
 	case 2:
 		eval_sh_2(out_shs, pt);

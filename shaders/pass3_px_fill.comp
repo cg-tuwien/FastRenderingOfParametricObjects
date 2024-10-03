@@ -167,6 +167,7 @@ void main()
 	const bool  useAdaptive          = uObjectData.mElements[objectId].mUseAdaptiveDetail == 1;
 	const vec4  lodAndRenderSettings = uObjectData.mElements[objectId].mLodAndRenderSettings;
 	const vec2  epsilons             = uObjectData.mElements[objectId].mLodAndRenderSettings.xy;
+	const vec2  samplingScalers      = uObjectData.mElements[objectId].mTessAndSamplingSettings.zw;
 
 	vec2 paramsStart = vec2(
 		uPxFillParams.mElements[pxFillId].mParams[0],
@@ -187,20 +188,21 @@ void main()
 
 	// Let's see how many iterations we need in each direction:
 	const float numPixelProducingInvocs = float(gl_WorkGroupSize.x - 1);
-	float numIterationsU = ubo.mUseMaxPatchResolutionDuringPxFill 
-		? max(floor((uPxFillParams.mElements[pxFillId].mScreenDists.x * STEP_SCALE_U + numPixelProducingInvocs - 1) / numPixelProducingInvocs), 1.0)
-		:     floor((screenSpaceThreshold                             * STEP_SCALE_U + numPixelProducingInvocs - 1) / numPixelProducingInvocs);
+	float numIterationsU = useAdaptive
+		? max(floor((uPxFillParams.mElements[pxFillId].mScreenDistsHybridData.x * STEP_SCALE_U + numPixelProducingInvocs - 1) * samplingScalers[0] / numPixelProducingInvocs), 1.0)
+		:     floor((screenSpaceThreshold                                       * STEP_SCALE_U + numPixelProducingInvocs - 1) * samplingScalers[0] / numPixelProducingInvocs);
 	numIterationsU = max(float(COOPERATIVE_GROUPS), numIterationsU);
 //	debugPrintfEXT("mPatchTargetResolution[%f], numPixelProducingInvocs[%f], numIterationsU[%f]", pushConstants.mPatchTargetResolution, numPixelProducingInvocs, numIterationsU);
 
 	// With that info, calc our deltas:
 	float iterationDeltaU = paramsRange[0] / numIterationsU;
 	float deltaU = iterationDeltaU / numPixelProducingInvocs;
-	float deltaV = ubo.mUseMaxPatchResolutionDuringPxFill 
-		? paramsRange[1] / max(uPxFillParams.mElements[pxFillId].mScreenDists.y * STEP_SCALE_V - 1.0, 1.0)  // -1.0 because we need to overshoot by one
-		: paramsRange[1] /    (screenSpaceThreshold                             * STEP_SCALE_V - 1.0); // -1.0 because we need to overshoot by one
+	float deltaV = useAdaptive
+		? paramsRange[1] / max(uPxFillParams.mElements[pxFillId].mScreenDistsHybridData.y * STEP_SCALE_V - 1.0, 1.0)  // -1.0 because we need to overshoot by one
+		: paramsRange[1] /    (screenSpaceThreshold                                       * STEP_SCALE_V - 1.0); // -1.0 because we need to overshoot by one
 //	debugPrintfEXT("iterationDeltaU[%f], deltaU[%f], deltaV[%f]", iterationDeltaU, deltaU, deltaV);
 
+	deltaV /= samplingScalers[1];
 	iterationDeltaU = deltaU * numPixelProducingInvocs;
 
 #if SHARED_MEM_LOCAL_RASTER
@@ -238,20 +240,20 @@ void main()
 			vec3 vpcPong = calcPoint(u, v, curveIndex, userData, tM, /* out: */ wsPong_untranslated, /* out: */ wsPong, /* out: */ offPong);
 
 			bool tryAgain = false;
-			if (useAdaptive) {
-				// Adaptive deltaV:
-				float pxDist = dot(vpcPong.xy - vpcPing.xy, vpcPong.xy - vpcPing.xy);
-				if (isnan(pxDist)) pxDist = 0.0;
-				const float subgroupMaxDist = subgroupMax(pxDist);
-				const bool  distTooLarge    = subgroupMaxDist > 1.4 && deltaV > minDeltaV;
-				const bool  distABitSmall   = subgroupMaxDist < 0.7 && deltaV < maxDeltaV;
-				if (distTooLarge) {
-					iv -= deltaV; // Try again
-					deltaV = clamp(deltaV - deltaVDecrease, minDeltaV, maxDeltaV);
-					iv += deltaV; // ...but slower.
-					tryAgain = true;
-				}
-			}
+//			if (useAdaptive) { NOTE: The old meaning of "useAdaptive" was that step sizes would be adapted => TO BE REFACTORED!
+//				// Adaptive deltaV:
+//				float pxDist = dot(vpcPong.xy - vpcPing.xy, vpcPong.xy - vpcPing.xy);
+//				if (isnan(pxDist)) pxDist = 0.0;
+//				const float subgroupMaxDist = subgroupMax(pxDist);
+//				const bool  distTooLarge    = subgroupMaxDist > 1.4 && deltaV > minDeltaV;
+//				const bool  distABitSmall   = subgroupMaxDist < 0.7 && deltaV < maxDeltaV;
+//				if (distTooLarge) {
+//					iv -= deltaV; // Try again
+//					deltaV = clamp(deltaV - deltaVDecrease, minDeltaV, maxDeltaV);
+//					iv += deltaV; // ...but slower.
+//					tryAgain = true;
+//				}
+//			}
 
 			if (!tryAgain) {
 				// Attention: The very last invocations do NOT produce pixels!!!! (We have to "waste" them for calculating normals)
@@ -280,7 +282,7 @@ void main()
 						}
 #else
 						float depth = vpcPing.z;
-						vec3  color = shade(matIndex, myColor, getParamShadingUserParams(u, v, curveIndex, userData, wsPing_untranslated, objectId), wsPing, n, getParamTexCoords(u, v, curveIndex, userData, wsPing), dfdx, dfdy);
+						vec3  color = shade(matIndex, /* const render variant index of POINT_direct: */ 3, myColor, getParamShadingUserParams(u, v, curveIndex, userData, wsPing_untranslated, objectId), wsPing, n, getParamTexCoords(u, v, curveIndex, userData, wsPing), dfdx, dfdy);
 #if SUPERSAMPLING
 						writeSupersampled(ivec2(vpcPing.xy), depth, vec4(color, 1.0));
 #else 

@@ -25,7 +25,7 @@ vec3 get_giant_worm_body(float u, float v, uvec3 userData, out vec3 pos, out vec
 
 	// Small bumps:
 	//float bumpySkin = abs(cos(u * 100.0)) * 0.05;
-	float bumpySkin = sin(100.0*u)*sin(100.0*u)*sin(100.0*u)*sin(100.0*u) * 0.05;
+	float bumpySkin = sin(100.0*u)*sin(100.0*u)*sin(100.0*u)*sin(100.0*u) * 0.05 * sin(20.0*v);
 
 	// Let the gitant worm be a bit thicker at the bottom:
 	float thicknessscale = 0.75 / (u * 0.5 + 0.5) + 0.5;

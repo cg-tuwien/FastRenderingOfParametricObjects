@@ -11,7 +11,7 @@
 
 // Maximum number of subdivision steps that divides patches into smaller parts:
 // (8 steps are enough to subdivide 8192x8192 down into 32x32)
-#define MAX_PATCH_SUBDIV_STEPS		12
+#define MAX_PATCH_SUBDIV_STEPS		24
 
 // Maximum number of LOD patches per "ping/pong" buffer:
 #define MAX_LOD_PATCHES				3000000
@@ -52,9 +52,6 @@
 // Local framebuffer's size (must be exactly PX_FILL_LOCAL_FB_TILE_SIZE_X*TILE_FACTOR_X, or PX_FILL_LOCAL_FB_TILE_SIZE_Y*TILE_FACTOR_Y, respectively):
 #define LOCAL_FB_X                      32
 #define LOCAL_FB_Y                      32
-
-// Extends struct px_fill_data by one element, fills it in pass2x, and reads it in pass3_px_fill_local_fb:
-#define WRITE_MAX_COORDS_IN_PASS2       1
 
 // If enabled, adds a new buffer and a new compute pass which goes over all patches and assigns them to screen tiles.
 // (Only relevant in conjunction with pass3_px_fill_local_fb.comp)

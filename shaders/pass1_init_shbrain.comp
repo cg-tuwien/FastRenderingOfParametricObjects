@@ -67,9 +67,9 @@ void main()
 
 	// out:
 	const uint insertIdx = atomicAdd(uPatchLodCount.mDispatchCounts[0].x, 1); // start with the first, a.k.a. "firstPing"
-	uPatchLodPing.mElements[insertIdx].mParams           = vec4(paramsFrom[0], paramsTo[0], paramsFrom[1], paramsTo[1]);
-	uPatchLodPing.mElements[insertIdx].mObjectIdUserData = uvec4(objectId, /* Brain dataset dimensions: */ datasetDimensions.x, datasetDimensions.y, /* Brain dataset ID => */ glyphId);
-
+	uPatchLodPing.mElements[insertIdx].mParams                = vec4(paramsFrom[0], paramsTo[0], paramsFrom[1], paramsTo[1]);
+	uPatchLodPing.mElements[insertIdx].mObjectIdUserData      = uvec4(objectId, /* Brain dataset dimensions: */ datasetDimensions.x, datasetDimensions.y, /* Brain dataset ID => */ glyphId);
+	uPatchLodPing.mElements[insertIdx].mScreenDistsHybridData = vec4(0.0, 0.0, intBitsToFloat(0), 1.0);
 
 #if SPAWN_FIXER_PATCHES
 	// If enabled: Just spawn six more patches---three around each pole:
@@ -78,24 +78,30 @@ void main()
 		const uint insertIdxXtra = atomicAdd(uPatchLodCount.mDispatchCounts[0].x, 6); // start with the first, a.k.a. "firstPing"
 
 		// top pole:
-		uPatchLodPing.mElements[insertIdxXtra    ].mParams           = vec4(-PI/ 64.0, PI/ 64.0, 3.0*PI/2.0, PI/2.0);
-		uPatchLodPing.mElements[insertIdxXtra    ].mObjectIdUserData = uvec4(objectId, /* Brain dataset dimensions: */ datasetDimensions.x, datasetDimensions.y, /* Brain dataset ID => */ glyphId);
+		uPatchLodPing.mElements[insertIdxXtra    ].mParams                = vec4(-PI/ 64.0, PI/ 64.0, 3.0*PI/2.0, PI/2.0);
+		uPatchLodPing.mElements[insertIdxXtra    ].mObjectIdUserData      = uvec4(objectId, /* Brain dataset dimensions: */ datasetDimensions.x, datasetDimensions.y, /* Brain dataset ID => */ glyphId);
+		uPatchLodPing.mElements[insertIdxXtra    ].mScreenDistsHybridData = vec4(0.0, 0.0, intBitsToFloat(0), 1.0);
 
-		uPatchLodPing.mElements[insertIdxXtra + 1].mParams           = vec4(-PI/128.0, PI/128.0, 3.0*PI/2.0, PI/2.0);
-		uPatchLodPing.mElements[insertIdxXtra + 1].mObjectIdUserData = uvec4(objectId, /* Brain dataset dimensions: */ datasetDimensions.x, datasetDimensions.y, /* Brain dataset ID => */ glyphId);
+		uPatchLodPing.mElements[insertIdxXtra + 1].mParams                = vec4(-PI/128.0, PI/128.0, 3.0*PI/2.0, PI/2.0);
+		uPatchLodPing.mElements[insertIdxXtra + 1].mObjectIdUserData      = uvec4(objectId, /* Brain dataset dimensions: */ datasetDimensions.x, datasetDimensions.y, /* Brain dataset ID => */ glyphId);
+		uPatchLodPing.mElements[insertIdxXtra + 1].mScreenDistsHybridData = vec4(0.0, 0.0, intBitsToFloat(0), 1.0);
 
-		uPatchLodPing.mElements[insertIdxXtra + 2].mParams           = vec4(-PI/256.0, PI/256.0, 3.0*PI/2.0, PI/2.0);
-		uPatchLodPing.mElements[insertIdxXtra + 2].mObjectIdUserData = uvec4(objectId, /* Brain dataset dimensions: */ datasetDimensions.x, datasetDimensions.y, /* Brain dataset ID => */ glyphId);
+		uPatchLodPing.mElements[insertIdxXtra + 2].mParams                = vec4(-PI/256.0, PI/256.0, 3.0*PI/2.0, PI/2.0);
+		uPatchLodPing.mElements[insertIdxXtra + 2].mObjectIdUserData      = uvec4(objectId, /* Brain dataset dimensions: */ datasetDimensions.x, datasetDimensions.y, /* Brain dataset ID => */ glyphId);
+		uPatchLodPing.mElements[insertIdxXtra + 2].mScreenDistsHybridData = vec4(0.0, 0.0, intBitsToFloat(0), 1.0);
 
 		// bottom pole:
-		uPatchLodPing.mElements[insertIdxXtra + 3].mParams           = vec4(PI-PI/ 64.0, PI+PI/ 64.0, 3.0*PI/2.0, PI/2.0);
-		uPatchLodPing.mElements[insertIdxXtra + 3].mObjectIdUserData = uvec4(objectId, /* Brain dataset dimensions: */ datasetDimensions.x, datasetDimensions.y, /* Brain dataset ID => */ glyphId);
+		uPatchLodPing.mElements[insertIdxXtra + 3].mParams                = vec4(PI-PI/ 64.0, PI+PI/ 64.0, 3.0*PI/2.0, PI/2.0);
+		uPatchLodPing.mElements[insertIdxXtra + 3].mObjectIdUserData      = uvec4(objectId, /* Brain dataset dimensions: */ datasetDimensions.x, datasetDimensions.y, /* Brain dataset ID => */ glyphId);
+		uPatchLodPing.mElements[insertIdxXtra + 3].mScreenDistsHybridData = vec4(0.0, 0.0, intBitsToFloat(0), 1.0);
 
-		uPatchLodPing.mElements[insertIdxXtra + 4].mParams           = vec4(PI-PI/128.0, PI+PI/128.0, 3.0*PI/2.0, PI/2.0);
-		uPatchLodPing.mElements[insertIdxXtra + 4].mObjectIdUserData = uvec4(objectId, /* Brain dataset dimensions: */ datasetDimensions.x, datasetDimensions.y, /* Brain dataset ID => */ glyphId);
+		uPatchLodPing.mElements[insertIdxXtra + 4].mParams                = vec4(PI-PI/128.0, PI+PI/128.0, 3.0*PI/2.0, PI/2.0);
+		uPatchLodPing.mElements[insertIdxXtra + 4].mObjectIdUserData      = uvec4(objectId, /* Brain dataset dimensions: */ datasetDimensions.x, datasetDimensions.y, /* Brain dataset ID => */ glyphId);
+		uPatchLodPing.mElements[insertIdxXtra + 4].mScreenDistsHybridData = vec4(0.0, 0.0, intBitsToFloat(0), 1.0);
 
-		uPatchLodPing.mElements[insertIdxXtra + 5].mParams           = vec4(PI-PI/256.0, PI+PI/256.0, 3.0*PI/2.0, PI/2.0);
-		uPatchLodPing.mElements[insertIdxXtra + 5].mObjectIdUserData = uvec4(objectId, /* Brain dataset dimensions: */ datasetDimensions.x, datasetDimensions.y, /* Brain dataset ID => */ glyphId);
+		uPatchLodPing.mElements[insertIdxXtra + 5].mParams                = vec4(PI-PI/256.0, PI+PI/256.0, 3.0*PI/2.0, PI/2.0);
+		uPatchLodPing.mElements[insertIdxXtra + 5].mObjectIdUserData      = uvec4(objectId, /* Brain dataset dimensions: */ datasetDimensions.x, datasetDimensions.y, /* Brain dataset ID => */ glyphId);
+		uPatchLodPing.mElements[insertIdxXtra + 5].mScreenDistsHybridData = vec4(0.0, 0.0, intBitsToFloat(0), 1.0);
 	}
 #endif
 }

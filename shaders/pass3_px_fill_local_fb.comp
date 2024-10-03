@@ -15,6 +15,9 @@
 #define _unroll_ [[unroll]]
 #define _loop_   [[loop]]
 
+// Enable the following option to DISABLE the samplingScalers (effectively setting them to 1.0 each)
+#define DISABLE_SAMPLING_SCALERS 1
+
 // This is const (see static int get_px_fill_set_index(rendering_method aRenderMethod) -> case rendering_method::PointRendered_4xSS_local_fb):
 #define POINT_RENDERED_4XSS_LOCAL_FB_INDEX 4
 
@@ -29,6 +32,7 @@ shared uint64_t LocalFramebuffer[LOCAL_FB_X][LOCAL_FB_Y];
 
 // Whether or not the debug clusters should be colored (background only):
 #define DEBUG_CLUSTER_VIS 0
+#define DEBUG_CLUSTER_VIS_LINES_ONLY 1
 #define MIX_CLUSTER_VIS_WITH_DRAW_COLOR 0
 
 // When enabled, does not render the parametric object but instead colors the tiles according to the #patches that were selected
@@ -127,31 +131,24 @@ vec3 groupcolors[MAX_COLORS] = {
     vec3(0.0, 0.2, 0.2)    // Nearly Black Cyan-Green
 };
 #if DEBUG_SHOW_PATCH_COUNTS
-#define MAX_HEATMAP_COLORS 23
+#define MAX_HEATMAP_COLORS 16
 vec3 modifiedHeatmapColors[MAX_HEATMAP_COLORS] = {
     vec3(0.18, 0.0, 0.29),  // 0 writes 
-    vec3(0.15, 0.3, 0.07),  // dark green:    
-    vec3(0.173, 0.71, 0.667),  // turquoise
-    vec3(0.627, 0.761, 0.467), // light green:   
-    vec3(0.831, 0.831, 0),   // yellow: 
-    vec3(1.0, 1.0, 1.0),    // white:         
-    vec3(0.99, 0.88, 0.94), // pink tones:    
-    vec3(0.95, 0.71, 0.85),	// from
-    vec3(0.87, 0.47, 0.68),	// light
-    vec3(0.77, 0.11, 0.49),	// to
-    vec3(0.56, 0.0, 0.32),  // dark pink
-    vec3(0.27, 0.46, 0.71), // blue tones:   
-    vec3(0.45, 0.68, 0.82),	// from dark
-    vec3(0.67, 0.85, 0.91),	// to
-    vec3(0.88, 0.95, 0.97), // light blue
-    vec3(1.0, 0.88, 0.56),  // orange tones: 
-    vec3(0.99, 0.68, 0.38),	// from light
-    vec3(0.96, 0.43, 0.26),	// to
-    vec3(0.84, 0.19, 0.15),	// very dark orange 
-    vec3(0.95, 0.0, 0.22),  // red tones:
-    vec3(0.65, 0.0, 0.15),	// from light
-    vec3(0.45, 0.0, 0.1),	// to
-    vec3(0.35, 0.0, 0.08)	// very dark red
+    vec3(1.0, 1.0, 1.0),
+    vec3(0.8, 0.9, 0.95),
+    vec3(0.6, 0.8, 0.9), 
+    vec3(0.3, 0.6, 0.8), 
+    vec3(0.1, 0.7, 0.9), 
+    vec3(0.2, 0.5, 0.7), 
+    vec3(0.3, 0.4, 0.5), 
+    vec3(0.5, 0.3, 0.3), 
+    vec3(0.7, 0.2, 0.2), 
+    vec3(0.99, 0.68, 0.38),	
+    vec3(0.77, 0.11, 0.49),
+    vec3(0.96, 0.43, 0.26),	
+	vec3(0.84, 0.19, 0.15),
+    vec3(0.45, 0.0, 0.1),	
+    vec3(0.95, 0.0, 0.22)  
 };
 #endif
 
@@ -236,9 +233,7 @@ void main()
 			// Bounds check: 
 			vec4 patchScreenInfo  = uPxFillParams.mElements[p + MAX_INDIRECT_DISPATCHES * POINT_RENDERED_4XSS_LOCAL_FB_INDEX].mScreenDists;
 			ivec2 minScreenCoords = ivec2(patchScreenInfo.zw);
-#if WRITE_MAX_COORDS_IN_PASS2
 			ivec2 maxScreenCoords = ivec2(uPxFillParams.mElements[p + MAX_INDIRECT_DISPATCHES * POINT_RENDERED_4XSS_LOCAL_FB_INDEX].mScreenMax.xy);
-#endif
 			if (!isOutside(minScreenCoords, maxScreenCoords, screenCoordsLB, screenCoordsUB)) {
 				const uint insertIndex = atomicAdd(NumTilePatches, 1);
 				TilePatches[insertIndex] = p;
@@ -289,6 +284,11 @@ void main()
 		const bool  useAdaptive          = uObjectData.mElements[objectId].mUseAdaptiveDetail == 1; 
 		const vec4  lodAndRenderSettings = uObjectData.mElements[objectId].mLodAndRenderSettings;
 		const vec2  epsilons             = uObjectData.mElements[objectId].mLodAndRenderSettings.xy;
+#if DISABLE_SAMPLING_SCALERS
+		const vec2  samplingScalers      = vec2(1.0, 1.0);
+#else
+		const vec2  samplingScalers      = uObjectData.mElements[objectId].mTessAndSamplingSettings.zw;
+#endif
 
 		vec2 paramsStart = vec2(
 			uPxFillParams.mElements[pxFillId].mParams[0],
@@ -309,19 +309,20 @@ void main()
 
 		// Let's see how many iterations we need in each direction:
 		const float numPixelProducingInvocs = float(gl_WorkGroupSize.x - 1);
-		float numIterationsU = ubo.mUseMaxPatchResolutionDuringPxFill 
-			? max(floor((uPxFillParams.mElements[pxFillId].mScreenDists.x * float(TILE_FACTOR_X) * STEP_SCALE_U + numPixelProducingInvocs - 1) / numPixelProducingInvocs), 1.0)
-			:     floor((screenSpaceThreshold                             * float(TILE_FACTOR_X) * STEP_SCALE_U + numPixelProducingInvocs - 1) / numPixelProducingInvocs);
+		float numIterationsU = useAdaptive
+			? max(floor((uPxFillParams.mElements[pxFillId].mScreenDistsHybridData.x * float(TILE_FACTOR_X) * STEP_SCALE_U + numPixelProducingInvocs - 1) * samplingScalers[0] / numPixelProducingInvocs), 1.0)
+			:     floor((screenSpaceThreshold                                       * float(TILE_FACTOR_X) * STEP_SCALE_U + numPixelProducingInvocs - 1) * samplingScalers[0] / numPixelProducingInvocs);
 	//	debugPrintfEXT("mPatchTargetResolution[%f], numPixelProducingInvocs[%f], numIterationsU[%f]", pushConstants.mPatchTargetResolution, numPixelProducingInvocs, numIterationsU);
 
 		// With that info, calc our deltas:
 		float iterationDeltaU = paramsRange[0] / numIterationsU;
 		float deltaU = iterationDeltaU / numPixelProducingInvocs;
-		float deltaV = ubo.mUseMaxPatchResolutionDuringPxFill 
-			? paramsRange[1] / max(uPxFillParams.mElements[pxFillId].mScreenDists.y * float(TILE_FACTOR_Y) * STEP_SCALE_V - 1.0, 1.0)  // -1.0 because we need to overshoot by one
-			: paramsRange[1] /    (screenSpaceThreshold                             * float(TILE_FACTOR_Y) * STEP_SCALE_V - 1.0); // -1.0 because we need to overshoot by one
+		float deltaV = useAdaptive
+			? paramsRange[1] / max(uPxFillParams.mElements[pxFillId].mScreenDistsHybridData.y * float(TILE_FACTOR_Y) * STEP_SCALE_V - 1.0, 1.0)  // -1.0 because we need to overshoot by one
+			: paramsRange[1] /    (screenSpaceThreshold                                       * float(TILE_FACTOR_Y) * STEP_SCALE_V - 1.0); // -1.0 because we need to overshoot by one
 	//	debugPrintfEXT("iterationDeltaU[%f], deltaU[%f], deltaV[%f]", iterationDeltaU, deltaU, deltaV);
 
+		deltaV /= samplingScalers[1];
 		iterationDeltaU = deltaU * numPixelProducingInvocs;
 
 		const float vTarget = paramsRange[1] + deltaV; // Gotta run for +1 because we're wasting te top-most row.
@@ -355,20 +356,20 @@ void main()
 				vec3 vpcPong = calcPoint(u, v, curveIndex, userData, tM, /* out: */ wsPong_untranslated, /* out: */ wsPong, /* out: */ offPong);
 
 				bool tryAgain = false;
-				if (useAdaptive) {
-					// Adaptive deltaV:
-					float pxDist = dot(vpcPong.xy - vpcPing.xy, vpcPong.xy - vpcPing.xy);
-					if (isnan(pxDist)) pxDist = 0.0;
-					const float subgroupMaxDist = subgroupMax(pxDist);
-					const bool  distTooLarge    = subgroupMaxDist > 1.4 && deltaV > minDeltaV;
-					const bool  distABitSmall   = subgroupMaxDist < 0.7 && deltaV < maxDeltaV;
-					if (distTooLarge) {
-						iv -= deltaV; // Try again
-						deltaV = clamp(deltaV - deltaVDecrease, minDeltaV, maxDeltaV);
-						iv += deltaV; // ...but slower.
-						tryAgain = true;
-					}
-				}
+//				if (useAdaptive) { NOTE: The old meaning of "useAdaptive" was that step sizes would be adapted => TO BE REFACTORED!
+//					// Adaptive deltaV:
+//					float pxDist = dot(vpcPong.xy - vpcPing.xy, vpcPong.xy - vpcPing.xy);
+//					if (isnan(pxDist)) pxDist = 0.0;
+//					const float subgroupMaxDist = subgroupMax(pxDist);
+//					const bool  distTooLarge    = subgroupMaxDist > 1.4 && deltaV > minDeltaV;
+//					const bool  distABitSmall   = subgroupMaxDist < 0.7 && deltaV < maxDeltaV;
+//					if (distTooLarge) {
+//						iv -= deltaV; // Try again
+//						deltaV = clamp(deltaV - deltaVDecrease, minDeltaV, maxDeltaV);
+//						iv += deltaV; // ...but slower.
+//						tryAgain = true;
+//					}
+//				}
 
 				if (!tryAgain) {
 					// Attention: The very last invocations do NOT produce pixels!!!! (We have to "waste" them for calculating normals)
@@ -391,7 +392,7 @@ void main()
 							ivec2 globalHiResFbCoords = ivec2(vpcPing.xy);
 							if (isInside(globalHiResFbCoords, screenCoordsLB, screenCoordsUB)) {
 								uint64_t data = getUint64ForFramebuffer(
-													vpcPing.z, shade(matIndex, myColor, 
+													vpcPing.z, shade(matIndex, /* const render variant index of POINT_localFB: */ 4, myColor, 
 																	getParamShadingUserParams(u, v, curveIndex, userData, wsPing_untranslated.xyz, objectId),
 																	wsPing.xyz, n, 
 																	getParamTexCoords(u, v, curveIndex, userData, wsPing.xyz), 
@@ -436,9 +437,9 @@ void main()
 			ivec2 globalFbCoords = ivec2(x, y) + screenCoordsLB;
 			writeToCombinedAttachment(globalFbCoords, getUint64ForFramebuffer(0.9999, vec4(modifiedHeatmapColors[
 #if SEPARATE_PATCH_TILE_ASSIGNMENT_PASS
-				min(numPatches, MAX_HEATMAP_COLORS-1)
+				min(numPatches / 5, MAX_HEATMAP_COLORS-1)
 #else
-				min(NumTilePatches, MAX_HEATMAP_COLORS-1)
+				min(NumTilePatches / 5, MAX_HEATMAP_COLORS-1)
 #endif
 			], 1.0)));
 		}
@@ -506,7 +507,11 @@ void main()
 #else
 				float intensity = 0.8;
 #endif
-				writeToCombinedAttachment(globalFbCoords, getUint64ForFramebuffer(0.9999, intensity * debugTileBackgroundColor));
+#if DEBUG_CLUSTER_VIS_LINES_ONLY
+				debugTileBackgroundColor = vec4(0.0);
+				if (x < 1 || y < 1)
+#endif 
+					writeToCombinedAttachment(globalFbCoords, getUint64ForFramebuffer(0.9999, intensity * debugTileBackgroundColor));
 			}
 #endif
 		}

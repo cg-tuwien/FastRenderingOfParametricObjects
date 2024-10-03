@@ -47,14 +47,8 @@ void main()
 	for (uint p = gl_GlobalInvocationID.x; p < numPatches; p += gl_WorkGroupSize.x * 128 /* <-- because we made a dispatch(128u, 1u, 1u) */) {
 		uint elementIndex = p + MAX_INDIRECT_DISPATCHES * POINT_RENDERED_4XSS_LOCAL_FB_INDEX;
 		// Bounds check: 
-		vec4 patchScreenInfo  = uPxFillParams.mElements[elementIndex].mScreenDists;
-		ivec2 minScreenCoords = ivec2(patchScreenInfo.zw);
-#if WRITE_MAX_COORDS_IN_PASS2
-		ivec2 maxScreenCoords = ivec2(uPxFillParams.mElements[elementIndex].mScreenMax.xy);
-#else
-		// TODO: Why is this                                  vvv              buggy?
-		ivec2 maxScreenCoords = minScreenCoords + ivec2(sqrt(patchScreenInfo.x*patchScreenInfo.x + patchScreenInfo.y*patchScreenInfo.y));
-#endif
+		ivec2 minScreenCoords = ivec2(uPxFillParams.mElements[elementIndex].mScreenMinMax.xy);
+		ivec2 maxScreenCoords = ivec2(uPxFillParams.mElements[elementIndex].mScreenMinMax.zw);
 		// Calculate x and y screen bounds IN TERMS OF TILES:
 		uvec2 minTileCoords = minScreenCoords/tileSizes;
 		uvec2 maxTileCoords = maxScreenCoords/tileSizes;

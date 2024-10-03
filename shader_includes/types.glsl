@@ -22,10 +22,14 @@ struct object_data
     int   mUseAdaptiveDetail;
     int   mRenderingVariantIndex;
     // The following settings are stored in the vec4:
-    //  .xy ... Percent how much to increase patch parameters (s.t. neighboring patches overlap a bit)
+    //  .xy ... Percent how much to incre ase patch parameters (s.t. neighboring patches overlap a bit)
     //  .z  ... screen-space threshold for the LOD stage
     //  .w  ... sampling factor for point-based rendering (< 1.0 probably means too little samples, > 1.0 might mean oversampling but also filling holes) 
     vec4  mLodAndRenderSettings;
+    // .xy: Tessellation settings: constant inner (x) and outer (y) tessellation levels, i.e., IF mUseAdaptiveDetail == 1
+    // .zw: Sampling density for point-based rendering techniques in u (z) and v (w) directions.
+    //      (< 1.0 probably means too little samples, > 1.0 might mean oversampling but also filling holes) 
+    vec4  mTessAndSamplingSettings;
     // The first three values of user data are being passed-along and can be accessed:
     // Note: SH glyphs and yarn/fiber curves get fixed user data (assigned in pass1_init_shbrain.comp or pass1_init_kityarn.comp, respectively).
     uvec4 mUserData;
@@ -43,17 +47,17 @@ struct px_fill_data
     // [3]: unused
     uvec4 mObjectIdUserData;
 
-    // [0]: EITHER max screen dist u
-    // [1]: EITHER max screen dist v
-    // [2]: min screen coords of patch u (if WRITE_OUT_MIN_MAX_SCREEN_COORDS is enabled in pass2x_patch_lod.comp)
-    // [3]: min screen coords of patch v (if WRITE_OUT_MIN_MAX_SCREEN_COORDS is enabled in pass2x_patch_lod.comp)
-    vec4 mScreenDists;
+    // [0]: max. screen dist u
+    // [1]: max. screen dist v
+    // [2]: hybrid levels to go (counting down)
+    // [3]: hybrid screen threshold divisor
+    vec4 mScreenDistsHybridData;
 
-#if WRITE_MAX_COORDS_IN_PASS2
     // [0]: min screen coords of patch u (if WRITE_OUT_MIN_MAX_SCREEN_COORDS is enabled in pass2x_patch_lod.comp)
     // [1]: min screen coords of patch v (if WRITE_OUT_MIN_MAX_SCREEN_COORDS is enabled in pass2x_patch_lod.comp)
-    vec4 mScreenMax;
-#endif
+    // [2]: max screen coords of patch u (if WRITE_OUT_MIN_MAX_SCREEN_COORDS is enabled in pass2x_patch_lod.comp)
+    // [3]: max screen coords of patch v (if WRITE_OUT_MIN_MAX_SCREEN_COORDS is enabled in pass2x_patch_lod.comp)
+    vec4 mScreenMinMax;
 };
 
 void getParams(vec4 data, out float uFrom, out float uTo, out float vFrom, out float vTo)

@@ -20,8 +20,8 @@
 #include "ImGuizmo.h"
 #include "big_dataset.hpp"
 
-#define NUM_TIMESTAMP_QUERIES 10
-
+#define NUM_PREDEFINED_MATERIALS 5
+#define NUM_TIMESTAMP_QUERIES 14
 #define NUM_DIFFERENT_RENDER_VARIANTS 5
 
 // Sample count possible values:
@@ -37,85 +37,31 @@
 #define SSAA_ENABLED 1
 #define SSAA_FACTOR  glm::uvec2(2, 2)
 
-#define TEST_MODE_ON                   1
-#define TEST_GATHER_PIPELINE_STATS     1
-#define TEST_ALLOW_GATHER_STATS        1
-#define TEST_DURATION_PER_STEP          2.5f
-#define TEST_GATHER_TIMER_QUERIES      1
+// TEST_MODE: Uncomment one of the following includes to load a specific configuration for test mode.
+//            It will then be tested with the rendering variant assigned to TEST_RENDERING_METHOD.
+//            Once the application has started, start the test with [Space].
+//#include "perf_tests/test_knit_yarn.hpp"
+//#include "perf_tests/test_fiber_curves.hpp"
+//#include "perf_tests/test_seashell.hpp"
+//#define TEST_RENDERING_METHOD          rendering_variant::PointRendered_direct
+#define TEST_GATHER_TIMER_QUERIES 0
+#define TEST_GATHER_PATCH_COUNTS  0
 
-// UNCOMMENT FOR KNIT YARN MEASUREMENT:
-#define TEST_CAMDIST                    0.4f
-#define TEST_CAMERA_DELTA_POW           2.2f
-#define TEST_TRANSLATE_Y               false
-#define TEST_TRANSLATE_Z               true
-#define TEST_CAM_Y_SHIFT               4.08f
-#define TEST_ENABLE_OBJ_IDX            18
-#define TEST_INNER_TESS_LEVEL          19
-#define TEST_OUTER_TESS_LEVEL          19
-#define TEST_SCREEN_DISTANCE_THRESHOLD 62
-#define TEST_USEINDIVIDUAL_PATCH_RES   1
-#define TEST_ENABLE_3D_MODEL           0
-#define POINT_RENDERIN_PATCH_RES_S_X   1.2f
-#define POINT_RENDERIN_PATCH_RES_S_Y   1.2f
-
-//// UNCOMMENT FOR FIBER CURVES MEASUREMENT:
-//#define TEST_CAMDIST                    0.4f
-//#define TEST_CAMERA_DELTA_POW           2.2f
-//#define TEST_TRANSLATE_Y               false
-//#define TEST_TRANSLATE_Z               true
-//#define TEST_CAM_Y_SHIFT               4.08f
-//#define TEST_ENABLE_OBJ_IDX            19
-//#define TEST_INNER_TESS_LEVEL          19
-//#define TEST_OUTER_TESS_LEVEL          19
-//#define TEST_SCREEN_DISTANCE_THRESHOLD 62
-//#define TEST_USEINDIVIDUAL_PATCH_RES   1
-//#define TEST_ENABLE_3D_MODEL           0
-//#define POINT_RENDERIN_PATCH_RES_S_X   1.2f
-//#define POINT_RENDERIN_PATCH_RES_S_Y   1.2f
-
-//// UNCOMMENT FOR SEASHELL MEASUREMENT:
-//#define TEST_CAMDIST                    4.0f
-//#define TEST_CAMERA_DELTA_POW           1.5f
-//#define TEST_TRANSLATE_Y               false
-//#define TEST_TRANSLATE_Z               true
-//#define TEST_CAM_Y_SHIFT               0.0f
-//#define TEST_ENABLE_OBJ_IDX            20
-//#define TEST_INNER_TESS_LEVEL          64
-//#define TEST_OUTER_TESS_LEVEL          64
-//#define TEST_SCREEN_DISTANCE_THRESHOLD 62
-//#define TEST_USEINDIVIDUAL_PATCH_RES   0
-//#define TEST_ENABLE_3D_MODEL           0
-//#define POINT_RENDERIN_PATCH_RES_S_X   1.5f
-//#define POINT_RENDERIN_PATCH_RES_S_Y   1.5f
-
-// ================= UNCOMMENT FOR PATCH->TESS RENDERING METHOD ======================
-// Values: rendering_variant::point_rendered | rendering_variant::tessellated_rasterized
-#define TEST_RENDERING_METHOD          rendering_variant::tessellated_rasterized
-// Values: 0 = Uint64 image | 3 = framebuffer (must use that for SSAA or MSAA)
-#define TEST_TARGET_IMAGE              3
-
-//// ================= UNCOMMENT FOR POINT->PATCH RENDERING METHOD =====================
-//// Values: rendering_variant::point_rendered | rendering_variant::tessellated_rasterized
-//#define TEST_RENDERING_METHOD          rendering_variant::point_rendered
-//// Values: 0 = Uint64 image | 3 = framebuffer (must use that for SSAA or MSAA)
-//#define TEST_TARGET_IMAGE              0
-
-#define NUM_PREDEFINED_MATERIALS 5
-
-static std::array<parametric_object, 13> PredefinedParametricObjects {{
-	parametric_object{"Sphere"      , "assets/po-sphere-patches.png",     false, parametric_object_type::Sphere,                 0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>() , glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{ 0.f,  0.f,  0.f})},
-	parametric_object{"Johi's Heart", "assets/po-johis-heart.png",        false, parametric_object_type::JohisHeart,              0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>(), glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{ 0.f,  0.f, -2.f})},
-	parametric_object{"Plane" ,       "assets/po-johis-heart.png",        true,  parametric_object_type::Plane,                  1.0f,   0.0f,            0.0f,  1.0f},
-	parametric_object{"Seashell 1"  , "assets/po-seashell1.png",          false, parametric_object_type::Seashell1,              glm::two_pi<float>() * 8.0f,/* -> */0.0f,   0.0f,/* -> */glm::two_pi<float>(), glm::uvec2{ 1u, 1u }, glm::mat4{ 1.0f }, -5},
-	parametric_object{"Seashell 2"  , "assets/po-seashell2.png",          false, parametric_object_type::Seashell2,              glm::two_pi<float>() * 8.0f,/* -> */0.0f,   0.0f,/* -> */glm::two_pi<float>(), glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{-4.5f, 7.0f, 0.0f }), -4},
-	parametric_object{"Seashell 3"  , "assets/po-seashell3.png",          false, parametric_object_type::Seashell3,              glm::two_pi<float>() * 8.0f,/* -> */0.0f,   0.0f,/* -> */glm::two_pi<float>(), glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{ 4.5f, 7.0f, 0.0f }), -3},
-	parametric_object{"Yarn Curve"  , "assets/po-yarn-curve-single.png",  false, parametric_object_type::SingleYarnCurve,        1.0f, 1.0f,     /* <-- yarn dimensions | n/a yarn -> */ 0.f, /* thickness --> */ 0.8f, glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{-0.3f, 0.0f, 0.0f}) * glm::scale(glm::vec3{ 0.3f }), -3},
-	parametric_object{"Fiber Curve" , "assets/po-fiber-curve-single.png", false, parametric_object_type::SingleFiberCurve,       1.0f, 1.0f,     /* <-- yarn dimensions | #fibers --> */ 6.f, /* thickness --> */ 0.3f, glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{-0.5f, 0.0f, 0.0f}) * glm::scale(glm::vec3{ 0.3f }), -3},
-	parametric_object{"Blue Curtain", "assets/po-blue-curtain.png",		  false, parametric_object_type::CurtainYarnCurves,      235.0f, 254.0f, /* <-- yarn dimensions | #fibers --> */ 6.f, /* thickness --> */ 0.8f, glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{-3.35f, 0.08f, 5.32f}) * glm::scale(glm::vec3{ 0.005f }), 19},
-	parametric_object{"Palm Tree"   , "assets/po-palm-tree.png",		  false, parametric_object_type::PalmTreeTrunk,          0.0f,   1.0f,            0.0f,  glm::two_pi<float>(), glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{ 0.f,  0.f, -4.f})},
-	parametric_object{"Giant Worm"  , "assets/po-giant-worm.png",		  false, parametric_object_type::GiantWorm,              0.0f,   1.0f,            0.0f,  glm::two_pi<float>(), glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{ 0.f,  0.f, -4.f}), -5},
-	parametric_object{"SH Glyph"    , "assets/po-single-sh-glyph.png",    false, parametric_object_type::SHGlyph,                0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>(),     glm::uvec2{ 1u, 1u }, glm::mat4{ 1.0f }, -2},
-	parametric_object{"Brain Scan"  , "assets/po-sh-brain.png",           false, parametric_object_type::SHBrain,                0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>(), glm::uvec2{ SH_BRAIN_DATA_SIZE_X, SH_BRAIN_DATA_SIZE_Y }, glm::mat4{ 1.0f }, -2}
+static std::array<parametric_object, 14> PredefinedParametricObjects {{
+	parametric_object{"Sphere"       , "assets/po-sphere-patches.png",     true , parametric_object_type::Sphere,                 0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>() , glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{ 0.f,  0.f,  0.f})},
+	parametric_object{"Johi's Heart" , "assets/po-johis-heart.png",        false, parametric_object_type::JohisHeart,             0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>(), glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{ 0.f,  0.f, -2.f})},
+	parametric_object{"Spiky Heart"  , "assets/po-spiky-heart.png",        false, parametric_object_type::SpikyHeart,             0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>(), glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{ 0.f,  0.f,  2.f}), -5},
+	parametric_object{"Seashell 1"   , "assets/po-seashell1.png",          false, parametric_object_type::Seashell1,              glm::two_pi<float>() * 8.0f,/* -> */0.0f,   0.0f,/* -> */glm::two_pi<float>(), glm::uvec2{ 1u, 1u }, glm::mat4{ 1.0f }, -3},
+	parametric_object{"Seashell 2"   , "assets/po-seashell2.png",          false, parametric_object_type::Seashell2,              glm::two_pi<float>() * 8.0f,/* -> */0.0f,   0.0f,/* -> */glm::two_pi<float>(), glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{-4.5f, 0.0f, 0.0f }), -4},
+	parametric_object{"Seashell 3"   , "assets/po-seashell3.png",          false, parametric_object_type::Seashell3,              glm::two_pi<float>() * 8.0f,/* -> */0.0f,   0.0f,/* -> */glm::two_pi<float>(), glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{ 4.5f, 0.0f, 0.0f }), -5},
+	parametric_object{"Yarn Curve"   , "assets/po-yarn-curve-single.png",  false, parametric_object_type::SingleYarnCurve,        1.0f, 1.0f,     /* <-- yarn dimensions | n/a yarn -> */ 0.f, /* thickness --> */ 0.8f, glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{-0.3f, 0.0f, 0.0f}) * glm::scale(glm::vec3{ 0.3f }), -5},
+	parametric_object{"Fiber Curve"  , "assets/po-fiber-curve-single.png", false, parametric_object_type::SingleFiberCurve,       1.0f, 1.0f,     /* <-- yarn dimensions | #fibers --> */ 6.f, /* thickness --> */ 0.3f, glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{-0.5f, 0.0f, 0.0f}) * glm::scale(glm::vec3{ 0.3f }), -5},
+	parametric_object{"Yarn Curtain" , "assets/po-blue-curtain.png",       false, parametric_object_type::CurtainYarnCurves,      235.0f, 254.0f, /* <-- yarn dimensions | #fibers --> */ 6.f, /* thickness --> */ 0.8f, glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{-3.35f, 0.08f, 5.32f}) * glm::scale(glm::vec3{ 0.005f }), 19},
+	parametric_object{"Fiber Curtain", "assets/po-blue-curtain.png",       false, parametric_object_type::CurtainFiberCurves,     235.0f, 254.0f, /* <-- yarn dimensions | #fibers --> */ 6.f, /* thickness --> */ 0.8f, glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{-3.35f, 0.08f, 5.32f}) * glm::scale(glm::vec3{ 0.005f }), 19},
+	parametric_object{"Palm Tree"    , "assets/po-palm-tree.png",          false, parametric_object_type::PalmTreeTrunk,          0.0f,   1.0f,            0.0f,  glm::two_pi<float>(), glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{ 0.f,  0.f, -4.f})},
+	parametric_object{"Giant Worm"   , "assets/po-giant-worm.png",         false, parametric_object_type::GiantWorm,              0.0f,   1.0f,            0.0f,  glm::two_pi<float>(), glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{ 0.f,  0.f, -4.f}), -5},
+	parametric_object{"SH Glyph"     , "assets/po-single-sh-glyph.png",    false, parametric_object_type::SHGlyph,                0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>(),     glm::uvec2{ 1u, 1u }, glm::mat4{ 1.0f }, -2},
+	parametric_object{"Brain Scan"   , "assets/po-sh-brain.png",           false, parametric_object_type::SHBrain,                0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>(), glm::uvec2{ SH_BRAIN_DATA_SIZE_X, SH_BRAIN_DATA_SIZE_Y }, glm::mat4{ 1.0f }, -2}
 }};
 
 class vk_parametric_curves_app : public avk::invokee
@@ -124,6 +70,10 @@ class vk_parametric_curves_app : public avk::invokee
 public: // v== avk::invokee overrides which will be invoked by the framework ==v
 	vk_parametric_curves_app(avk::queue& aQueue)
 		: mQueue{ &aQueue }
+		, mEnableSampleShadingFor8xMS{ false }
+		, mEnableSampleShadingFor4xSS8xMS{ false }
+		, mRenderVariantDataTransferEnabled { { true, true, true } }
+		, mOutputResultOfRenderVariantIndex{ 3 }
 	{
         for (const auto& po : PredefinedParametricObjects) {
             mParametricObjects.push_back(po);
@@ -517,8 +467,8 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
                 cfg::front_face::define_front_faces_to_be_counter_clockwise(),
 			    mBackfaceCullingOn ? cfg::culling_mode::cull_back_faces : cfg::culling_mode::disabled,
 
-				cfg::viewport_depth_scissors_config::from_framebuffer(mFramebufferSS.as_reference()),
-				mRenderpassSS, cfg::subpass_index{ 0 },
+				cfg::viewport_depth_scissors_config::from_framebuffer(mFramebufferNoAA.as_reference()),
+				mRenderpassNoAA, cfg::subpass_index{ 0 },
 				cfg::shade_per_fragment(), 
 			
 				mDisableColorAttachmentOut 
@@ -539,24 +489,48 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 		);
 	}
 
-	avk::graphics_pipeline create_ss_resolve_pipe()
+	avk::graphics_pipeline create_noaa_to_ms_pipe()
 	{
 		using namespace avk;
 
 		return context().create_graphics_pipeline_for(
-                vertex_shader("shaders/ss_resolve.vert"),
-				fragment_shader("shaders/ss_resolve.frag"),
+                vertex_shader("shaders/full_screen_quad.vert"),
+				fragment_shader("shaders/full_screen_quad_from_combined_attachment.frag"),
                 cfg::front_face::define_front_faces_to_be_counter_clockwise(),
-			    mBackfaceCullingOn ? cfg::culling_mode::cull_back_faces : cfg::culling_mode::disabled,
+			    cfg::culling_mode::cull_back_faces,
 
-				cfg::viewport_depth_scissors_config::from_framebuffer(mFramebuffer.as_reference()),
-				mRenderpass, cfg::subpass_index{ 0u }, 
+				cfg::viewport_depth_scissors_config::from_framebuffer(mFramebufferMS.as_reference()),
+				mRenderpassMS, cfg::subpass_index{ 0u }, 
+				cfg::shade_per_fragment(),
+						
+				push_constant_binding_data{ shader_type::all, 0, sizeof(copy_to_backbuffer_push_constants) },
+				descriptor_binding(0, 0, mFsQuadColorSampler),
+				descriptor_binding(0, 1, mFsQuadDepthSampler),
+				descriptor_binding(1, 0, mCombinedAttachmentView->as_storage_image(layout::general))
+#if STATS_ENABLED
+				, descriptor_binding(1, 1, mHeatMapImageView->as_storage_image(layout::general))
+#endif
+		);
+	}
+
+	avk::graphics_pipeline create_ms_to_ssms_pipe()
+	{
+		using namespace avk;
+
+		return context().create_graphics_pipeline_for(
+                vertex_shader("shaders/full_screen_quad.vert"),
+				fragment_shader("shaders/full_screen_quad.frag"),
+                cfg::front_face::define_front_faces_to_be_counter_clockwise(),
+			    cfg::culling_mode::cull_back_faces,
+
+				cfg::viewport_depth_scissors_config::from_framebuffer(mFramebufferSSMS.as_reference()),
+				mRenderpassSSMS, cfg::subpass_index{ 0u }, 
 				cfg::shade_per_fragment(),
 			
-				descriptor_binding(0, 0, mSsResolveColorSampler),
-				descriptor_binding(0, 1, mSsResolveDepthSampler),
-			    descriptor_binding(0, 2, mFramebufferSS->image_view_at(0)->as_sampled_image(layout::shader_read_only_optimal)),
-			    descriptor_binding(0, 3, mFramebufferSS->image_view_at(1)->as_sampled_image(layout::shader_read_only_optimal))
+				descriptor_binding(0, 0, mFsQuadColorSampler),
+				descriptor_binding(0, 1, mFsQuadDepthSampler),
+			    descriptor_binding(0, 2, mFramebufferMS->image_view_at(0)->as_sampled_image(layout::shader_read_only_optimal)),
+			    descriptor_binding(0, 3, mFramebufferMS->image_view_at(1)->as_sampled_image(layout::shader_read_only_optimal))
 		);
 	}
 
@@ -607,10 +581,14 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
         auto resolution    = context().main_window()->resolution();
 		auto colorFormatMS = std::make_tuple(aAttachmentFormats[0], SAMPLE_COUNT);
 		auto depthFormatMS = std::make_tuple(aAttachmentFormats[1], SAMPLE_COUNT);
+        auto  tmpColorAttachment  = context().create_image(resolution.x, resolution.y, aAttachmentFormats[0], 1, memory_usage::device,
+                                                          image_usage::color_attachment | image_usage::input_attachment | image_usage::sampled | image_usage::tiling_optimal | image_usage::transfer_source);
         auto  colorAttachment     = context().create_image(resolution.x, resolution.y, aAttachmentFormats[0], 1, memory_usage::device,
                                                           image_usage::color_attachment | image_usage::input_attachment | image_usage::sampled | image_usage::tiling_optimal | image_usage::transfer_source);
 		auto  colorAttachmentMS   = context().create_image(resolution.x, resolution.y, colorFormatMS, 1, memory_usage::device,
                                                           image_usage::color_attachment | image_usage::input_attachment | image_usage::sampled | image_usage::tiling_optimal | image_usage::transfer_source);
+        auto  tmpDepthAttachment  = context().create_image(resolution.x, resolution.y, aAttachmentFormats[1], 1, memory_usage::device,
+                                                          image_usage::depth_stencil_attachment | image_usage::input_attachment | image_usage::sampled | image_usage::tiling_optimal | image_usage::transfer_source);
         auto  depthAttachment     = context().create_image(resolution.x, resolution.y, aAttachmentFormats[1], 1, memory_usage::device,
                                                           image_usage::depth_stencil_attachment | image_usage::input_attachment | image_usage::sampled | image_usage::tiling_optimal | image_usage::transfer_source);
         auto  depthAttachmentMS   = context().create_image(resolution.x, resolution.y, depthFormatMS, 1, memory_usage::device,
@@ -643,63 +621,94 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
         context().main_window()->add_present_dependency_for_frame(std::move(sem), currentFrameId + 1); 
 
         // Create views for all them images:
-        mColorAttachmentView       = context().create_image_view(std::move(colorAttachment));
-		auto colorAttachmentViewMS = context().create_image_view(std::move(colorAttachmentMS));
-		auto colorAttachmentViewSS = context().create_image_view(std::move(colorAttachmentSS));
-		auto colorAttachmentViewSSMS= context().create_image_view(std::move(colorAttachmentSSMS));
-        mDepthAttachmentView       = context().create_image_view(std::move(depthAttachment));
-        auto depthAttachmentViewMS = context().create_image_view(std::move(depthAttachmentMS));
-        auto depthAttachmentViewSS = context().create_image_view(std::move(depthAttachmentSS));
-        auto depthAttachmentViewSSMS= context().create_image_view(std::move(depthAttachmentSSMS));
-        mCombinedAttachmentView    = context().create_image_view(std::move(combinedAttachment));
+		auto tmpColorAttachmentView  = context().create_image_view(std::move(tmpColorAttachment));
+        auto colorAttachmentView     = context().create_image_view(std::move(colorAttachment));
+		auto colorAttachmentViewMS   = context().create_image_view(std::move(colorAttachmentMS));
+		auto colorAttachmentViewSS   = context().create_image_view(std::move(colorAttachmentSS));
+		auto colorAttachmentViewSSMS = context().create_image_view(std::move(colorAttachmentSSMS));
+        auto tmpDepthAttachmentView  = context().create_image_view(std::move(tmpDepthAttachment));
+        auto depthAttachmentView     = context().create_image_view(std::move(depthAttachment));
+        auto depthAttachmentViewMS   = context().create_image_view(std::move(depthAttachmentMS));
+        auto depthAttachmentViewSS   = context().create_image_view(std::move(depthAttachmentSS));
+        auto depthAttachmentViewSSMS = context().create_image_view(std::move(depthAttachmentSSMS));
+        mCombinedAttachmentView      = context().create_image_view(std::move(combinedAttachment));
 #if STATS_ENABLED
 		mHeatMapImageView          = context().create_image_view(std::move(heatMapImage));
 #endif
 
-        mRenderpass = context().create_renderpass({// Define attachments and sub pass usages:                          vvv  Note: All the draw calls are in the same (first) subpass: SS, noAA, simple-stupid vertex pipe (because... why not?!)
-                attachment::declare(aAttachmentFormats[0], on_load::clear.from_previous_layout(layout::undefined), usage::unused        >> usage::unused                              , on_store::store.in_layout(layout::shader_read_only_optimal)),
+        mRenderpassNoAA = context().create_renderpass({
+                attachment::declare(aAttachmentFormats[0], on_load::clear.from_previous_layout(layout::undefined), usage::color(0)     , on_store::store.in_layout(layout::shader_read_only_optimal)),
+                attachment::declare(aAttachmentFormats[1], on_load::clear.from_previous_layout(layout::undefined), usage::depth_stencil, on_store::store.in_layout(layout::shader_read_only_optimal)),
+            }, {
+				subpass_dependency{subpass::external >> subpass::index(0),
+					stage::none    >>   stage::all_graphics,
+					access::none   >>   access::color_attachment_write | access::depth_stencil_attachment_read | access::depth_stencil_attachment_write
+				},
+				subpass_dependency{subpass::index(0) >> subpass::external, 
+					stage::color_attachment_output | stage::early_fragment_tests | stage::late_fragment_tests                        >>  stage::compute_shader                                     ,
+					access::color_attachment_write | access::depth_stencil_attachment_read | access::depth_stencil_attachment_write  >>  access::shader_storage_read | access::shader_storage_write
+				}
+			});
+
+        mFramebufferNoAA = context().create_framebuffer(mRenderpassNoAA, make_vector(
+			tmpColorAttachmentView, 
+			tmpDepthAttachmentView
+		));
+
+        mRenderpassMS = context().create_renderpass({
+                attachment::declare(aAttachmentFormats[0], on_load::clear.from_previous_layout(layout::undefined), usage::unused        >> usage::unused                              , on_store::store
+#if SSAA_ENABLED
+					.in_layout(layout::shader_read_only_optimal)
+#else
+					.in_layout(layout::transfer_src)
+#endif
+				),
                 attachment::declare(aAttachmentFormats[1], on_load::clear.from_previous_layout(layout::undefined), usage::unused        >> usage::unused                              , on_store::store.in_layout(layout::shader_read_only_optimal)),
                 attachment::declare(colorFormatMS        , on_load::clear.from_previous_layout(layout::undefined), usage::color(0)      >> usage::color(0)      + usage::resolve_to(0), on_store::dont_care),
                 attachment::declare(depthFormatMS        , on_load::clear.from_previous_layout(layout::undefined), usage::depth_stencil >> usage::depth_stencil + usage::resolve_to(1), on_store::dont_care)
             }, {
 				subpass_dependency{subpass::external >> subpass::index(0),
-					stage::none    >>   stage::all_graphics,
+					stage::none    >>   stage::color_attachment_output | stage::early_fragment_tests | stage::late_fragment_tests,
 					access::none   >>   access::color_attachment_write | access::depth_stencil_attachment_read | access::depth_stencil_attachment_write
 				},
 				subpass_dependency{subpass::index(0) >> subpass::index(1),
-					stage::all_graphics                                                       >>   stage::all_graphics,
-					access::color_attachment_write | access::depth_stencil_attachment_write   >>   access::color_attachment_write | access::depth_stencil_attachment_read | access::depth_stencil_attachment_write
+					stage::color_attachment_output | stage::early_fragment_tests | stage::late_fragment_tests  >>   stage::color_attachment_output | stage::early_fragment_tests | stage::late_fragment_tests,
+					access::color_attachment_write | access::depth_stencil_attachment_write                    >>   access::color_attachment_write | access::depth_stencil_attachment_read | access::depth_stencil_attachment_write
 				},
-				subpass_dependency{subpass::index(1) >> subpass::external,
-					stage::fragment_shader       | stage::color_attachment_output  >>   stage::compute_shader                                      | stage::transfer,
-					access::shader_storage_write | access::color_attachment_write  >>   access::shader_storage_read | access::shader_storage_write | access::memory_read
+				subpass_dependency{subpass::index(1) >> subpass::external, // MS rendering
+					stage::color_attachment_output | stage::early_fragment_tests | stage::late_fragment_tests   >>   stage::color_attachment_output | stage::early_fragment_tests | stage::late_fragment_tests,
+					access::color_attachment_write | access::depth_stencil_attachment_write                     >>   access::color_attachment_write | access::depth_stencil_attachment_read | access::depth_stencil_attachment_write
 				}
 			});
 
-        mFramebuffer = context().create_framebuffer(mRenderpass, make_vector(
-			mColorAttachmentView, 
-			mDepthAttachmentView,
+        mFramebufferMS = context().create_framebuffer(mRenderpassMS, make_vector(
+			colorAttachmentView, 
+			depthAttachmentView,
 			colorAttachmentViewMS,
 			depthAttachmentViewMS
 		));
 
-        mRenderpassSS = context().create_renderpass({// Define attachments and sub pass usages:                          vvv  Note: All the draw calls are in the same (first) subpass: SS, noAA, simple-stupid vertex pipe (because... why not?!)
-                attachment::declare(aAttachmentFormats[0], on_load::clear.from_previous_layout(layout::undefined), usage::unused                                                , on_store::store.in_layout(layout::shader_read_only_optimal)),
-                attachment::declare(aAttachmentFormats[1], on_load::clear.from_previous_layout(layout::undefined), usage::unused                                                , on_store::store.in_layout(layout::shader_read_only_optimal)),
-                attachment::declare(colorFormatMS        , on_load::clear.from_previous_layout(layout::undefined), usage::color(0)      + usage::resolve_to(0)                                                          , on_store::dont_care),
-                attachment::declare(depthFormatMS        , on_load::clear.from_previous_layout(layout::undefined), usage::depth_stencil + usage::resolve_to(1).set_depth_resolve_mode(vk::ResolveModeFlagBits::eAverage), on_store::dont_care)
+        mRenderpassSSMS = context().create_renderpass({
+                attachment::declare(aAttachmentFormats[0], on_load::clear.from_previous_layout(layout::undefined), usage::unused        >> usage::unused                               , on_store::store.in_layout(layout::transfer_src)),
+                attachment::declare(aAttachmentFormats[1], on_load::clear.from_previous_layout(layout::undefined), usage::unused        >> usage::unused                               , on_store::store.in_layout(layout::transfer_src)),
+                attachment::declare(colorFormatMS        , on_load::clear.from_previous_layout(layout::undefined), usage::color(0)      >> usage::color(0)      + usage::resolve_to(0) , on_store::dont_care),
+                attachment::declare(depthFormatMS        , on_load::clear.from_previous_layout(layout::undefined), usage::depth_stencil >> usage::depth_stencil + usage::resolve_to(1) , on_store::dont_care)
             }, {
 				subpass_dependency{subpass::external >> subpass::index(0),
-					stage::none    >>   stage::all_graphics,
-					access::none   >>   access::color_attachment_write | access::depth_stencil_attachment_read | access::depth_stencil_attachment_write
+					stage::color_attachment_output | stage::early_fragment_tests | stage::late_fragment_tests   >>   stage::color_attachment_output | stage::early_fragment_tests | stage::late_fragment_tests,
+					access::color_attachment_write | access::depth_stencil_attachment_write                     >>   access::color_attachment_write | access::depth_stencil_attachment_read | access::depth_stencil_attachment_write
 				},
-				subpass_dependency{subpass::index(0) >> subpass::external,
-					stage::fragment_shader       | stage::color_attachment_output  >>   stage::compute_shader                                      | stage::transfer,
-					access::shader_storage_write | access::color_attachment_write  >>   access::shader_storage_read | access::shader_storage_write | access::memory_read
+				subpass_dependency{subpass::index(0) >> subpass::index(1), // Full-screen quad NoAA -> MS
+					stage::color_attachment_output | stage::early_fragment_tests | stage::late_fragment_tests   >>   stage::color_attachment_output | stage::early_fragment_tests | stage::late_fragment_tests,
+					access::color_attachment_write | access::depth_stencil_attachment_write                     >>   access::color_attachment_write | access::depth_stencil_attachment_read | access::depth_stencil_attachment_write
+				},
+				subpass_dependency{subpass::index(1) >> subpass::external,
+					stage::color_attachment_output  >>  stage::transfer,
+					access::color_attachment_write  >>  access::memory_read
 				}
 			});
 
-        mFramebufferSS = context().create_framebuffer(mRenderpassSS, make_vector(
+        mFramebufferSSMS = context().create_framebuffer(mRenderpassSSMS, make_vector(
 			colorAttachmentViewSS,
 			depthAttachmentViewSS,
 			colorAttachmentViewSSMS,
@@ -752,13 +761,18 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 			}
             tmp.mTransformationMatrix = po.transformation_matrix();
 			tmp.mMaterialIndex = po.material_index();
-			tmp.mUseAdaptiveDetail = mAdaptivePxFill ? 1 : 0;
+			tmp.mUseAdaptiveDetail = po.adaptive_rendering_on() ? 1 : 0;
 			tmp.mRenderingVariantIndex = get_rendering_variant_index(po.how_to_render());
 
 			tmp.mLodAndRenderSettings = { 
 				po.parameters_epsilon()[0], po.parameters_epsilon()[1],
 				po.screen_distance_threshold() / get_screen_space_threshold_divisor(po.how_to_render()),
-				po.sampling_factor()
+				0xDAD
+			};
+
+			tmp.mTessAndSamplingSettings = {
+				po.tessellation_levels().x, po.tessellation_levels().y,
+				po.sampling_factors().x   , po.sampling_factors().y
 			};
 			
 			tmp.mUserData = { 0, 0, 0, 0 };
@@ -1001,6 +1015,28 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 				}
 				ImGui::PopID();
 			}
+
+			// One more row just for SH glyphs:
+			ImGui::TableNextRow();
+			poId = 0;
+			for (auto& po : mParametricObjects) {
+				ImGui::TableNextColumn();
+				ImGui::PushID(poId++);
+				if (po.param_obj_type() == parametric_object_type::SHGlyph) {
+					int tmpOrder = mDebugSlidersi[0];
+					ImGui::SliderInt("SH Order", &tmpOrder, 2, 12);
+					tmpOrder = (tmpOrder / 2) * 2;
+					mDebugSlidersi[0] = tmpOrder;
+				}
+				if (po.param_obj_type() == parametric_object_type::SHBrain) {
+					int tmpOrder = mDebugSlidersi[1];
+					ImGui::SliderInt("SH Order", &tmpOrder, 2, 12);
+					tmpOrder = (tmpOrder / 2) * 2;
+					mDebugSlidersi[1] = tmpOrder;
+				}
+				ImGui::PopID();
+			}
+
 			ImGui::EndTable();
 		}
 		ImGui::End();
@@ -1045,9 +1081,24 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 					updateObjects = true;
 				}
 
-				auto f = po.sampling_factor();
-				if (ImGui::DragFloat("Sampling Factor", &f, 0.01f)) {
-					po.set_sampling_factor(f);
+				ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "Tessellation variants only:");
+				auto tesslvls = po.tessellation_levels();
+				if (ImGui::SliderFloat2("Tess. levels: inner | outer", &tesslvls[0], 1.0f, 64.0f, "%.1f")) {
+					po.set_tessellation_levels(tesslvls);
+					updateObjects = true;
+				}
+
+				ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "Point rendering variants only:");
+				auto f = po.sampling_factors();
+				if (ImGui::DragFloat2("Sampling Factors (u, v)", &f[0], 0.01f, 0.1f, 10.0f)) {
+					po.set_sampling_factors(f);
+					updateObjects = true;
+				}
+
+				ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "Applies to all variants:");
+				auto adaptive = po.adaptive_rendering_on();
+				if (ImGui::Checkbox("Adaptive tessellation/sampling density", &adaptive)) {
+					po.set_adaptive_rendering_on(adaptive);
 					updateObjects = true;
 				}
 
@@ -1175,7 +1226,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 #else 
 			{},
 #endif
-			// NOTE: We're creating NUM_DIFFERENT_RENDER_VARIANTS-many such  vvv  entries, because: [0] = Tess_noAA, [1] = Tess_8xSS, [2] = Tess_4xSS_8xMS, [3] = PointRendered_direct, [4] = PointRendered_4xSS_local_fb
+			// NOTE: We're creating NUM_DIFFERENT_RENDER_VARIANTS-many such  vvv  entries, because: [0] = Tess_noAA, [1] = Tess_8xMS, [2] = Tess_4xSS_8xMS, [3] = PointRendered_direct, [4] = PointRendered_4xSS_local_fb
 			indirect_buffer_meta::create_from_num_elements(NUM_DIFFERENT_RENDER_VARIANTS,  sizeof(VkDrawIndirectCommand)),
 			storage_buffer_meta::create_from_size(         NUM_DIFFERENT_RENDER_VARIANTS * sizeof(VkDrawIndirectCommand))
 		);
@@ -1187,10 +1238,12 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 		mVertexPipeline = create_vertex_pipe();
 		mUpdater->on(shader_files_changed_event(mVertexPipeline.as_reference())).update(mVertexPipeline);
 
-		mSsResolveColorSampler = avk::context().create_sampler(avk::filter_mode::trilinear, avk::border_handling_mode::clamp_to_border, 0.0f);
-		mSsResolveDepthSampler = avk::context().create_sampler(avk::filter_mode::trilinear , avk::border_handling_mode::clamp_to_border, 0.0f);
-		mSsResolvePipeline = create_ss_resolve_pipe();
-		mUpdater->on(shader_files_changed_event(mSsResolvePipeline.as_reference())).update(mSsResolvePipeline);
+		mFsQuadColorSampler = avk::context().create_sampler(avk::filter_mode::trilinear, avk::border_handling_mode::clamp_to_border, 0.0f);
+		mFsQuadDepthSampler = avk::context().create_sampler(avk::filter_mode::trilinear , avk::border_handling_mode::clamp_to_border, 0.0f);
+		mFsQuadNoAAtoMSPipe = create_noaa_to_ms_pipe();
+		mFsQuadMStoSSPipe   = create_ms_to_ssms_pipe();
+		mUpdater->on(shader_files_changed_event(mFsQuadNoAAtoMSPipe.as_reference())).update(mFsQuadNoAAtoMSPipe);
+		mUpdater->on(shader_files_changed_event(mFsQuadMStoSSPipe.as_reference())).update(mFsQuadMStoSSPipe);
 
 		mTessPipelinePxFillNoaa = create_tess_pipe(
 			"shaders/px-fill-tess/patch_ready.vert", 
@@ -1198,8 +1251,8 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 			"shaders/px-fill-tess/patch_go.tese",
 			push_constant_binding_data{shader_type::all, 0, sizeof(patch_into_tess_push_constants)},
 			cfg::shade_per_fragment(),
-			cfg::viewport_depth_scissors_config::from_framebuffer(mFramebuffer.as_reference()),
-			mRenderpass, cfg::subpass_index{ 1 }
+			cfg::viewport_depth_scissors_config::from_framebuffer(mFramebufferNoAA.as_reference()),
+			mRenderpassNoAA, cfg::subpass_index{ 0 }
 		);
 		mUpdater->on(shader_files_changed_event(mTessPipelinePxFillNoaa.as_reference())).update(mTessPipelinePxFillNoaa);
 
@@ -1214,9 +1267,9 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 			"shaders/px-fill-tess/patch_set.tesc", 
 			"shaders/px-fill-tess/patch_go.tese",
 			push_constant_binding_data{shader_type::all, 0, sizeof(patch_into_tess_push_constants)},
-			cfg::shade_per_sample(),
-			cfg::viewport_depth_scissors_config::from_framebuffer(mFramebuffer.as_reference()),
-			mRenderpass, cfg::subpass_index{ 1 }
+			mEnableSampleShadingFor8xMS ? cfg::shade_per_sample() : cfg::shade_per_fragment(),
+			cfg::viewport_depth_scissors_config::from_framebuffer(mFramebufferMS.as_reference()),
+			mRenderpassMS, cfg::subpass_index{ 1 }
 		);
 		mUpdater->on(shader_files_changed_event(mTessPipelinePxFillMultisampled.as_reference())).update(mTessPipelinePxFillMultisampled);
 
@@ -1231,9 +1284,9 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 			"shaders/px-fill-tess/patch_set.tesc", 
 			"shaders/px-fill-tess/patch_go.tese",
 			push_constant_binding_data{shader_type::all, 0, sizeof(patch_into_tess_push_constants)},
-			cfg::shade_per_fragment(),
-			cfg::viewport_depth_scissors_config::from_framebuffer(mFramebufferSS.as_reference()),
-			mRenderpassSS, cfg::subpass_index{ 0 }
+			mEnableSampleShadingFor4xSS8xMS ? cfg::shade_per_sample() : cfg::shade_per_fragment(),
+			cfg::viewport_depth_scissors_config::from_framebuffer(mFramebufferSSMS.as_reference()),
+			mRenderpassSSMS, cfg::subpass_index{ 1 }
 		);
 		mUpdater->on(shader_files_changed_event(mTessPipelinePxFillSupersampled.as_reference())).update(mTessPipelinePxFillSupersampled);
 
@@ -1279,8 +1332,8 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 		mCopyToCombinedAttachmentPipe = context().create_compute_pipeline_for(
 			"shaders/copy_to_combined_attachment.comp",
             descriptor_binding(0, 0, mCombinedAttachmentView->as_storage_image(layout::general)),
-			descriptor_binding(1, 0, mColorAttachmentView->as_sampled_image(layout::shader_read_only_optimal)),
-			descriptor_binding(1, 1, mDepthAttachmentView->as_sampled_image(layout::shader_read_only_optimal))
+			descriptor_binding(1, 0, mFramebufferNoAA->image_view_at(0)->as_sampled_image(layout::shader_read_only_optimal)),
+			descriptor_binding(1, 1, mFramebufferNoAA->image_view_at(1)->as_sampled_image(layout::shader_read_only_optimal))
 		);
         mUpdater->on(shader_files_changed_event(mCopyToCombinedAttachmentPipe.as_reference())).update(mCopyToCombinedAttachmentPipe);
 
@@ -1344,17 +1397,21 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 					auto props = context().physical_device().getProperties();
 					return static_cast<double>(props.limits.timestampPeriod);
 				}),
-				lastClearDuration = 0.0,
-				lastInitDuration = 0.0,
-				lastLodStageDuration = 0.0,
-				last3dModelDuration = 0.0,
-				lastTess4xSSand8xMSRenderDuration = 0.0,
-				lastTessNoaaRenderDuration = 0.0,
-				lastTess8xSSRenderDuration = 0.0,
-				lastTotalTessRenderDuration = 0.0,
-				lastPointRenderDuration = 0.0,
-				lastPatchToTileDuration = 0.0,
-				lastBeginToRenderEndDuration = 0.0
+				lastClearDuration				 = 0.0,
+				lastInitDuration				 = 0.0,
+				lastLodStageDuration			 = 0.0,
+				last3dModelsRenderDuration		 = 0.0,
+				lastTessNoaaDuration			 = 0.0,
+				lastCopyToCombinedAttachmentDur	 = 0.0,
+				lastPatchToTileStepDuration		 = 0.0,
+				lastPointRenderingNoaaDuration	 = 0.0,
+				lastPointRenderingLocalFbDur	 = 0.0,
+				lastFSQbefore8xSSDuration		 = 0.0,
+				lastTess8xSSDuration			 = 0.0,
+				lastFSQbefore4xSS8xMSDuration	 = 0.0,
+				lastTess4xSS8xMSDuration		 = 0.0,
+				lastTotalRenderDuration			 = 0.0,
+				lastTotalStepsDuration			 = 0.0
 			]() mutable {
 				if (mMeasurementInProgress) {
 					return;
@@ -1374,50 +1431,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 				ImGui::Text("%.1f FPS", ImGui::GetIO().Framerate);
 				ImGui::Text("%.1lf ms/render() CPU time", mRenderDurationMs);
 				ImGui::Separator();
-				ImGui::TextColored(ImVec4(.5f, .3f, .4f, 1.f), "Timestamp Period: %.3f ns", timestampPeriod);
-
-#if STATS_ENABLED
-				// Timestamps are gathered regardless of pipeline stats:
-				lastBeginToRenderEndDuration = glm::mix(lastBeginToRenderEndDuration, mLastBeginToParametricDuration * 1e-6 * timestampPeriod, 0.05);
-				lastClearDuration =            glm::mix(lastClearDuration           , mLastClearDuration             * 1e-6 * timestampPeriod, 0.05);
-				lastInitDuration =             glm::mix(lastInitDuration            , mLastInitDuration              * 1e-6 * timestampPeriod, 0.05);
-				lastLodStageDuration =         glm::mix(lastLodStageDuration        , mLastLodStageDuration          * 1e-6 * timestampPeriod, 0.05);
-				last3dModelDuration =          glm::mix(last3dModelDuration         , mLast3dModelsRenderDuration    * 1e-6 * timestampPeriod, 0.05);
-				lastTess4xSSand8xMSRenderDuration =       glm::mix(lastTess4xSSand8xMSRenderDuration      , mLastTess4xSSand8xMSRenderDuration  * 1e-6 * timestampPeriod, 0.05);
-				lastTessNoaaRenderDuration =       glm::mix(lastTessNoaaRenderDuration      , mLastTessNoaaRenderDuration    * 1e-6 * timestampPeriod, 0.05);
-				lastTess8xSSRenderDuration =       glm::mix(lastTess8xSSRenderDuration      , mLastTess8xSSRenderDuration    * 1e-6 * timestampPeriod, 0.05);
-				lastTotalTessRenderDuration =       glm::mix(lastTotalTessRenderDuration      , mLastTotalTessRenderDuration   * 1e-6 * timestampPeriod, 0.05);
-				lastPointRenderDuration =      glm::mix(lastPointRenderDuration     , mLastPointRenderDuration       * 1e-6 * timestampPeriod, 0.05);
-				lastPatchToTileDuration =      glm::mix(lastPatchToTileDuration     , mLastPatchToTileDuration       * 1e-6 * timestampPeriod, 0.05);
-				ImGui::TextColored(ImVec4(.8f, .1f, .6f, 1.f), "Total frame time        : %.3lf ms (timer queries)", lastBeginToRenderEndDuration);
-				ImGui::TextColored(ImVec4(.8f, .1f, .6f, 1.f), "Clearing                : %.3lf ms (timer queries)", lastClearDuration);
-				ImGui::TextColored(ImVec4(.8f, .1f, .6f, 1.f), "Initialization stage    : %.3lf ms (timer queries)", lastInitDuration);
-				ImGui::TextColored(ImVec4(.8f, .1f, .6f, 1.f), "LOD stage               : %.3lf ms (timer queries)", lastLodStageDuration);
-				ImGui::TextColored(ImVec4(.8f, .1f, .6f, 1.f), "Rendering Sponza        : %.3lf ms (timer queries)", last3dModelDuration);
-				ImGui::TextColored(ImVec4(.8f, .1f, .6f, 1.f), "Tess. 4xSS+8xMS         : %.3lf ms (timer queries)", lastTess4xSSand8xMSRenderDuration);
-				ImGui::TextColored(ImVec4(.8f, .1f, .6f, 1.f), "Tess. noAA              : %.3lf ms (timer queries)", lastTessNoaaRenderDuration);
-				ImGui::TextColored(ImVec4(.8f, .1f, .6f, 1.f), "Tess. 8xSS (sample shd.): %.3lf ms (timer queries)", lastTess8xSSRenderDuration);
-				ImGui::TextColored(ImVec4(.8f, .1f, .6f, 1.f), "Tess.-based TOTAL       : %.3lf ms (timer queries)", lastTotalTessRenderDuration);
-				ImGui::TextColored(ImVec4(.8f, .1f, .6f, 1.f), "Point-based rendering   : %.3lf ms (timer queries)", lastPointRenderDuration);
-				ImGui::TextColored(ImVec4(.8f, .1f, .6f, 1.f), "  -> thereof tile sel.  : %.3lf ms (timer queries)", lastPatchToTileDuration);
-
-				// ... pipeline statistics only if the option is ticked:
-			    if (ImGui::Checkbox("Gather pipeline stats.", &mGatherPipelineStats)) {
-					mPipelineStats = {0,0};
-				}
-				if (mGatherPipelineStats) {
-				    ImGui::Text(std::format(                       "pipeline stats #0   : {:12L} clipping    invocations", mPipelineStats[0]).c_str());
-				    ImGui::Text(std::format(                       "pipeline stats #1   : {:12L} frag shader invocations", mPipelineStats[1]).c_str());
-				    ImGui::Text(std::format(                       "pipeline stats #2   : {:12L} comp shader invocations", mPipelineStats[2]).c_str());
-
-				}
-				ImGui::Separator();
-                ImGui::Combo("-> into backbuffer", &mWhatToCopyToBackbuffer, "[u] Uint64->color\0[h] Heat map\0[b] Uint64->color (but keep heat map enabled)\0[f] FB->color\0");
-#else
-				ImGui::TextColored(ImVec4(0.5, 0.5, 0.5, 1.0), "Pipeline stats disabled project-wide.");
-				ImGui::TextColored(ImVec4(0.5, 0.5, 0.5, 1.0), "Heat map write disabled project-wide too (just fyi).");
-#endif
-
+				
 				if (!mDrawCalls.empty()) {
 				    ImGui::Separator();
 				    ImGui::Checkbox("Render Sponza + Terrain", &mRenderExtra3DModel);
@@ -1455,29 +1469,30 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 				rasterPipesNeedRecreation = ImGui::Checkbox("Backface Culling ON", &mBackfaceCullingOn) || rasterPipesNeedRecreation;
 				rasterPipesNeedRecreation = ImGui::Checkbox("Disable Color Attachment Output" , &mDisableColorAttachmentOut) || rasterPipesNeedRecreation;
 
-				ImGui::Text("[F6] ... toggle wireframe mode (currently %s)", mWireframeModeOn ? "ON" : "OFF");
+				ImGui::Text("Enable/disable render result transfers:");
+				ImGui::Indent();
+				ImGui::Checkbox("Tess. noAA -> Point-based", &mRenderVariantDataTransferEnabled[0]);
+				ImGui::Checkbox("Point-based -> 8xMS", &mRenderVariantDataTransferEnabled[1]);
+				ImGui::Checkbox("8xMS -> 4xSS+8xMS", &mRenderVariantDataTransferEnabled[2]);
+				ImGui::Unindent();
 
-				// Just some Debug stuff:
-				ImGui::Separator();
-				ImGui::Text("DEBUG SLIDERS:");
-                ImGui::PushItemWidth(imGuiWindowWidth * 0.6f);
-				ImGui::SliderFloat("LERP SH <-> Sphere (aka float dbg slider #1)", &mDebugSliders[0], 0.0f, 1.0f);
-				ImGui::SliderInt("SH Band           (aka int dbg slider #1)", &mDebugSlidersi[0],  0, 31);
-				ImGui::SliderInt("SH Basis Function (aka int dbg slider #2)", &mDebugSlidersi[1], -mDebugSlidersi[0], mDebugSlidersi[0]);
-				ImGui::Text("##lololo");
-				ImGui::SliderFloat("Terrain height (aka float dbg slider #2)", &mDebugSliders[1], 0.0f, 10.0f);
-				ImGui::PopItemWidth();
+				ImGui::Combo("-> results -> backbuffer", &mOutputResultOfRenderVariantIndex, "After tess. noAA\0After point-based\0After 8xMS\0After 4xSS+8xMS\0");
 
-				// Automatic performance measurement, camera flight:
-				ImGui::Separator();
-				ImGui::Checkbox("Start performance measurement 4s", &mStartMeasurement);
-				ImGui::SliderFloat("Camera distance from origin", &mDistanceFromOrigin, 5.0f, 100.0f, "%.0f");
-				ImGui::Checkbox("Move camera in steps during measurements", &mMoveCameraDuringMeasurements);
-				ImGui::SliderInt("#steps to move the camera closer/away", &mMeasurementMoveCameraSteps, 0, 10);
-				ImGui::DragFloat("Delta by how much to move the camera with each step", &mMeasurementMoveCameraDelta, 0.1f);
+				ImGui::Text("Enable/disable sample shading:");
+				ImGui::Indent();
+				rasterPipesNeedRecreation = ImGui::Checkbox("Sample shading enabled for 8xMS", &mEnableSampleShadingFor8xMS) || rasterPipesNeedRecreation;
+				if (mEnableSampleShadingFor8xMS) {
+					ImGui::SameLine(); ImGui::TextColored(ImVec4(.4f, .4f, .8f, 1.f), "-> 8xSS");
+				}
+				rasterPipesNeedRecreation = ImGui::Checkbox("Sample shading enabled for 4xSS+8xMS", &mEnableSampleShadingFor4xSS8xMS) || rasterPipesNeedRecreation;
+				if (mEnableSampleShadingFor4xSS8xMS) {
+					ImGui::SameLine(); ImGui::TextColored(ImVec4(.4f, .4f, .8f, 1.f), "-> 32xSS");
+				}
+				ImGui::Unindent();
 
-				ImGui::Separator();
-                if (ImGui::Checkbox("Animations paused (freeze time)", &mAnimationPaused)) {
+				ImGui::Checkbox("Render in wireframe mode ([F1] to toggle)", &mWireframeModeOn);
+
+				if (ImGui::Checkbox("Animations paused (freeze time)", &mAnimationPaused)) {
                     if (mAnimationPaused) {
                         mAnimationPauseTime = time().absolute_time();
                     }
@@ -1486,12 +1501,89 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
                     }
                 }
 
-				ImGui::Checkbox("Use individual patch resolution during px fill", &mUseMaxPatchResolutionDuringPxFill);
+				//// Just some Debug stuff:
+				//ImGui::Separator();
+				//ImGui::Text("DEBUG SLIDERS:");
+    //            ImGui::PushItemWidth(imGuiWindowWidth * 0.6f);
+				//ImGui::SliderFloat("LERP SH <-> Sphere (aka float dbg slider #1)", &mDebugSliders[0], 0.0f, 1.0f);
+				//ImGui::SliderInt("SH Band           (aka int dbg slider #1)", &mDebugSlidersi[0],  0, 31);
+				//ImGui::SliderInt("SH Basis Function (aka int dbg slider #2)", &mDebugSlidersi[1], -mDebugSlidersi[0], mDebugSlidersi[0]);
+				//ImGui::Text("##lololo");
+				//ImGui::SliderFloat("Terrain height (aka float dbg slider #2)", &mDebugSliders[1], 0.0f, 10.0f);
+				//ImGui::PopItemWidth();
 
-				ImGui::End();
+				// Automatic performance measurement, camera flight:
+				ImGui::Separator();
+
+#if TEST_MODE_ON 
+				ImGui::Checkbox("Start performance measurement (as configured with TEST_MODE_ON) [Space]", &mStartMeasurement);
+#else 
+				ImGui::Checkbox("Start performance measurement [Space]", &mStartMeasurement);
+				ImGui::SliderFloat("Camera distance from origin", &mDistanceFromOrigin, 5.0f, 100.0f, "%.0f");
+				ImGui::Checkbox("Move camera in steps during measurements", &mMoveCameraDuringMeasurements);
+				ImGui::SliderInt("#steps to move the camera closer/away", &mMeasurementMoveCameraSteps, 0, 10);
+				ImGui::DragFloat("Delta by how much to move the camera with each step", &mMeasurementMoveCameraDelta, 0.1f);
+#endif
+
+				ImGui::Separator();
+
+ImGui::TextColored(ImVec4(.5f, .3f, .4f, 1.f), "Timestamp Period: %.3f ns", timestampPeriod);
+
+#if STATS_ENABLED
+				// Timestamps are gathered regardless of pipeline stats:
+				lastClearDuration				= glm::mix(lastClearDuration				, mLastClearDuration				* 1e-6 * timestampPeriod, 0.05);
+				lastInitDuration				= glm::mix(lastInitDuration					, mLastInitDuration					* 1e-6 * timestampPeriod, 0.05);
+				lastLodStageDuration			= glm::mix(lastLodStageDuration				, mLastLodStageDuration				* 1e-6 * timestampPeriod, 0.05);
+				last3dModelsRenderDuration		= glm::mix(last3dModelsRenderDuration		, mLast3dModelsRenderDuration		* 1e-6 * timestampPeriod, 0.05);
+				lastTessNoaaDuration			= glm::mix(lastTessNoaaDuration				, mLastTessNoaaDuration				* 1e-6 * timestampPeriod, 0.05);
+				lastCopyToCombinedAttachmentDur	= glm::mix(lastCopyToCombinedAttachmentDur	, mLastCopyToCombinedAttachmentDur	* 1e-6 * timestampPeriod, 0.05);
+				lastPatchToTileStepDuration		= glm::mix(lastPatchToTileStepDuration		, mLastPatchToTileStepDuration		* 1e-6 * timestampPeriod, 0.05);
+				lastPointRenderingNoaaDuration	= glm::mix(lastPointRenderingNoaaDuration	, mLastPointRenderingNoaaDuration	* 1e-6 * timestampPeriod, 0.05);
+				lastPointRenderingLocalFbDur	= glm::mix(lastPointRenderingLocalFbDur		, mLastPointRenderingLocalFbDur		* 1e-6 * timestampPeriod, 0.05);
+				lastFSQbefore8xSSDuration		= glm::mix(lastFSQbefore8xSSDuration		, mLastFSQbefore8xSSDuration		* 1e-6 * timestampPeriod, 0.05);
+				lastTess8xSSDuration			= glm::mix(lastTess8xSSDuration				, mLastTess8xSSDuration				* 1e-6 * timestampPeriod, 0.05);
+				lastFSQbefore4xSS8xMSDuration	= glm::mix(lastFSQbefore4xSS8xMSDuration	, mLastFSQbefore4xSS8xMSDuration	* 1e-6 * timestampPeriod, 0.05);
+				lastTess4xSS8xMSDuration		= glm::mix(lastTess4xSS8xMSDuration			, mLastTess4xSS8xMSDuration			* 1e-6 * timestampPeriod, 0.05);
+				lastTotalRenderDuration			= glm::mix(lastTotalRenderDuration			, mLastTotalStepsDuration			* 1e-6 * timestampPeriod, 0.05);
+				lastTotalStepsDuration			= glm::mix(lastTotalStepsDuration			, mLastTotalStepsDuration			* 1e-6 * timestampPeriod, 0.05);
+
+				ImGui::TextColored(ImVec4(.8f, .1f, .6f, 1.f), "Total frame time        : %.3lf ms (timer queries)", lastTotalStepsDuration);
+				ImGui::TextColored(ImVec4(.8f, .1f, .6f, 1.f), "Clearing                : %.3lf ms (timer queries)", lastClearDuration);
+				ImGui::TextColored(ImVec4(.8f, .1f, .6f, 1.f), "Initialization stage    : %.3lf ms (timer queries)", lastInitDuration);
+				ImGui::TextColored(ImVec4(.8f, .1f, .6f, 1.f), "LOD stage               : %.3lf ms (timer queries)", lastLodStageDuration);
+				ImGui::TextColored(ImVec4(.8f, .1f, .6f, 1.f), "Rendering Sponza        : %.3lf ms (timer queries)", last3dModelsRenderDuration);
+				ImGui::TextColored(ImVec4(.8f, .1f, .6f, 1.f), "Tess. noAA              : %.3lf ms (timer queries)", lastTessNoaaDuration);
+				ImGui::TextColored(ImVec4(.8f, .1f, .6f, 1.f), "  -> FB -> combined att.: %.3lf ms (timer queries)", lastCopyToCombinedAttachmentDur);
+				ImGui::TextColored(ImVec4(.8f, .1f, .6f, 1.f), "(Assign to local tiles) : %.3lf ms (timer queries)", lastPatchToTileStepDuration);
+				ImGui::TextColored(ImVec4(.8f, .1f, .6f, 1.f), "Point rendering ~1spp   : %.3lf ms (timer queries)", lastPointRenderingNoaaDuration);
+				ImGui::TextColored(ImVec4(.8f, .1f, .6f, 1.f), "Point r. ~4spp local fb.: %.3lf ms (timer queries)", lastPointRenderingLocalFbDur);
+				ImGui::TextColored(ImVec4(.8f, .1f, .6f, 1.f), "   ^ TOTAL (with assign): %.3lf ms (timer queries)", lastPatchToTileStepDuration + lastPointRenderingLocalFbDur);
+				ImGui::TextColored(ImVec4(.8f, .1f, .6f, 1.f), "  -> results -> FSQ     : %.3lf ms (timer queries)", lastFSQbefore8xSSDuration);
+				ImGui::TextColored(ImVec4(.8f, .1f, .6f, 1.f), "Tess. 8xSS (sample shd.): %.3lf ms (timer queries)", lastTess8xSSDuration);
+				ImGui::TextColored(ImVec4(.8f, .1f, .6f, 1.f), "  -> results -> FSQ     : %.3lf ms (timer queries)", lastFSQbefore4xSS8xMSDuration);
+				ImGui::TextColored(ImVec4(.8f, .1f, .6f, 1.f), "Tess. 4xSS+8xMS         : %.3lf ms (timer queries)", lastTess4xSS8xMSDuration);
+				ImGui::TextColored(ImVec4(.8f, .1f, .6f, 1.f), "Total render duration   : %.3lf ms (timer queries)", lastTotalRenderDuration);
+
+				// ... pipeline statistics only if the option is ticked:
+			    if (ImGui::Checkbox("Gather pipeline stats.", &mGatherPipelineStats)) {
+					mPipelineStats = {0,0};
+				}
+				if (mGatherPipelineStats) {
+				    ImGui::Text(std::format(                       "pipeline stats #0   : {:12L} clipping    invocations", mPipelineStats[0]).c_str());
+				    ImGui::Text(std::format(                       "pipeline stats #1   : {:12L} frag shader invocations", mPipelineStats[1]).c_str());
+				    ImGui::Text(std::format(                       "pipeline stats #2   : {:12L} comp shader invocations", mPipelineStats[2]).c_str());
+
+				}
+				ImGui::Separator();
+                ImGui::Combo("-> into backbuffer", &mWhatToCopyToBackbuffer, "[u] Uint64->color\0[h] Heat map\0[b] Uint64->color (but keep heat map enabled)\0[f] FB->color\0");
+#else
+				ImGui::TextColored(ImVec4(0.5, 0.5, 0.5, 1.0), "Pipeline stats disabled project-wide.");
+				ImGui::TextColored(ImVec4(0.5, 0.5, 0.5, 1.0), "Heat map write disabled project-wide too (just fyi).");
+#endif
+
+				ImGui::Separator();
 
 				if (mGatherPipelineStats) {
-				    ImGui::Begin("Stats and Counters");
 			        ImGui::TextColored(ImVec4(.8f, .1f, .6f, 1.f), "Parametric func. evaluations and pixel writes:");
 				    std::array<std::string, 3> counterDescriptions = { {
 				        "total #parametric function evaluations (lod + culling + rendering)",
@@ -1517,8 +1609,10 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 					ImGui::Text(std::format("{:12L} pixel fill patches spawned[2]", mNumPxFillPatchesCreated[2]).c_str());
 					ImGui::Text(std::format("{:12L} pixel fill patches spawned[3]", mNumPxFillPatchesCreated[3]).c_str());
 					ImGui::Text(std::format("{:12L} pixel fill patches spawned[4]", mNumPxFillPatchesCreated[4]).c_str());
-					ImGui::End();
 				}
+
+				ImGui::End();
+
 
 				// Do we need to recreate the vertex pipe?
 				if (rasterPipesNeedRecreation) {
@@ -1527,14 +1621,26 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 					context().main_window()->handle_lifetime(std::move(newVertexPipe));
 
 					{
+						auto newFsQuadNoaaToMsPipe = create_noaa_to_ms_pipe();
+						std::swap(*mFsQuadNoAAtoMSPipe, *newFsQuadNoaaToMsPipe);
+						context().main_window()->handle_lifetime(std::move(newFsQuadNoaaToMsPipe));
+					}
+
+					{
+						auto newFsQuadMsToSsPipe = create_ms_to_ssms_pipe();
+						std::swap(*mFsQuadMStoSSPipe, *newFsQuadMsToSsPipe);
+						context().main_window()->handle_lifetime(std::move(newFsQuadMsToSsPipe));
+					}
+
+					{
 						auto newTessPipePxFill = create_tess_pipe(
 							"shaders/px-fill-tess/patch_ready.vert", 
 							"shaders/px-fill-tess/patch_set.tesc", 
 							"shaders/px-fill-tess/patch_go.tese",
 							push_constant_binding_data{shader_type::all, 0, sizeof(patch_into_tess_push_constants)},
 							cfg::shade_per_fragment(),
-							cfg::viewport_depth_scissors_config::from_framebuffer(mFramebuffer.as_reference()),
-							mRenderpass, cfg::subpass_index{ 1 }
+							cfg::viewport_depth_scissors_config::from_framebuffer(mFramebufferNoAA.as_reference()),
+							mRenderpassNoAA, cfg::subpass_index{ 0 }
 						);
 						std::swap(*mTessPipelinePxFillNoaa, *newTessPipePxFill);
 						context().main_window()->handle_lifetime(std::move(newTessPipePxFill));
@@ -1552,9 +1658,9 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 							"shaders/px-fill-tess/patch_set.tesc", 
 							"shaders/px-fill-tess/patch_go.tese",
 							push_constant_binding_data{shader_type::all, 0, sizeof(patch_into_tess_push_constants)},
-							cfg::shade_per_sample(),
-							cfg::viewport_depth_scissors_config::from_framebuffer(mFramebuffer.as_reference()),
-							mRenderpass, cfg::subpass_index{ 1 }
+							mEnableSampleShadingFor8xMS ? cfg::shade_per_sample() : cfg::shade_per_fragment(),
+							cfg::viewport_depth_scissors_config::from_framebuffer(mFramebufferMS.as_reference()),
+							mRenderpassMS, cfg::subpass_index{ 1 }
 						);
 						std::swap(*mTessPipelinePxFillMultisampled, *newTessPipePxFillSpS);
 						context().main_window()->handle_lifetime(std::move(newTessPipePxFillSpS));
@@ -1572,9 +1678,9 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 							"shaders/px-fill-tess/patch_set.tesc", 
 							"shaders/px-fill-tess/patch_go.tese",
 							push_constant_binding_data{shader_type::all, 0, sizeof(patch_into_tess_push_constants)},
-							cfg::shade_per_fragment(),
-							cfg::viewport_depth_scissors_config::from_framebuffer(mFramebufferSS.as_reference()),
-							mRenderpassSS, cfg::subpass_index{ 0 }
+							mEnableSampleShadingFor4xSS8xMS ? cfg::shade_per_sample() : cfg::shade_per_fragment(),
+							cfg::viewport_depth_scissors_config::from_framebuffer(mFramebufferSSMS.as_reference()),
+							mRenderpassSSMS, cfg::subpass_index{ 1 }
 						);
 						std::swap(*mTessPipelinePxFillSupersampled, *newTessPipePxFillSuSa);
 						context().main_window()->handle_lifetime(std::move(newTessPipePxFillSuSa));
@@ -1615,20 +1721,20 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
         }
 
 		// F6 ... toggle wireframe mode
-		if (input().key_pressed(key_code::f6)) {
+		if (input().key_pressed(key_code::f1)) {
 			mWireframeModeOn = !mWireframeModeOn;
 		}
 
-		if (input().key_pressed(key_code::u)) {
+		if (input().key_pressed(key_code::f3)) {
 			mWhatToCopyToBackbuffer = 0;
         }
-		if (input().key_pressed(key_code::h)) {
+		if (input().key_pressed(key_code::f4)) {
 			mWhatToCopyToBackbuffer = 1;
         }
-		if (input().key_pressed(key_code::b)) {
+		if (input().key_pressed(key_code::f5)) {
 			mWhatToCopyToBackbuffer = 2;
         }
-		if (input().key_pressed(key_code::f)) {
+		if (input().key_pressed(key_code::f6)) {
 			mWhatToCopyToBackbuffer = 3;
         }
 
@@ -1645,18 +1751,47 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 		if (avk::input().key_pressed(avk::key_code::space)) {
 			mStartMeasurement = true;
 		}
+#if TEST_DURATION_PER_STEP
 		const float MeasureSecsPerStep = TEST_DURATION_PER_STEP;
+#else
+		const float MeasureSecsPerStep = 2.5f;
+#endif
 		if (mStartMeasurement) {
 #if TEST_MODE_ON
 			for (int ii = 0; ii < mParametricObjects.size(); ++ii) {
-				mParametricObjects[ii].set_enabled(ii == TEST_ENABLE_OBJ_IDX);
+				if (ii == TEST_ENABLE_OBJ_IDX) {
+					mParametricObjects[ii].set_enabled(true);
+					mParametricObjects[ii].set_tessellation_levels({ static_cast<float>(TEST_INNER_TESS_LEVEL), static_cast<float>(TEST_OUTER_TESS_LEVEL) });
+					mParametricObjects[ii].set_screen_distance_threshold(static_cast<float>(TEST_SCREEN_DISTANCE_THRESHOLD));
+					mParametricObjects[ii].set_adaptive_rendering_on(1 == TEST_USEINDIVIDUAL_PATCH_RES);
+					mParametricObjects[ii].set_how_to_render(TEST_RENDERING_METHOD);
+
+					mParametricObjects[ii].set_transformation_matrix(glm::mat4{ 1.0f }); // TODO: Use an appropriate one
+
+					LOG_INFO("The following settings were active during the test:");
+					LOG_INFO(std::format(" - Rendering mode: '{}'", get_rendering_variant_description(mParametricObjects[ii].how_to_render())));
+					LOG_INFO(std::format(" - Adaptive fill mode: {}", mParametricObjects[ii].adaptive_rendering_on() ? std::string("ON") : std::string("OFF")));
+					switch (mParametricObjects[ii].how_to_render()) {
+					case rendering_variant::PointRendered_4xSS_local_fb: 
+						LOG_INFO(std::format(" - Tile size:     {}x{}", PX_FILL_LOCAL_FB_TILE_SIZE_X, PX_FILL_LOCAL_FB_TILE_SIZE_Y));
+						LOG_INFO(std::format(" - Tile factor:   {}x{}", TILE_FACTOR_X, TILE_FACTOR_Y));
+						LOG_INFO(std::format(" - Local FB size: {}x{}", LOCAL_FB_X, LOCAL_FB_Y));
+						break;
+					case rendering_variant::Tess_8xSS:
+					case rendering_variant::Tess_4xSS_8xMS:
+						LOG_INFO(std::format(" - SAMPLE_COUNT: {}", vk::to_string(SAMPLE_COUNT)));
+					case rendering_variant::Tess_noAA:
+						LOG_INFO(std::format(" - Inner Tessellation Level: {}", mParametricObjects[ii].tessellation_levels()[0]));
+						LOG_INFO(std::format(" - Outer Tessellation Level: {}", mParametricObjects[ii].tessellation_levels()[1]));
+						break;
+					}
+				}
+				else {
+					mParametricObjects[ii].set_enabled(false);
+				}
 			}
 			fill_object_data_buffer();
-			mConstInnerTessLevel = static_cast<float>(TEST_INNER_TESS_LEVEL);
-			mConstOuterTessLevel = static_cast<float>(TEST_OUTER_TESS_LEVEL);
-			mUseMaxPatchResolutionDuringPxFill = 1 == TEST_USEINDIVIDUAL_PATCH_RES;
 			mRenderExtra3DModel = 1 == TEST_ENABLE_3D_MODEL;
-			mWhatToCopyToBackbuffer = TEST_TARGET_IMAGE;
 			mGatherPipelineStats = 1 == TEST_GATHER_PIPELINE_STATS;
 #endif
 #if TEST_MODE_ON && !TEST_ALLOW_GATHER_STATS
@@ -1673,6 +1808,15 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 			mMeasurementFrameCounters.clear();
 			mMeasurementMoveCameraSteps = glm::max(mMeasurementMoveCameraSteps, 0);
 			mMeasurementFrameCounters.resize(mMeasurementMoveCameraSteps + 1, std::make_tuple(0.0, 0.0f, 0, 0, 0));
+#if TEST_GATHER_PATCH_COUNTS
+			mMeasurementPatchCounts.clear();
+			mMeasurementPatchCounts.resize(mMeasurementMoveCameraSteps + 1);
+			for (auto& a : mMeasurementPatchCounts) {
+				for (int b = 0; b < MAX_PATCH_SUBDIV_STEPS; ++b) {
+					a[b] = 0u;
+				}
+			}
+#endif
 			//auto imguiManager = current_composition()->element_by_type<imgui_manager>();
 			//imguiManager->disable();
 			mMeasurementInProgress = true;
@@ -1693,35 +1837,13 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 			    //auto imguiManager = current_composition()->element_by_type<imgui_manager>();
 			    //imguiManager->enable();
 			    mMeasurementInProgress = false;
-				std::string whichMethod = "TODO: not implemented yet";
-				LOG_INFO_EM(std::format("{} frames rendered during {} sec. measurement time frame with {} method.", std::get<int>(mMeasurementFrameCounters.back()), mMeasurementEndTime - mMeasurementStartTime, whichMethod));
-				LOG_INFO("The following settings were active:");
+				LOG_INFO_EM(std::format("{} frames rendered during {} sec. measurement time frame.", std::get<int>(mMeasurementFrameCounters.back()), mMeasurementEndTime - mMeasurementStartTime));
 #if STATS_ENABLED
 				LOG_INFO(std::format(" - mGatherPipelineStats: {}", mGatherPipelineStats));
 #else
 				LOG_INFO(            " - mGatherPipelineStats not included in build (!STATS_ENABLED)");
 #endif
-//                switch (mRenderingMethod) {
-//                case rendering_variant::point_rendered: 
-//					LOG_INFO(std::format(" - Use individual patch resolution during px fill: {}", mUseMaxPatchResolutionDuringPxFill));
-//					LOG_INFO(std::format(" - Adaptive pixel fill enabled:                    {}", mAdaptivePxFill));
-//					LOG_INFO(std::format(" - PX_FILL_LOCAL_FB enabled: {}", (0 != PX_FILL_LOCAL_FB)));
-//#if PX_FILL_LOCAL_FB
-//					LOG_INFO(std::format("   - Tile size:     {}x{}", PX_FILL_LOCAL_FB_TILE_SIZE_X, PX_FILL_LOCAL_FB_TILE_SIZE_Y));
-//					LOG_INFO(std::format("   - Tile factor:   {}x{}", TILE_FACTOR_X, TILE_FACTOR_Y));
-//					LOG_INFO(std::format("   - Local FB size: {}x{}", LOCAL_FB_X, LOCAL_FB_Y));
-//
-//#endif
-//                    break;
-//                case rendering_variant::tessellated_rasterized:
-//                case rendering_variant::tessellated_rasterized_wireframe:
-//					LOG_INFO(std::format(" - Constant Inner Tessellation Level: {}", mConstInnerTessLevel));
-//					LOG_INFO(std::format(" - Constant Outer Tessellation Level: {}", mConstOuterTessLevel));
-//					LOG_INFO(std::format(" - Use individual patch resolution during px fill: {}", mUseMaxPatchResolutionDuringPxFill));
-//					LOG_INFO(std::format(" - MSAA ENABLED {}, namely: {}", (0 != MSAA_ENABLED), vk::to_string(SAMPLE_COUNT)));
-//					break;
-//                }
-				LOG_INFO("Measurement results (elapsed time, camera distance, unique pixels (avg.), num patches out to render (avg.), FPS):");
+
 				for (int i = mMeasurementFrameCounters.size() - 1; i > 0; --i) {
 					std::get<double>(mMeasurementFrameCounters[i]) -= std::get<double>(mMeasurementFrameCounters[i - 1]);
 				}
@@ -1750,6 +1872,15 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 					}
 			    }
 #endif 
+#if TEST_GATHER_PATCH_COUNTS
+				LOG_INFO_EM("Patch counts:");
+				for (int a = 0; a < mMeasurementPatchCounts.size(); ++a) {
+					LOG_INFO(std::format("Measurement #{}", a));
+					for (int b = 0; b < MAX_PATCH_SUBDIV_STEPS; ++b) {
+						LOG_INFO(std::format("    {:12}", mMeasurementPatchCounts[a][b] / static_cast<uint32_t>(std::get<int>(mMeasurementFrameCounters[a]))));
+					}
+				}
+#endif
 			}
             else {
 				// FLY & MEASURE!
@@ -1760,13 +1891,17 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 					std::get<float>(mMeasurementFrameCounters[curIdx]) = glm::length(glm::vec3{ mOrbitCam.translation().x, 0.0f, mOrbitCam.translation().z });
 				}
 #if TEST_GATHER_TIMER_QUERIES && STATS_ENABLED
-				//std::get<2>(mMeasurementFrameCounters[curIdx]) += mLastBeginToParametricDuration - mLastClearDuration; // <----- TODO after timer queries rework
-				//std::get<3>(mMeasurementFrameCounters[curIdx]) += mLastPatchLodDuration;                               // <----- TODO after timer queries rework
+				std::get<2>(mMeasurementFrameCounters[curIdx]) += mLastTotalRenderDuration;
+				std::get<3>(mMeasurementFrameCounters[curIdx]) += mLastLodStageDuration;
 #else
 				std::get<2>(mMeasurementFrameCounters[curIdx]) += mCounterValues[1];
-				//                                                       TODO: Is that   vvv   the right way to handle [0], [1] and [2]?? 
-				std::get<3>(mMeasurementFrameCounters[curIdx]) += std::max({ mNumPxFillPatchesCreated[0], mNumPxFillPatchesCreated[1], mNumPxFillPatchesCreated[2] });
+				std::get<3>(mMeasurementFrameCounters[curIdx]) += mNumPxFillPatchesCreated[0] + mNumPxFillPatchesCreated[1] + mNumPxFillPatchesCreated[2] + mNumPxFillPatchesCreated[3] + mNumPxFillPatchesCreated[4];
 #endif 
+#if TEST_GATHER_PATCH_COUNTS
+				for (int b = 0; b < MAX_PATCH_SUBDIV_STEPS; ++b) {
+					mMeasurementPatchCounts[curIdx][b] += mPatchesCreatedPerLevel[b];
+				}
+#endif
 				std::get<int>(mMeasurementFrameCounters[curIdx]) += 1;
             	auto f = static_cast<float>((curTime - curIdx * MeasureSecsPerStep - mMeasurementStartTime) / MeasureSecsPerStep);
 
@@ -1939,7 +2074,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 
 		auto mainWnd = context().main_window();
 		//auto resolution = mainWnd->resolution();
-		auto resolution = glm::uvec2(mFramebuffer->image_at(0).width(), mFramebuffer->image_at(0).height());
+		auto resolution = glm::uvec2(mFramebufferNoAA->image_at(0).width(), mFramebufferNoAA->image_at(0).height());
 		auto inFlightIndex = mainWnd->current_in_flight_index();
 
 		glm::mat4 projMat = mQuakeCam.is_enabled() ? mQuakeCam.projection_matrix() : mOrbitCam.projection_matrix();
@@ -1961,7 +2096,6 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
         uboData.mDebugSliders                              = mDebugSliders;
         uboData.mDebugSlidersi                             = mDebugSlidersi;
 		uboData.mHeatMapEnabled                            = mWhatToCopyToBackbuffer == 1 || mWhatToCopyToBackbuffer == 2 ? VK_TRUE : VK_FALSE;
-        uboData.mUseMaxPatchResolutionDuringPxFill         = mUseMaxPatchResolutionDuringPxFill ? VK_TRUE : VK_FALSE;
 		uboData.mWriteToCombinedAttachmentInFragmentShader = 3 != mWhatToCopyToBackbuffer ? VK_TRUE : VK_FALSE;
         uboData.mGatherPipelineStats                       = mGatherPipelineStats;
         uboData.mAbsoluteTime                              = (mAnimationPaused ? mAnimationPauseTime : time().absolute_time()) - mTimeToSubtract;
@@ -1987,17 +2121,25 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 				firstQueryIndex, NUM_TIMESTAMP_QUERIES, vk::QueryResultFlagBits::eWait // => ensure that the results are available
 			);
 
-			mLastClearDuration = timers[1] - timers[0];
-			mLastInitDuration = timers[2] - timers[1];
-			mLastLodStageDuration = timers[3] - timers[2];
-			mLast3dModelsRenderDuration = timers[4] - timers[3];
-			mLastTess4xSSand8xMSRenderDuration = timers[5] - timers[4];
-			mLastTessNoaaRenderDuration = timers[6] - timers[5];
-			mLastTess8xSSRenderDuration = timers[7] - timers[6];
-			mLastTotalTessRenderDuration = timers[7] - timers[4];
-			mLastPatchToTileDuration = timers[6] - timers[5];
-			mLastPointRenderDuration = timers[6] - timers[5]; // Over two timestamp queries
-			mLastBeginToParametricDuration = timers[6] - timers[0];
+			auto get_duration = [&timers](int index) {
+				return timers[index] - timers[index-1];
+			};
+
+			mLastClearDuration					= get_duration(1); // + 1, stage::compute_shader), // measure after clearing
+			mLastInitDuration					= get_duration(2); // + 2, stage::compute_shader), // measure after init
+			mLastLodStageDuration				= get_duration(3); // + 3, stage::compute_shader), // measure after LOD stage
+			mLast3dModelsRenderDuration			= get_duration(4); // + 4, stage::color_attachment_output), // measure after rendering sponza
+			mLastTessNoaaDuration				= get_duration(5); // + 5, stage::color_attachment_output), // measure after Tess. noAA
+			mLastCopyToCombinedAttachmentDur	= get_duration(6); // + 6, stage::compute_shader), // measure after copy-over to combined attachment
+			mLastPatchToTileStepDuration		= get_duration(7); // + 7, stage::compute_shader), // measure after patch to tile step
+			mLastPointRenderingNoaaDuration		= get_duration(8); // + 8, stage::compute_shader), // measure after px fill (the version with the holes ^^)
+			mLastPointRenderingLocalFbDur		= get_duration(9); // + 9, stage::compute_shader), // measure after point rendering into local fb
+			mLastFSQbefore8xSSDuration			= get_duration(10); // + 10, stage::color_attachment_output), // measure after copy-over combined attachment back into a framebuffer image
+			mLastTess8xSSDuration				= get_duration(11); // + 11, stage::color_attachment_output), // measure after Tess. 8xSS
+			mLastFSQbefore4xSS8xMSDuration		= get_duration(12); // + 12, stage::color_attachment_output), // measure after copy-over combined attachment back into a framebuffer image
+			mLastTess4xSS8xMSDuration			= get_duration(13); // + 13, stage::color_attachment_output), // measure after rendering with Tess. 4xSS+8xMS
+			mLastTotalRenderDuration			= timers[13] - timers[4];
+			mLastTotalStepsDuration				= timers[13] - timers[0];
 
 			if (mGatherPipelineStats) {
                 mPipelineStats = mPipelineStatsPool->get_results<uint64_t, 3>(inFlightIndex, 1, vk::QueryResultFlagBits::e64);
@@ -2094,9 +2236,10 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 #endif
 
 			// 3) Render patches:
-			command::render_pass(mRenderpassSS.as_reference(), mFramebufferSS.as_reference(), command::gather(
 
-				// 3.3) Render extra 3D models into the same framebuffer (with multi-sampling):
+			command::render_pass(mRenderpassNoAA.as_reference(), mFramebufferNoAA.as_reference(), command::gather(
+
+				// 3.1) Render extra 3D models (noAA):
 				command::conditional(
 					[this]() { return mRenderExtra3DModel; },
 					[this, inFlightIndex]() { return command::gather(
@@ -2133,56 +2276,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 #if STATS_ENABLED
 				mTimestampPool->write_timestamp(firstQueryIndex + 4, stage::color_attachment_output), // measure after rendering sponza
 #endif
-
-// 3.2) Render tessellated patches with SS
-                command::bind_pipeline(tessPipePxFillSupersampledToBeUsed.as_reference()),
-				command::bind_descriptors(tessPipePxFillSupersampledToBeUsed->layout(), mDescriptorCache->get_or_create_descriptor_sets({
-					descriptor_binding(0, 0, mFrameDataBuffers[inFlightIndex]),
-			        descriptor_binding(0, 1, as_combined_image_samplers(mImageSamplers, layout::shader_read_only_optimal)),
-			        descriptor_binding(0, 2, mMaterialBuffer),
-					descriptor_binding(1, 0, mCombinedAttachmentView->as_storage_image(layout::general)),
-#if STATS_ENABLED
-					descriptor_binding(1, 1, mHeatMapImageView->as_storage_image(layout::general)),
-#endif
-			        descriptor_binding(2, 0, mCountersSsbo->as_storage_buffer()),
-				    descriptor_binding(3, 0, mObjectDataBuffer->as_storage_buffer()),
-					descriptor_binding(3, 1, mIndirectPxFillParamsBuffer->as_storage_buffer()),
-				    descriptor_binding(3, 2, mIndirectPxFillCountBuffer->as_storage_buffer()),
-					descriptor_binding(4, 0, mBigDataset->as_storage_buffer())
-				})),
-
-				command::push_constants(tessPipePxFillSupersampledToBeUsed->layout(), patch_into_tess_push_constants{ 
-					mConstOuterTessLevel, mConstInnerTessLevel, 
-					get_rendering_variant_index(rendering_variant::Tess_4xSS_8xMS) * MAX_INDIRECT_DISPATCHES 
-				}),
-				command::draw_vertices_indirect(
-					mIndirectPxFillCountBuffer.as_reference(), 
-					get_rendering_variant_index(rendering_variant::Tess_4xSS_8xMS) * sizeof(VkDrawIndirectCommand), 
-					sizeof(VkDrawIndirectCommand), 
-					1u) // <-- Exactly ONE draw (but potentially a lot of instances), use the one at [1]
-
-			)),
-
-#if STATS_ENABLED
-				mTimestampPool->write_timestamp(firstQueryIndex + 5, stage::color_attachment_output), // measure after Tess. 4xSS+8xMS
-#endif
-
-			command::render_pass(mRenderpass.as_reference(), mFramebuffer.as_reference(), command::gather(
-
-				// 3.1) Render tessellated patches with noAA
-                command::bind_pipeline(mSsResolvePipeline.as_reference()),
-				command::bind_descriptors(mSsResolvePipeline->layout(), mDescriptorCache->get_or_create_descriptor_sets({
-					descriptor_binding(0, 0, mSsResolveColorSampler),
-					descriptor_binding(0, 1, mSsResolveDepthSampler),
-					descriptor_binding(0, 2, mFramebufferSS->image_view_at(0)->as_sampled_image(layout::shader_read_only_optimal)),
-					descriptor_binding(0, 3, mFramebufferSS->image_view_at(1)->as_sampled_image(layout::shader_read_only_optimal))
-				})),
-				// Draw a a full-screen quad:
-				command::draw(6, 1, 0, 1),
-				
-				command::next_subpass(),
-
-				// 3.1) Render tessellated patches with 8xMS with sample shading (i.e., actually 8xSS)
+				// 3.2) Render tessellated patches with noAA:
                 command::bind_pipeline(tessPipePxFillNoaaToBeUsed.as_reference()),
 				command::bind_descriptors(tessPipePxFillNoaaToBeUsed->layout(), mDescriptorCache->get_or_create_descriptor_sets({
 					descriptor_binding(0, 0, mFrameDataBuffers[inFlightIndex]),
@@ -2200,20 +2294,156 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 				})),
 					
 				command::push_constants(tessPipePxFillNoaaToBeUsed->layout(), patch_into_tess_push_constants{ 
-					mConstOuterTessLevel, mConstInnerTessLevel, 
 					get_rendering_variant_index(rendering_variant::Tess_noAA) * MAX_INDIRECT_DISPATCHES 
 				}),
 				command::draw_vertices_indirect(
 					mIndirectPxFillCountBuffer.as_reference(), 
 					get_rendering_variant_index(rendering_variant::Tess_noAA) * sizeof(VkDrawIndirectCommand), 
 					sizeof(VkDrawIndirectCommand), 
-					1u), // <-- Exactly ONE draw (but potentially a lot of instances), use the one at [0]
+					1u) // <-- Exactly ONE draw (but potentially a lot of instances), use the one at [0]
 				
+			)),
+
 #if STATS_ENABLED
-				mTimestampPool->write_timestamp(firstQueryIndex + 6, stage::color_attachment_output), // measure after Tess. noAA
+			mTimestampPool->write_timestamp(firstQueryIndex + 5, stage::color_attachment_output), // measure after Tess. noAA
 #endif
 
-				// 3.2) Render tessellated patches with MSAA
+			// 3.3) Copy whatever was rendered in noAA-fashion so far into combined attachment, s.t. point rendering can be added:
+
+			sync::global_memory_barrier(
+				stage::early_fragment_tests | stage::late_fragment_tests | stage::color_attachment_output  >>  stage::compute_shader,
+				access::depth_stencil_attachment_write                   | access::color_attachment_write  >>  access::shader_read
+			), 
+
+			command::conditional([this] { return mRenderVariantDataTransferEnabled[0]; }, [this, resolution] { return command::gather(
+				command::bind_pipeline(mCopyToCombinedAttachmentPipe.as_reference()),
+				command::bind_descriptors(mCopyToCombinedAttachmentPipe->layout(), mDescriptorCache->get_or_create_descriptor_sets({
+					descriptor_binding(0, 0, mCombinedAttachmentView->as_storage_image(layout::general)),
+					descriptor_binding(1, 0, mFramebufferNoAA->image_view_at(0)->as_sampled_image(layout::shader_read_only_optimal)),
+					descriptor_binding(1, 1, mFramebufferNoAA->image_view_at(1)->as_sampled_image(layout::shader_read_only_optimal))
+					})),
+				command::dispatch((resolution.x + 15u) / 16u, (resolution.y + 15u) / 16u, 1u),
+
+				sync::global_memory_barrier(stage::compute_shader + access::shader_write >> stage::compute_shader + (access::shader_read | access::shader_write))
+			); }),
+				
+#if STATS_ENABLED
+			mTimestampPool->write_timestamp(firstQueryIndex + 6, stage::compute_shader), // measure after copy-over to combined attachment
+#endif
+
+			// => Perform point rendering into combined attachment 
+#if SEPARATE_PATCH_TILE_ASSIGNMENT_PASS
+			// Inject another intermediate pass:
+			command::bind_pipeline(mSelectTilePatchesPipe.as_reference()),
+			command::bind_descriptors(mSelectTilePatchesPipe->layout(), mDescriptorCache->get_or_create_descriptor_sets({
+				descriptor_binding(0, 0, mFrameDataBuffers[inFlightIndex]), 
+			    descriptor_binding(0, 1, as_combined_image_samplers(mImageSamplers, layout::shader_read_only_optimal)),
+			    descriptor_binding(0, 2, mMaterialBuffer),
+			    descriptor_binding(1, 0, mCountersSsbo->as_storage_buffer()),
+				descriptor_binding(2, 0, mObjectDataBuffer->as_storage_buffer()),
+				descriptor_binding(2, 1, mIndirectPxFillParamsBuffer->as_storage_buffer()),
+				descriptor_binding(2, 2, mIndirectPxFillCountBuffer->as_storage_buffer()),
+                descriptor_binding(3, 0, mCombinedAttachmentView->as_storage_image(layout::general))
+#if STATS_ENABLED
+                , descriptor_binding(3, 1, mHeatMapImageView->as_storage_image(layout::general))
+#endif
+				, descriptor_binding(4, 0, mTilePatchesBuffer->as_storage_buffer())
+			})),
+
+			command::dispatch(128u /* <--- TODO: num tiles / 32 */, 1u, 1u),
+
+			sync::global_memory_barrier(stage::compute_shader + access::memory_write >> stage::compute_shader + access::memory_read),
+#endif
+#if STATS_ENABLED
+			mTimestampPool->write_timestamp(firstQueryIndex + 7, stage::compute_shader), // measure after patch to tile step
+#endif
+
+			// 3.4) Pixel fill directly into combined attachment ~1spp
+            command::bind_pipeline(mPxFillComputePipe.as_reference()),
+			command::bind_descriptors(mPxFillComputePipe->layout(), mDescriptorCache->get_or_create_descriptor_sets({
+				descriptor_binding(0, 0, mFrameDataBuffers[inFlightIndex]), 
+			    descriptor_binding(0, 1, as_combined_image_samplers(mImageSamplers, layout::shader_read_only_optimal)),
+			    descriptor_binding(0, 2, mMaterialBuffer),
+			    descriptor_binding(1, 0, mCountersSsbo->as_storage_buffer()),
+				descriptor_binding(2, 0, mObjectDataBuffer->as_storage_buffer()),
+				descriptor_binding(2, 1, mIndirectPxFillParamsBuffer->as_storage_buffer()),
+				descriptor_binding(2, 2, mIndirectPxFillCountBuffer->as_storage_buffer()),
+                descriptor_binding(3, 0, mCombinedAttachmentView->as_storage_image(layout::general))
+#if STATS_ENABLED
+                , descriptor_binding(3, 1, mHeatMapImageView->as_storage_image(layout::general))
+#endif
+				, descriptor_binding(4, 0, mBigDataset->as_storage_buffer())
+			})),
+			command::push_constants(mPxFillComputePipe->layout(), pass3_push_constants{
+				mGatherPipelineStats ? VK_TRUE : VK_FALSE
+			}),
+			command::dispatch_indirect(
+				mIndirectPxFillCountBuffer, 
+				get_rendering_variant_index(rendering_variant::PointRendered_direct) * sizeof(VkDrawIndirectCommand) 
+				/* offset to the right struct member: */  + sizeof(VkDrawIndirectCommand::vertexCount)
+			), // => in order to use the instanceCount!
+
+#if STATS_ENABLED
+			mTimestampPool->write_timestamp(firstQueryIndex + 8, stage::compute_shader), // measure after px fill (the version with the holes ^^)
+#endif
+
+			// 3.5) Pixel fill into local framebuffers (~4spp) then into combined attachment
+            command::bind_pipeline(mPxFillLocalFbComputePipe.as_reference()),
+			command::bind_descriptors(mPxFillLocalFbComputePipe->layout(), mDescriptorCache->get_or_create_descriptor_sets({
+				descriptor_binding(0, 0, mFrameDataBuffers[inFlightIndex]), 
+			    descriptor_binding(0, 1, as_combined_image_samplers(mImageSamplers, layout::shader_read_only_optimal)),
+			    descriptor_binding(0, 2, mMaterialBuffer),
+			    descriptor_binding(1, 0, mCountersSsbo->as_storage_buffer()),
+				descriptor_binding(2, 0, mObjectDataBuffer->as_storage_buffer()),
+				descriptor_binding(2, 1, mIndirectPxFillParamsBuffer->as_storage_buffer()),
+				descriptor_binding(2, 2, mIndirectPxFillCountBuffer->as_storage_buffer()),
+                descriptor_binding(3, 0, mCombinedAttachmentView->as_storage_image(layout::general))
+#if STATS_ENABLED
+                , descriptor_binding(3, 1, mHeatMapImageView->as_storage_image(layout::general))
+#endif
+				, descriptor_binding(4, 0, mBigDataset->as_storage_buffer())
+#if SEPARATE_PATCH_TILE_ASSIGNMENT_PASS
+				, descriptor_binding(5, 0, mTilePatchesBuffer->as_storage_buffer())
+#endif
+			})),
+			command::push_constants(mPxFillLocalFbComputePipe->layout(), pass3_push_constants{
+				mGatherPipelineStats ? VK_TRUE : VK_FALSE
+			}),
+			command::dispatch((resolution.x + PX_FILL_LOCAL_FB_TILE_SIZE_X - 1) / PX_FILL_LOCAL_FB_TILE_SIZE_X, (resolution.y + PX_FILL_LOCAL_FB_TILE_SIZE_Y - 1) / PX_FILL_LOCAL_FB_TILE_SIZE_Y, 1),
+
+#if STATS_ENABLED
+			mTimestampPool->write_timestamp(firstQueryIndex + 9, stage::compute_shader), // measure after point rendering into local fb
+#endif
+
+			sync::global_memory_barrier(stage::compute_shader + access::shader_write >> stage::fragment_shader + access::shader_read),
+
+			command::render_pass(mRenderpassMS.as_reference(), mFramebufferMS.as_reference(), command::gather(
+
+				command::conditional([this] { return mRenderVariantDataTransferEnabled[1]; }, [this] { return command::gather(
+					// 3.6) Full-screen quad noAA->MS
+					command::bind_pipeline(mFsQuadNoAAtoMSPipe.as_reference()),
+					command::push_constants(mFsQuadNoAAtoMSPipe->layout(), copy_to_backbuffer_push_constants{
+						mWhatToCopyToBackbuffer > 1 ? 0 : mWhatToCopyToBackbuffer // 0 => 0, 1 => 1, 2 => 0
+						}),
+					command::bind_descriptors(mFsQuadNoAAtoMSPipe->layout(), mDescriptorCache->get_or_create_descriptor_sets({
+						descriptor_binding(0, 0, mFsQuadColorSampler),
+						descriptor_binding(0, 1, mFsQuadDepthSampler),
+						descriptor_binding(1, 0, mCombinedAttachmentView->as_storage_image(layout::general))
+#if STATS_ENABLED
+						, descriptor_binding(1, 1, mHeatMapImageView->as_storage_image(layout::general))
+#endif
+						})),
+					// Draw a a full-screen quad:
+					command::draw(6, 1, 0, 1)
+				); }),
+				
+				command::next_subpass(),
+
+#if STATS_ENABLED
+				mTimestampPool->write_timestamp(firstQueryIndex + 10, stage::color_attachment_output), // measure after copy-over combined attachment back into a framebuffer image
+#endif
+
+				// 3.7) Render tessellated patches with 8xMS + sample shading => i.e., actually this is 8xSS
                 command::bind_pipeline(tessPipePxFillMultisampledToBeUsed.as_reference()),
 				command::bind_descriptors(tessPipePxFillMultisampledToBeUsed->layout(), mDescriptorCache->get_or_create_descriptor_sets({
 					descriptor_binding(0, 0, mFrameDataBuffers[inFlightIndex]),
@@ -2231,178 +2461,150 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 				})),
 					
 				command::push_constants(tessPipePxFillMultisampledToBeUsed->layout(), patch_into_tess_push_constants{ 
-					mConstOuterTessLevel, mConstInnerTessLevel, 
-					get_rendering_variant_index(rendering_variant::Tess_8xSS) * MAX_INDIRECT_DISPATCHES 
+					get_rendering_variant_index(rendering_variant::Tess_8xMS) * MAX_INDIRECT_DISPATCHES 
 				}),
 				command::draw_vertices_indirect(
 					mIndirectPxFillCountBuffer.as_reference(), 
-					get_rendering_variant_index(rendering_variant::Tess_8xSS) * sizeof(VkDrawIndirectCommand), 
+					get_rendering_variant_index(rendering_variant::Tess_8xMS) * sizeof(VkDrawIndirectCommand), 
 					sizeof(VkDrawIndirectCommand), 
 					1u) // <-- Exactly ONE draw (but potentially a lot of instances), use the one at [1]
 
 			)),
 
+
 #if STATS_ENABLED
-			mTimestampPool->write_timestamp(firstQueryIndex + 7, stage::color_attachment_output), // measure after rendering with Tess. 8xSS(MS)
+			mTimestampPool->write_timestamp(firstQueryIndex + 11, stage::color_attachment_output), // measure after Tess. 8xSS
 #endif
-			// 3.4) Color attachment has been resolved into non-super sampled image
-			// 3.5) TODO: Copy resolved (color + depth) --into--> combined attachment 
 
-			sync::global_memory_barrier(stage::all_commands + access::memory_write >> stage::compute_shader + access::memory_read), // TODO: Barrier too heavy
+#if SSAA_ENABLED
+			command::render_pass(mRenderpassSSMS.as_reference(), mFramebufferSSMS.as_reference(), command::gather(
 
-			command::bind_pipeline(mCopyToCombinedAttachmentPipe.as_reference()),
-				command::bind_descriptors(mCopyToCombinedAttachmentPipe->layout(), mDescriptorCache->get_or_create_descriptor_sets({
-					descriptor_binding(0, 0, mCombinedAttachmentView->as_storage_image(layout::general)),
-					descriptor_binding(1, 0, mColorAttachmentView->as_sampled_image(layout::shader_read_only_optimal)),
-					descriptor_binding(1, 1, mDepthAttachmentView->as_sampled_image(layout::shader_read_only_optimal))
-				})),
-			command::dispatch((resolution.x + 15u) / 16u, (resolution.y + 15u) / 16u, 1u),
+				command::conditional([this] { return mRenderVariantDataTransferEnabled[2]; }, [this] { return command::gather(
+					// 3.8) Full-screen quad MS->SSMS
+					command::bind_pipeline(mFsQuadMStoSSPipe.as_reference()),
+					command::bind_descriptors(mFsQuadMStoSSPipe->layout(), mDescriptorCache->get_or_create_descriptor_sets({
+						descriptor_binding(0, 0, mFsQuadColorSampler),
+						descriptor_binding(0, 1, mFsQuadDepthSampler),
+						descriptor_binding(0, 2, mFramebufferMS->image_view_at(0)->as_sampled_image(layout::shader_read_only_optimal)),
+						descriptor_binding(0, 3, mFramebufferMS->image_view_at(1)->as_sampled_image(layout::shader_read_only_optimal))
+						})),
+					// Draw a a full-screen quad:
+					command::draw(6, 1, 0, 1)
+				); }),
+				
+				command::next_subpass(),
 
-			sync::global_memory_barrier(stage::compute_shader + access::memory_write >> stage::compute_shader + access::memory_read),
+#if STATS_ENABLED
+				mTimestampPool->write_timestamp(firstQueryIndex + 12, stage::color_attachment_output), // measure after copy-over combined attachment back into a framebuffer image
+#endif
 
-			// 3.6) Perform point rendering into combined attachment 
-
-
-
-
-
-
-
-#if SEPARATE_PATCH_TILE_ASSIGNMENT_PASS
-				// Inject another intermediate pass:
-				command::bind_pipeline(mSelectTilePatchesPipe.as_reference()),
-				command::bind_descriptors(mSelectTilePatchesPipe->layout(), mDescriptorCache->get_or_create_descriptor_sets({
-				    descriptor_binding(0, 0, mFrameDataBuffers[inFlightIndex]), 
+				// 3.9) Render tessellated patches with SS
+                command::bind_pipeline(tessPipePxFillSupersampledToBeUsed.as_reference()),
+				command::bind_descriptors(tessPipePxFillSupersampledToBeUsed->layout(), mDescriptorCache->get_or_create_descriptor_sets({
+					descriptor_binding(0, 0, mFrameDataBuffers[inFlightIndex]),
 			        descriptor_binding(0, 1, as_combined_image_samplers(mImageSamplers, layout::shader_read_only_optimal)),
 			        descriptor_binding(0, 2, mMaterialBuffer),
-			        descriptor_binding(1, 0, mCountersSsbo->as_storage_buffer()),
-				    descriptor_binding(2, 0, mObjectDataBuffer->as_storage_buffer()),
-				    descriptor_binding(2, 1, mIndirectPxFillParamsBuffer->as_storage_buffer()),
-				    descriptor_binding(2, 2, mIndirectPxFillCountBuffer->as_storage_buffer()),
-                    descriptor_binding(3, 0, mCombinedAttachmentView->as_storage_image(layout::general))
+					descriptor_binding(1, 0, mCombinedAttachmentView->as_storage_image(layout::general)),
 #if STATS_ENABLED
-                    , descriptor_binding(3, 1, mHeatMapImageView->as_storage_image(layout::general))
+					descriptor_binding(1, 1, mHeatMapImageView->as_storage_image(layout::general)),
 #endif
-					, descriptor_binding(4, 0, mTilePatchesBuffer->as_storage_buffer())
+			        descriptor_binding(2, 0, mCountersSsbo->as_storage_buffer()),
+				    descriptor_binding(3, 0, mObjectDataBuffer->as_storage_buffer()),
+					descriptor_binding(3, 1, mIndirectPxFillParamsBuffer->as_storage_buffer()),
+				    descriptor_binding(3, 2, mIndirectPxFillCountBuffer->as_storage_buffer()),
+					descriptor_binding(4, 0, mBigDataset->as_storage_buffer())
 				})),
 
-				command::dispatch(128u /* <--- TODO: num tiles / 32 */, 1u, 1u),
-
-				sync::global_memory_barrier(stage::compute_shader + access::memory_write >> stage::compute_shader + access::memory_read),
-#endif
-#if STATS_ENABLED
-				mTimestampPool->write_timestamp(firstQueryIndex + 8, stage::compute_shader), // measure after patch to tile step
-#endif
-
-				// 3rd pass compute shaders (two variants): px fill PER DRAW PACKAGE directly from compute shaders
-                command::bind_pipeline(mPxFillComputePipe.as_reference()),
-				command::bind_descriptors(mPxFillComputePipe->layout(), mDescriptorCache->get_or_create_descriptor_sets({
-				    descriptor_binding(0, 0, mFrameDataBuffers[inFlightIndex]), 
-			        descriptor_binding(0, 1, as_combined_image_samplers(mImageSamplers, layout::shader_read_only_optimal)),
-			        descriptor_binding(0, 2, mMaterialBuffer),
-			        descriptor_binding(1, 0, mCountersSsbo->as_storage_buffer()),
-				    descriptor_binding(2, 0, mObjectDataBuffer->as_storage_buffer()),
-				    descriptor_binding(2, 1, mIndirectPxFillParamsBuffer->as_storage_buffer()),
-				    descriptor_binding(2, 2, mIndirectPxFillCountBuffer->as_storage_buffer()),
-                    descriptor_binding(3, 0, mCombinedAttachmentView->as_storage_image(layout::general))
-#if STATS_ENABLED
-                    , descriptor_binding(3, 1, mHeatMapImageView->as_storage_image(layout::general))
-#endif
-					, descriptor_binding(4, 0, mBigDataset->as_storage_buffer())
-				})),
-				command::push_constants(mPxFillComputePipe->layout(), pass3_push_constants{
-					mGatherPipelineStats ? VK_TRUE : VK_FALSE
+				command::push_constants(tessPipePxFillSupersampledToBeUsed->layout(), patch_into_tess_push_constants{ 
+					get_rendering_variant_index(rendering_variant::Tess_4xSS_8xMS) * MAX_INDIRECT_DISPATCHES 
 				}),
-				command::dispatch_indirect(
-					mIndirectPxFillCountBuffer, 
-					get_rendering_variant_index(rendering_variant::PointRendered_direct) * sizeof(VkDrawIndirectCommand) 
-					/* offset to the right struct member: */  + sizeof(VkDrawIndirectCommand::vertexCount)
-				), // => in order to use the instanceCount!
+				command::draw_vertices_indirect(
+					mIndirectPxFillCountBuffer.as_reference(), 
+					get_rendering_variant_index(rendering_variant::Tess_4xSS_8xMS) * sizeof(VkDrawIndirectCommand), 
+					sizeof(VkDrawIndirectCommand), 
+					1u) // <-- Exactly ONE draw (but potentially a lot of instances), use the one at [1]
 
-
-
-				// 3rd pass compute shaders (two variants): px fill PER DRAW PACKAGE directly from compute shaders
-                command::bind_pipeline(mPxFillLocalFbComputePipe.as_reference()),
-				command::bind_descriptors(mPxFillLocalFbComputePipe->layout(), mDescriptorCache->get_or_create_descriptor_sets({
-				    descriptor_binding(0, 0, mFrameDataBuffers[inFlightIndex]), 
-			        descriptor_binding(0, 1, as_combined_image_samplers(mImageSamplers, layout::shader_read_only_optimal)),
-			        descriptor_binding(0, 2, mMaterialBuffer),
-			        descriptor_binding(1, 0, mCountersSsbo->as_storage_buffer()),
-				    descriptor_binding(2, 0, mObjectDataBuffer->as_storage_buffer()),
-				    descriptor_binding(2, 1, mIndirectPxFillParamsBuffer->as_storage_buffer()),
-				    descriptor_binding(2, 2, mIndirectPxFillCountBuffer->as_storage_buffer()),
-                    descriptor_binding(3, 0, mCombinedAttachmentView->as_storage_image(layout::general))
+			)),
+#else 
 #if STATS_ENABLED
-                    , descriptor_binding(3, 1, mHeatMapImageView->as_storage_image(layout::general))
+			mTimestampPool->write_timestamp(firstQueryIndex + 12, stage::color_attachment_output),
 #endif
-					, descriptor_binding(4, 0, mBigDataset->as_storage_buffer())
-#if SEPARATE_PATCH_TILE_ASSIGNMENT_PASS
-					, descriptor_binding(5, 0, mTilePatchesBuffer->as_storage_buffer())
-#endif
-				})),
-				command::push_constants(mPxFillLocalFbComputePipe->layout(), pass3_push_constants{
-					mGatherPipelineStats ? VK_TRUE : VK_FALSE
-				}),
-				command::dispatch((resolution.x + PX_FILL_LOCAL_FB_TILE_SIZE_X - 1) / PX_FILL_LOCAL_FB_TILE_SIZE_X, (resolution.y + PX_FILL_LOCAL_FB_TILE_SIZE_Y - 1) / PX_FILL_LOCAL_FB_TILE_SIZE_Y, 1),
-
-#if STATS_ENABLED
-			mTimestampPool->write_timestamp(firstQueryIndex + 9, stage::compute_shader), // measure after point rendering
 #endif
 
-
-
-
 #if STATS_ENABLED
-			    commandsEndStats,
+			mTimestampPool->write_timestamp(firstQueryIndex + 13, stage::color_attachment_output), // measure after rendering with Tess. 4xSS+8xMS
+
+			commandsEndStats,
 #else
-			    // Fascinating: Without that following barrier, we get rendering artifacts in the ABSENCE of the timestamp write!
-			    // TODO:            ^ investigate further!
-			    sync::global_memory_barrier(stage::fragment_shader | stage::compute_shader >> stage::compute_shader, access::shader_write >> access::shader_read),
+			// Fascinating: Without that following barrier, we get rendering artifacts in the ABSENCE of the timestamp write!
+			// TODO:            ^ investigate further!
+			sync::global_memory_barrier(stage::fragment_shader | stage::compute_shader >> stage::compute_shader, access::shader_write >> access::shader_read),
 #endif
-		
-			// 3.6) Copy combined attachment -> back buffer
-			
-
-
 
 			// //That worked:
-			//sync::image_memory_barrier(context().main_window()->current_backbuffer()->image_at(0),  // Window's back buffer's color attachment
-			//		                    stage::none          >>   stage::blit,
-			//		                    access::none         >>   access::transfer_write)
-			//	.with_layout_transition(layout::undefined   >>   layout::transfer_dst),             // Don't care about the previous layout
-
-			//blit_image(mFramebufferSS->image_at(0), layout::transfer_src, context().main_window()->current_backbuffer()->image_at(0), layout::transfer_dst, 
-			//			vk::ImageAspectFlagBits::eColor, vk::Filter::eLinear),
-
-			//sync::image_memory_barrier(context().main_window()->current_backbuffer()->image_at(0),  // Window's back buffer's color attachment
-			//		                    stage::blit                    >>   stage::color_attachment_output, // <-- for ImGui, which draws afterwards
-			//		                    access::transfer_write         >>   access::color_attachment_read | access::color_attachment_write)
-			//	.with_layout_transition(       layout::transfer_dst   >>   layout::color_attachment_optimal)
-
-
-			// Copy from Uint64 image into back buffer:
 			sync::image_memory_barrier(context().main_window()->current_backbuffer()->image_at(0),  // Window's back buffer's color attachment
-					                    stage::none          >>   stage::compute_shader,
-					                    access::none         >>   access::shader_storage_write)
-				.with_layout_transition(layout::undefined   >>   layout::general),                  // Don't care about the previous layout
-						
-			command::bind_pipeline(mCopyToBackufferPipe.as_reference()),
-			command::push_constants(mCopyToBackufferPipe->layout(), copy_to_backbuffer_push_constants{ 
-				mWhatToCopyToBackbuffer > 1 ? 0 : mWhatToCopyToBackbuffer // 0 => 0, 1 => 1, 2 => 0
+					                    stage::none          >>   stage::blit,
+					                    access::none         >>   access::transfer_write)
+				.with_layout_transition(layout::undefined   >>   layout::transfer_dst),             // Don't care about the previous layout
+
+#if SSAA_ENABLED
+			command::conditional([this] { return mOutputResultOfRenderVariantIndex == 0; }, [this] { return 
+				sync::image_memory_barrier(mFramebufferNoAA->image_at(0),
+					                    stage::color_attachment_output     >>   stage::blit, 
+					                    access::color_attachment_write     >>   access::transfer_read | access::transfer_write)
+				.with_layout_transition(layout::shader_read_only_optimal   >>   layout::transfer_src);
 			}),
-			command::bind_descriptors(mCopyToBackufferPipe->layout(), mDescriptorCache->get_or_create_descriptor_sets({
-				descriptor_binding(0, 0, mCombinedAttachmentView->as_storage_image(layout::general)),
-#if STATS_ENABLED
-				descriptor_binding(0, 1, mHeatMapImageView->as_storage_image(layout::general)),
-#endif
-				descriptor_binding(1, 0, context().main_window()->current_backbuffer()->image_view_at(0)->as_storage_image(layout::general))
-			})),
-			command::dispatch((resolution.x + 15u) / 16u, (resolution.y + 15u) / 16u, 1u),
+			command::conditional([this] { return mOutputResultOfRenderVariantIndex == 2; }, [this] { return 
+				sync::image_memory_barrier(mFramebufferMS->image_at(0),
+					                    stage::color_attachment_output     >>   stage::blit, 
+					                    access::color_attachment_write     >>   access::transfer_read | access::transfer_write)
+				.with_layout_transition(layout::shader_read_only_optimal   >>   layout::transfer_src);
+			}),
 
+			command::conditional([this] { return mOutputResultOfRenderVariantIndex != 1; }, [this] { return command::gather(
+				blit_image(   mOutputResultOfRenderVariantIndex == 0 ? mFramebufferNoAA->image_at(0)
+							: mOutputResultOfRenderVariantIndex == 2 ? mFramebufferMS->image_at(0)  
+							:                                          mFramebufferSSMS->image_at(0), 
+							layout::transfer_src, context().main_window()->current_backbuffer()->image_at(0), layout::transfer_dst, 
+							vk::ImageAspectFlagBits::eColor, vk::Filter::eLinear),
+
+				sync::image_memory_barrier(context().main_window()->current_backbuffer()->image_at(0),  // Window's back buffer's color attachment
+											stage::blit                    >>   stage::color_attachment_output, // <-- for ImGui, which draws afterwards
+											access::transfer_write         >>   access::color_attachment_read | access::color_attachment_write)
+					.with_layout_transition(       layout::transfer_dst   >>   layout::color_attachment_optimal)
+			); }, [this, resolution] { return command::gather(
+				// Copy from Uint64 image into back buffer:
+				sync::image_memory_barrier(context().main_window()->current_backbuffer()->image_at(0),  // Window's back buffer's color attachment
+											stage::none                        >>   stage::compute_shader,
+											access::none                       >>   access::shader_storage_write)
+					.with_layout_transition(layout::transfer_dst               >>   layout::general),                  // Don't care about the previous layout
+						
+				command::bind_pipeline(mCopyToBackufferPipe.as_reference()),
+				command::push_constants(mCopyToBackufferPipe->layout(), copy_to_backbuffer_push_constants{ 
+					mWhatToCopyToBackbuffer > 1 ? 0 : mWhatToCopyToBackbuffer // 0 => 0, 1 => 1, 2 => 0
+				}),
+				command::bind_descriptors(mCopyToBackufferPipe->layout(), mDescriptorCache->get_or_create_descriptor_sets({
+					descriptor_binding(0, 0, mCombinedAttachmentView->as_storage_image(layout::general)),
+#if STATS_ENABLED
+					descriptor_binding(0, 1, mHeatMapImageView->as_storage_image(layout::general)),
+#endif
+					descriptor_binding(1, 0, context().main_window()->current_backbuffer()->image_view_at(0)->as_storage_image(layout::general))
+				})),
+				command::dispatch((resolution.x + 15u) / 16u, (resolution.y + 15u) / 16u, 1u),
+
+				sync::image_memory_barrier(context().main_window()->current_backbuffer()->image_at(0),  // Window's back buffer's color attachment
+											stage::compute_shader          >>   stage::color_attachment_output, // <-- for ImGui, which draws afterwards
+											access::shader_storage_write   >>   access::color_attachment_read | access::color_attachment_write)
+					.with_layout_transition(            layout::general   >>   layout::color_attachment_optimal)
+			); })
+#else 
+			blit_image(mFramebufferMS->image_at(0), layout::transfer_src, context().main_window()->current_backbuffer()->image_at(0), layout::transfer_dst, 
+						vk::ImageAspectFlagBits::eColor, vk::Filter::eLinear),
 			sync::image_memory_barrier(context().main_window()->current_backbuffer()->image_at(0),  // Window's back buffer's color attachment
-					                    stage::compute_shader          >>   stage::color_attachment_output, // <-- for ImGui, which draws afterwards
-					                    access::shader_storage_write   >>   access::color_attachment_read | access::color_attachment_write)
-				.with_layout_transition(            layout::general   >>   layout::color_attachment_optimal)
+					                    stage::blit                    >>   stage::color_attachment_output, // <-- for ImGui, which draws afterwards
+					                    access::transfer_write         >>   access::color_attachment_read | access::color_attachment_write)
+				.with_layout_transition(       layout::transfer_dst   >>   layout::color_attachment_optimal)
+#endif
 
 
 		);
@@ -2485,29 +2687,33 @@ private: // v== Member variables ==v
 
 #if STATS_ENABLED
     avk::query_pool mTimestampPool;
-	uint64_t mLastClearDuration = 0;
-	uint64_t mLastInitDuration = 0;
-	uint64_t mLastLodStageDuration = 0;
-	uint64_t mLast3dModelsRenderDuration = 0;
-	uint64_t mLastTess4xSSand8xMSRenderDuration = 0;
-	uint64_t mLastTessNoaaRenderDuration = 0;
-	uint64_t mLastTess8xSSRenderDuration = 0;
-	uint64_t mLastTotalTessRenderDuration = 0;
-	uint64_t mLastPatchToTileDuration = 0;
-	uint64_t mLastPointRenderDuration = 0;
-	uint64_t mLastBeginToParametricDuration = 0;
-	uint64_t mLastFrameDuration = 0;
+
+	uint64_t mLastClearDuration = 0;				// + 1, stage::compute_shader), // measure after clearing
+	uint64_t mLastInitDuration = 0;					// + 2, stage::compute_shader), // measure after init
+	uint64_t mLastLodStageDuration = 0;				// + 3, stage::compute_shader), // measure after LOD stage
+	uint64_t mLast3dModelsRenderDuration = 0;		// + 4, stage::color_attachment_output), // measure after rendering sponza
+	uint64_t mLastTessNoaaDuration = 0;				// + 5, stage::color_attachment_output), // measure after Tess. noAA
+	uint64_t mLastCopyToCombinedAttachmentDur = 0;	// + 6, stage::compute_shader), // measure after copy-over to combined attachment
+	uint64_t mLastPatchToTileStepDuration = 0;		// + 7, stage::compute_shader), // measure after patch to tile step
+	uint64_t mLastPointRenderingNoaaDuration = 0;	// + 8, stage::compute_shader), // measure after px fill (the version with the holes ^^)
+	uint64_t mLastPointRenderingLocalFbDur = 0;		// + 9, stage::compute_shader), // measure after point rendering into local fb
+	uint64_t mLastFSQbefore8xSSDuration = 0;		// + 10, stage::color_attachment_output), // measure after copy-over combined attachment back into a framebuffer image
+	uint64_t mLastTess8xSSDuration = 0;				// + 11, stage::color_attachment_output), // measure after Tess. 8xSS
+	uint64_t mLastFSQbefore4xSS8xMSDuration = 0;	// + 12, stage::color_attachment_output), // measure after copy-over combined attachment back into a framebuffer image
+	uint64_t mLastTess4xSS8xMSDuration = 0;			// + 13, stage::color_attachment_output), // measure after rendering with Tess. 4xSS+8xMS
+	uint64_t mLastTotalRenderDuration = 0;
+	uint64_t mLastTotalStepsDuration = 0;
 
 	avk::query_pool mPipelineStatsPool;
 	std::array<uint64_t, 3> mPipelineStats;
 #endif
 	
-	avk::renderpass  mRenderpass;
-	avk::renderpass  mRenderpassSS;
-	avk::framebuffer mFramebuffer;
-	avk::framebuffer mFramebufferSS;
-	avk::image_view  mColorAttachmentView;
-	avk::image_view  mDepthAttachmentView;
+	avk::renderpass  mRenderpassNoAA;
+	avk::renderpass  mRenderpassMS;
+	avk::renderpass  mRenderpassSSMS;
+	avk::framebuffer mFramebufferNoAA;
+	avk::framebuffer mFramebufferMS;
+	avk::framebuffer mFramebufferSSMS;
 	avk::image_view  mCombinedAttachmentView;
     avk::compute_pipeline mCopyToBackufferPipe;
     avk::compute_pipeline mClearCombinedAttachmentPipe;
@@ -2529,11 +2735,10 @@ private: // v== Member variables ==v
     avk::graphics_pipeline mTessPipelinePxFillNoaaWireframe;
     avk::graphics_pipeline mTessPipelinePxFillMultisampledWireframe;
     avk::graphics_pipeline mTessPipelinePxFillSupersampledWireframe;
-	avk::graphics_pipeline mSsResolvePipeline;
-	avk::sampler mSsResolveColorSampler;
-	avk::sampler mSsResolveDepthSampler;
-	float mConstOuterTessLevel = 16.0;
-	float mConstInnerTessLevel = 16.0;
+	avk::graphics_pipeline mFsQuadNoAAtoMSPipe;
+	avk::graphics_pipeline mFsQuadMStoSSPipe;
+	avk::sampler mFsQuadColorSampler;
+	avk::sampler mFsQuadDepthSampler;
 
 #if STATS_ENABLED
     bool mGatherPipelineStats      = true;
@@ -2546,25 +2751,26 @@ private: // v== Member variables ==v
 	std::vector<glm::vec3> mSpherePositions;
 
 	bool mStartMeasurement = false;
-	float mDistanceFromOrigin = 20.f;
+	float mDistanceFromOrigin = 22.0f;
 	bool mMeasurementInProgress = false;
 	double mMeasurementStartTime = 0.0;
 	double mMeasurementEndTime = 0.0;
 	std::vector<std::tuple<double, float, uint64_t, uint64_t, int>> mMeasurementFrameCounters;
 	bool mMoveCameraDuringMeasurements = true;
 	int mMeasurementMoveCameraSteps = 6;
-	float mMeasurementMoveCameraDelta = -5.0f;
+	float mMeasurementMoveCameraDelta = -3.0f;
 	int mMeasurementIndexLastFrame = -1;
 
 	avk::buffer mCountersSsbo;
 	std::array<uint32_t, 4> mCounterValues;
 	std::array<uint32_t, MAX_PATCH_SUBDIV_STEPS> mPatchesCreatedPerLevel;
+#if TEST_GATHER_PATCH_COUNTS
+	std::vector<std::array<uint32_t, MAX_PATCH_SUBDIV_STEPS>> mMeasurementPatchCounts;
+#endif
 	std::array<uint32_t, NUM_DIFFERENT_RENDER_VARIANTS> mNumPxFillPatchesCreated;
 
 	// Other, global settings, stored in common UBO:
     bool m2ndPassEnabled = false;
-    bool mAdaptivePxFill = false;
-    bool mUseMaxPatchResolutionDuringPxFill = true;
 
 	// Buffers for vertex pipelines:
 	avk::buffer mPositionsBuffer;
@@ -2601,6 +2807,11 @@ private: // v== Member variables ==v
 
 	avk::buffer mBigDataset;
 	uint32_t mDatasetSize = 0;
+
+	bool mEnableSampleShadingFor8xMS;
+	bool mEnableSampleShadingFor4xSS8xMS;
+	std::array<bool, 3> mRenderVariantDataTransferEnabled;
+	int  mOutputResultOfRenderVariantIndex;
 
 }; // vk_parametric_curves_app
 

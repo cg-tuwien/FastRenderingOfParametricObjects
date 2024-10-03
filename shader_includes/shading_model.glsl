@@ -90,7 +90,7 @@ vec3 gltf_dielectric_brdf(vec3 incoming, vec3 outgoing, vec3 normal, float rough
     return mix(diffuse, vec3(specular), fresnel);
 }
 
-vec3 shade(int matIndex, vec3 albedo, vec3 shadingUserParams, vec3 posWS, vec3 normalWS, vec2 texCoords SHADE_ADDITIONAL_PARAMS)
+vec3 shade(int matIndex, int renderVariant, vec3 albedo, vec3 shadingUserParams, vec3 posWS, vec3 normalWS, vec2 texCoords SHADE_ADDITIONAL_PARAMS)
 {
     if (matIndex < -5 || matIndex > 1000) {
 		return linear_rgb_to_srgb(vec3(1.0, 0.0, 1.0));
@@ -109,6 +109,10 @@ vec3 shade(int matIndex, vec3 albedo, vec3 shadingUserParams, vec3 posWS, vec3 n
  //       color = exposure * (brdf * max(0.0, dot(incoming, normalVS)) + base_color * ambient);
  //       return color;
  //   }
+
+#if ENABLE_HYBRID_TECHNIQUE
+    matIndex += renderVariant;
+#endif
 
     if (-1 == matIndex) { // ========== DEBUG VISUALIZATION BEGIN ============
 		float illu = max(0.2, dot(normalWS, normalize(vec3(1.0, 1.0, 1.0))));
@@ -151,7 +155,7 @@ vec3 shade(int matIndex, vec3 albedo, vec3 shadingUserParams, vec3 posWS, vec3 n
     if (matIndex <= -3) { // ========== NICE AND RED|GREEN|BLUE MATERIAL BEGIN ============
         vec3 outgoing = normalize(normalWS);
         vec3 base_color = srgb_to_linear_rgb(
-            matIndex == -3 ? vec3(0.2, 0.5, 1.0) :
+            matIndex == -5 ? vec3(0.2, 0.5, 1.0) :
             matIndex == -4 ? vec3(0.2, 1.0, 0.5) : vec3(1.0, 0.2, 0.5)
         );
         const vec3 incoming = normalize(vec3(1.23, 7.89, 4.56));

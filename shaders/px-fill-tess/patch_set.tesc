@@ -49,8 +49,6 @@ layout (location = 1) patch out PerPatchPayload
 
 layout(push_constant) uniform PushConstants
 {
-    float mConstOuterSubdivLevel;
-    float mConstInnerSubdivLevel;
     int   mPxFillParamsBufferOffset;
 }
 pushConstants;
@@ -61,19 +59,21 @@ void main()
 
     if (gl_InvocationID == 0)
     {
-        const uint pxFillId  = vert_in[0].mPxFillId;
-	    const uint objectId  = uPxFillParams.mElements[pxFillId].mObjectIdUserData[0];
-	    const uvec3 userData = uPxFillParams.mElements[pxFillId].mObjectIdUserData.yzw;
-        patch_out.mObjectId  = objectId;
-        patch_out.mUserData  = userData;
+        const uint pxFillId     = vert_in[0].mPxFillId;
+	    const uint objectId     = uPxFillParams.mElements[pxFillId].mObjectIdUserData[0];
+	    const uvec3 userData    = uPxFillParams.mElements[pxFillId].mObjectIdUserData.yzw;
+		const bool  useAdaptive = uObjectData.mElements[objectId].mUseAdaptiveDetail == 1; 
+        const vec2  tessLevels  = uObjectData.mElements[objectId].mTessAndSamplingSettings.xy;
+        patch_out.mObjectId     = objectId;
+        patch_out.mUserData     = userData;
 
-        if (ubo.mUseMaxPatchResolutionDuringPxFill) {
+        if (useAdaptive) {
             const float absoluteMin =  8.0;
             const float absoluteMax = 64.0;
-            const vec2 screenDists = uPxFillParams.mElements[pxFillId].mScreenDists.xy;
+            const vec2 screenDists = uPxFillParams.mElements[pxFillId].mScreenDistsHybridData.xy;
             const float threshold  = uObjectData.mElements[objectId].mLodAndRenderSettings.z;
-            const float outerTess = pushConstants.mConstOuterSubdivLevel;
-            const float innerTess = pushConstants.mConstInnerSubdivLevel;
+            const float innerTess = tessLevels[0];
+            const float outerTess = tessLevels[1];
 
             gl_TessLevelOuter[1] = clamp(outerTess * screenDists.x / min(threshold, outerTess), absoluteMin, absoluteMax);
             gl_TessLevelOuter[3] = clamp(outerTess * screenDists.x / min(threshold, outerTess), absoluteMin, absoluteMax);
@@ -84,13 +84,13 @@ void main()
             gl_TessLevelInner[1] = clamp(innerTess * screenDists.y / min(threshold, innerTess), absoluteMin, absoluteMax);
         }
         else {
-            gl_TessLevelOuter[0] = pushConstants.mConstOuterSubdivLevel;
-            gl_TessLevelOuter[1] = pushConstants.mConstOuterSubdivLevel;
-            gl_TessLevelOuter[2] = pushConstants.mConstOuterSubdivLevel;
-            gl_TessLevelOuter[3] = pushConstants.mConstOuterSubdivLevel;
+            gl_TessLevelOuter[0] = tessLevels[1];
+            gl_TessLevelOuter[1] = tessLevels[1];
+            gl_TessLevelOuter[2] = tessLevels[1];
+            gl_TessLevelOuter[3] = tessLevels[1];
 
-            gl_TessLevelInner[0] = pushConstants.mConstInnerSubdivLevel;
-            gl_TessLevelInner[1] = pushConstants.mConstInnerSubdivLevel;
+            gl_TessLevelInner[0] = tessLevels[0];
+            gl_TessLevelInner[1] = tessLevels[0];
         }
     }
 }
