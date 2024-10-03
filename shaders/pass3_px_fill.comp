@@ -1,0 +1,331 @@
+#version 460
+#extension GL_EXT_shader_16bit_storage                   : require
+#extension GL_EXT_shader_8bit_storage                    : require
+#extension GL_EXT_nonuniform_qualifier                   : require
+#extension GL_EXT_shader_image_int64                     : require
+#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
+#extension GL_GOOGLE_include_directive                   : enable
+#extension GL_KHR_shader_subgroup_arithmetic             : require
+#extension GL_KHR_shader_subgroup_ballot                 : require
+#extension GL_KHR_shader_subgroup_shuffle                : require
+#extension GL_KHR_shader_subgroup_shuffle_relative       : require
+#extension GL_EXT_debug_printf                           : enable
+
+// This is const (see static int get_px_fill_set_index(rendering_method aRenderMethod) -> case rendering_method::PointRendered_direct):
+#define POINT_RENDERED_DIRECT_INDEX 3
+
+// Possible values: [1...4]
+// Obviously, higher numbers might lead to better parallelization.
+// More groups can probably better utilize the shared memory, because shared memory is shared between 4 SMs anyways.
+#define COOPERATIVE_GROUPS 2
+
+#define STEP_SCALE_U 1.25
+#define STEP_SCALE_V 1.25
+
+layout(local_size_x = 32, local_size_y = 1, local_size_z = COOPERATIVE_GROUPS) in;
+#include "../shader_includes/host_device_shared.h"
+#include "../shader_includes/util/ui64_conv.glsl"
+#include "../shader_includes/util/glsl_helpers.glsl"
+#include "../shader_includes/types.glsl"
+#include "../shader_includes/common_ubo.glsl"
+#include "../shader_includes/material_handling.glsl"
+
+#if SHARED_MEM_LOCAL_RASTER
+#define LOCAL_FB_X 40
+#define LOCAL_FB_Y 40
+//shared uint64_t LocalFramebuffer[LOCAL_FB_X][LOCAL_FB_Y];
+
+struct fb_data
+{
+	vec2 mParams;
+	vec3 mNormal;
+	float mDepth;
+};
+shared fb_data LocalFramebuffer[LOCAL_FB_X][LOCAL_FB_Y];
+
+#endif
+
+// +------------------------------------------------------------------------------+
+// |   Bound Resources                                                            |
+// +------------------------------------------------------------------------------+
+// layout(set = 0, binding = 0) buffer is contained within common_ubo.glsl
+layout(set = 1, binding = 0) buffer SsboCounters { uint mCounters[4]; } uCounters;
+layout(set = 2, binding = 0) buffer ObjectData   { object_data mElements[]; }  uObjectData;
+layout(set = 2, binding = 1) buffer PxFillParams { px_fill_data mElements[]; } uPxFillParams; 
+layout(set = 2, binding = 2) buffer PxFillCount  { VkDrawIndirectCommand mDrawParams[]; } uPxFillCounts;
+layout(set = 3, binding = 0, r64ui) uniform restrict volatile u64image2D uCombinedAttachment;
+#if STATS_ENABLED
+layout(set = 3, binding = 1, r32ui) uniform restrict uimage2D   uHeatmapImage;
+#endif
+layout(set = 4, binding = 0) buffer BigDataset { dataset_sh_coeffs mEntries[]; } uBigDataset; 
+
+#include "../shader_includes/parametric_functions/shape_functions.glsl"
+#include "../shader_includes/parametric_curve_helpers.glsl"
+#include "../shader_includes/combined_attachment_shared.glsl"
+// Gotta define some defines before including shading_model.glsl
+#define SHADE_ADDITIONAL_PARAMS , vec2 dx, vec2 dy
+//#define SAMPLE textureGrad
+//#define SAMPLE_ADDITIONAL_PARAMS , dx, dy
+#define SAMPLE textureLod
+#define SAMPLE_ADDITIONAL_PARAMS , 0
+#include "../shader_includes/shading_model.glsl"
+
+// +------------------------------------------------------------------------------+
+// |   PushConstants                                                              |
+// +------------------------------------------------------------------------------+
+layout(push_constant) uniform PushConstants
+{
+    bool mGatherPipelineStats;
+} pushConstants;
+
+// +------------------------------------------------------------------------------+
+// |   Colhorrrse                                                                 |
+// +------------------------------------------------------------------------------+
+//#define MAX_COLORS 7
+//vec3 groupcolors[MAX_COLORS] = {
+//    vec3(0.37, 0.63, 0.28), // Existing color: Greenish
+//    vec3(0.75, 0.95, 0.75), // Existing color: Whitish
+//    vec3(0.1, 0.4, 0.15),   // Dark green
+//    vec3(0.2, 0.6, 0.3),    // Medium green
+//    vec3(0.45, 0.8, 0.55),  // Light green
+//    vec3(0.6, 0.9, 0.65),   // Pale green
+//    vec3(0.25, 0.7, 0.4)   // Bright green
+//};
+#define MAX_COLORS 23
+vec3 groupcolors[MAX_COLORS] = {
+    vec3(0.0, 0.6, 0.0),   // Dark Green
+    vec3(0.0, 0.7, 0.0),   // Green
+    vec3(0.0, 0.8, 0.2),   // Greenish Turquoise
+    vec3(0.0, 0.8, 0.4),   // Light Green
+    vec3(0.0, 0.8, 0.6),   // Medium Green
+    vec3(0.0, 0.8, 0.8),   // Cyan-Green
+    vec3(0.0, 0.7, 0.5),   // Greenish Cyan
+    vec3(0.0, 0.6, 0.4),   // Deep Green
+    vec3(0.0, 0.5, 0.3),   // Forest Green
+    vec3(0.0, 0.4, 0.2),   // Dark Forest Green
+    vec3(0.2, 0.6, 0.0),   // Greenish Olive
+    vec3(0.3, 0.7, 0.0),   // Lime Green
+    vec3(0.4, 0.8, 0.0),   // Chartreuse Green
+    vec3(0.5, 0.9, 0.0),   // Bright Green
+    vec3(0.6, 0.9, 0.3),   // Vivid Green
+    vec3(0.6, 0.9, 0.6),   // Light Lime Green
+    vec3(0.6, 0.8, 0.8),   // Pale Green
+    vec3(0.5, 0.7, 0.7),   // Greenish Cyan
+    vec3(0.4, 0.6, 0.6),   // Dark Cyan-Green
+    vec3(0.3, 0.5, 0.5),   // Deep Cyan-Green
+    vec3(0.2, 0.4, 0.4),   // Very Deep Cyan-Green
+    vec3(0.1, 0.3, 0.3),   // Extremely Deep Cyan-Green
+    vec3(0.0, 0.2, 0.2)    // Nearly Black Cyan-Green
+};
+
+// ################## point producer ###################
+
+// Calculates a point
+// @params u, v, curveIndex    Parametric parameters + which curve 
+// @param  translation         Translation for world space position 
+// @param  scale               Scale for world space position 
+// @param  posWS               OUT parameter, returns the point's world space position 
+// @param  isOff               OUT parameter, returns is_off_screen information 
+// @return The resulting viewport coordinates as vec3
+vec3 calcPoint(float u, float v, int curveIndex, uvec3 userData, mat4 tM, out vec3 posWS_untranslated, out vec3 posWS, out uint isOff) 
+{
+	// Start with world space:
+	vec4 rawWS = paramToWS(u, v, curveIndex, userData);
+	posWS_untranslated = rawWS.xyz;
+	vec4 traWS = tM * rawWS;
+	posWS = traWS.xyz;
+	vec4 posCS = toCS(traWS);
+	
+	// Is this point even inside the view frustum?
+	isOff = is_off_screen(posCS); 
+
+	// Onto the big screen:
+	vec3   vpc = toScreen(posCS); 
+	return vpc;
+}
+
+// ################## compute shader main ###################
+void main()
+{
+#if SHARED_MEM_LOCAL_RASTER
+	for (uint x = gl_LocalInvocationID.x; x < LOCAL_FB_X; x += gl_WorkGroupSize.x) {
+		for (uint y = gl_LocalInvocationID.y; y < LOCAL_FB_Y; y += gl_WorkGroupSize.y) {
+			LocalFramebuffer[x][y] = fb_data(vec2(0.0), vec3(0.0), 1.0);
+		}
+	}
+#endif
+
+	uint pxFillId = gl_WorkGroupID.x + MAX_INDIRECT_DISPATCHES * POINT_RENDERED_DIRECT_INDEX;
+//	if (pxFillId != 0) return;
+
+	// in: 
+	const uint  objectId             = uPxFillParams.mElements[pxFillId].mObjectIdUserData[0];
+	const uvec3  userData            = uPxFillParams.mElements[pxFillId].mObjectIdUserData.yzw;
+	const mat4   tM                  = uObjectData.mElements[objectId].mTransformationMatrix;
+	const int   curveIndex           = uObjectData.mElements[objectId].mCurveIndex;
+	const int   matIndex             = uObjectData.mElements[objectId].mMaterialIndex;
+	const bool  useAdaptive          = uObjectData.mElements[objectId].mUseAdaptiveDetail == 1;
+	const vec4  lodAndRenderSettings = uObjectData.mElements[objectId].mLodAndRenderSettings;
+	const vec2  epsilons             = uObjectData.mElements[objectId].mLodAndRenderSettings.xy;
+	const vec2  samplingScalers      = uObjectData.mElements[objectId].mTessAndSamplingSettings.zw;
+
+	vec2 paramsStart = vec2(
+		uPxFillParams.mElements[pxFillId].mParams[0],
+		uPxFillParams.mElements[pxFillId].mParams[2]
+	);
+
+	vec2 paramsTo = vec2(
+		uPxFillParams.mElements[pxFillId].mParams[1],
+		uPxFillParams.mElements[pxFillId].mParams[3]
+	);
+
+	vec2 paramsRange = paramsTo - paramsStart;
+	paramsStart -= epsilons * paramsRange;
+	paramsTo    += epsilons * paramsRange;
+	paramsRange = paramsTo - paramsStart;
+	
+	const float screenSpaceThreshold = lodAndRenderSettings.z;
+
+	// Let's see how many iterations we need in each direction:
+	const float numPixelProducingInvocs = float(gl_WorkGroupSize.x - 1);
+	float numIterationsU = useAdaptive
+		? max(floor((uPxFillParams.mElements[pxFillId].mScreenDistsHybridData.x * STEP_SCALE_U + numPixelProducingInvocs - 1) * samplingScalers[0] / numPixelProducingInvocs), 1.0)
+		:     floor((screenSpaceThreshold                                       * STEP_SCALE_U + numPixelProducingInvocs - 1) * samplingScalers[0] / numPixelProducingInvocs);
+	numIterationsU = max(float(COOPERATIVE_GROUPS), numIterationsU);
+//	debugPrintfEXT("mPatchTargetResolution[%f], numPixelProducingInvocs[%f], numIterationsU[%f]", pushConstants.mPatchTargetResolution, numPixelProducingInvocs, numIterationsU);
+
+	// With that info, calc our deltas:
+	float iterationDeltaU = paramsRange[0] / numIterationsU;
+	float deltaU = iterationDeltaU / numPixelProducingInvocs;
+	float deltaV = useAdaptive
+		? paramsRange[1] / max(uPxFillParams.mElements[pxFillId].mScreenDistsHybridData.y * STEP_SCALE_V - 1.0, 1.0)  // -1.0 because we need to overshoot by one
+		: paramsRange[1] /    (screenSpaceThreshold                                       * STEP_SCALE_V - 1.0); // -1.0 because we need to overshoot by one
+//	debugPrintfEXT("iterationDeltaU[%f], deltaU[%f], deltaV[%f]", iterationDeltaU, deltaU, deltaV);
+
+	deltaV /= samplingScalers[1];
+	iterationDeltaU = deltaU * numPixelProducingInvocs;
+
+#if SHARED_MEM_LOCAL_RASTER
+	const ivec2 minScreenCoords = ivec2(uPxFillParams.mElements[pxFillId].mScreenDists.zw);
+#endif
+
+	const float vTarget = paramsRange[1] + deltaV; // Gotta run for +1 because we're wasting te top-most row.
+	const float minDeltaV      = deltaV * 0.5;
+	const float maxDeltaV      = deltaV * 2.0;
+	const float deltaVIncrease = deltaV * 0.1666;
+	const float deltaVDecrease = deltaV * 0.3333;
+
+	const float myInvocIdx  = float(gl_SubgroupInvocationID);
+	// TODO: Potential hazard: !!!!Floating point precision!!!! 
+	//       If it gets too small, then the baaaad things could happen.
+	//       E.g., what if the deltaU/deltaV is so small, that adding it doesn't change the value anymore??! :scream:
+	for (float iu = float(gl_LocalInvocationID.z); iu < numIterationsU; iu += float(COOPERATIVE_GROUPS)) {
+		const float u = paramsStart[0]   +   iu * iterationDeltaU   +   deltaU * myInvocIdx;
+		float       v = paramsStart[1];
+		// Calculate the "bottom"-most row now, because we need that values for normals calculation in subsequent loop iterations:
+		vec3 wsPing, wsPing_untranslated;
+		uint offPing;
+		vec3 vpcPing = calcPoint(u, v, curveIndex, userData, tM, /* out: */ wsPing_untranslated, /* out: */ wsPing, /* out: */ offPing);
+
+		// In order to calclate the normal, steal from neighbor:
+		vec3 wsNeighbor  = subgroupShuffleDown(wsPing , 1); // subgroupShuffle(wsPing, clamp(gl_SubgroupInvocationID + 1, 0, gl_WorkGroupSize.x - 1));
+		vec3 vpcNeighbor = subgroupShuffleDown(vpcPing, 1);
+
+		// Now do all the iterations ("rows") in v-direction:
+		for (float iv = deltaV; iv < vTarget; iv += deltaV) {
+			v = paramsStart[1] + iv;
+			// Calculate the next row...
+			vec3 wsPong, wsPong_untranslated;
+			uint offPong;
+			vec3 vpcPong = calcPoint(u, v, curveIndex, userData, tM, /* out: */ wsPong_untranslated, /* out: */ wsPong, /* out: */ offPong);
+
+			bool tryAgain = false;
+//			if (useAdaptive) { NOTE: The old meaning of "useAdaptive" was that step sizes would be adapted => TO BE REFACTORED!
+//				// Adaptive deltaV:
+//				float pxDist = dot(vpcPong.xy - vpcPing.xy, vpcPong.xy - vpcPing.xy);
+//				if (isnan(pxDist)) pxDist = 0.0;
+//				const float subgroupMaxDist = subgroupMax(pxDist);
+//				const bool  distTooLarge    = subgroupMaxDist > 1.4 && deltaV > minDeltaV;
+//				const bool  distABitSmall   = subgroupMaxDist < 0.7 && deltaV < maxDeltaV;
+//				if (distTooLarge) {
+//					iv -= deltaV; // Try again
+//					deltaV = clamp(deltaV - deltaVDecrease, minDeltaV, maxDeltaV);
+//					iv += deltaV; // ...but slower.
+//					tryAgain = true;
+//				}
+//			}
+
+			if (!tryAgain) {
+				// Attention: The very last invocations do NOT produce pixels!!!! (We have to "waste" them for calculating normals)
+				if (gl_SubgroupInvocationID < gl_WorkGroupSize.x - 1) {
+				
+					// ...but write out the previous one (now with normals information):
+					vec3 n = calculateNormalWS(wsPing, wsNeighbor, wsPong, curveIndex, userData);
+					bool backfaceCull = ubo.mResolutionAndCulling.z == 1 && toNDC(toCS(vec4(n, 0.0))).z < 0.0;
+					if (!backfaceCull) {
+						// PRODUCE PIXEL:
+//						vec3 myColor = groupcolors[pxFillId % MAX_COLORS];
+						vec3 myColor = groupcolors[int(paramsStart.x * 1000.0 + paramsStart.y * 123.0) % MAX_COLORS];
+
+						vec2 dfdx = vec2(deltaU, 0.0);
+						vec2 dfdy = vec2(0.0, deltaV);
+						// Gotta scale dfdx and dfdy by their pixel distances:
+						dfdx /= (vpcPong.xy     - vpcPing.xy);
+						dfdy /= (vpcNeighbor.xy - vpcPing.xy);
+
+#if SHARED_MEM_LOCAL_RASTER
+//						uint64_t data = getUint64ForFramebuffer(vpcPing.z, shade(matIndex, myColor, wsPing.xyz, n, vec2(u, v), dfdx, dfdy));
+						ivec2 localFbCoords = ivec2(mix(minScreenCoords, vpcPing.xy, ubo.mDebugSliders[0])) - minScreenCoords;
+						if (localFbCoords.x >= 0 && localFbCoords.x < LOCAL_FB_X && localFbCoords.y >= 0 && localFbCoords.y < LOCAL_FB_Y) {
+//							LocalFramebuffer[localFbCoords.x][localFbCoords.y] = data;
+							LocalFramebuffer[localFbCoords.x][localFbCoords.y] = fb_data(vec2(u, v), n, vpcPing.z);
+						}
+#else
+						float depth = vpcPing.z;
+						vec3  color = shade(matIndex, /* const render variant index of POINT_direct: */ 3, myColor, getParamShadingUserParams(u, v, curveIndex, userData, wsPing_untranslated, objectId), wsPing, n, getParamTexCoords(u, v, curveIndex, userData, wsPing), dfdx, dfdy);
+#if SUPERSAMPLING
+						writeSupersampled(ivec2(vpcPing.xy), depth, vec4(color, 1.0));
+#else 
+						writeToCombinedAttachment(ivec2(vpcPing.xy), depth, color); // vec4(dfdx, 0.0, 1.0));
+#endif
+#endif
+					}
+				}
+
+				// Do the ping-pong, then goto next v row:
+				wsPing = wsPong;
+				offPing = offPong;
+				vpcPing = vpcPong;
+			}
+			
+			wsNeighbor  = subgroupShuffleDown(wsPing , 1);
+			vpcNeighbor = subgroupShuffleDown(vpcPing, 1);
+//			if (distABitSmall) {
+//				deltaV = clamp(deltaV + deltaVIncrease, minDeltaV, maxDeltaV); // We miiiight try faster next iteration.
+//			}
+		}
+	}
+
+#if SHARED_MEM_LOCAL_RASTER
+	for (uint x = gl_LocalInvocationID.x; x < LOCAL_FB_X; x += gl_WorkGroupSize.x) {
+		for (uint y = gl_LocalInvocationID.y; y < LOCAL_FB_Y; y += gl_WorkGroupSize.y) {
+			ivec2 globalFbCoords = ivec2(x, y) + minScreenCoords;
+			fb_data data = LocalFramebuffer[x][y];
+			if (data.mNormal != vec3(0.0)) { // Such a normal means: No data written
+				vec2 params = data.mParams;
+				vec3 n = data.mNormal;
+//				vec2 paramsDiff = ; // TODO: Other indicies maybe?!
+				vec2 dfdx = LocalFramebuffer[(x & 0x1) == 0 ? x+1 : x-1][y].mParams - params;
+				vec2 dfdy = LocalFramebuffer[x][(y & 0x1) == 0 ? y+1 : y-1].mParams - params;
+				float depth = data.mDepth;
+				vec3 myColor = groupcolors[pxFillId % MAX_COLORS];
+
+				vec4 posWS = paramToWS(u, v, curveIndex, userData)
+
+				uint64_t data = getUint64ForFramebuffer(depth, shade(matIndex, myColor, getParamShadingUserParams(params.x, params.y, curveIndex, userData, posWS_untranslated, objectId), n, getParamTexCoords(params.x, params.y, curveIndex, userData, wsPing), dfdx, dfdy));
+				writeToCombinedAttachment(globalFbCoords, data);
+			}
+		}
+	}
+#endif
+}

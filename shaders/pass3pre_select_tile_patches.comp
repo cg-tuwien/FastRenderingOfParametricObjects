@@ -1,0 +1,67 @@
+#version 460
+#extension GL_EXT_shader_16bit_storage                   : require
+#extension GL_EXT_shader_8bit_storage                    : require
+#extension GL_EXT_nonuniform_qualifier                   : require
+#extension GL_EXT_shader_image_int64                     : require
+#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
+#extension GL_GOOGLE_include_directive                   : enable
+#extension GL_KHR_shader_subgroup_arithmetic             : require
+#extension GL_KHR_shader_subgroup_ballot                 : require
+#extension GL_KHR_shader_subgroup_shuffle                : require
+#extension GL_KHR_shader_subgroup_shuffle_relative       : require
+#extension GL_EXT_debug_printf                           : enable
+
+// This is const (see static int get_px_fill_set_index(rendering_method aRenderMethod) -> case rendering_method::PointRendered_4xSS_local_fb):
+#define POINT_RENDERED_4XSS_LOCAL_FB_INDEX 4
+
+layout(local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
+#include "../shader_includes/host_device_shared.h"
+#include "../shader_includes/util/ui64_conv.glsl"
+#include "../shader_includes/util/glsl_helpers.glsl"
+#include "../shader_includes/types.glsl"
+#include "../shader_includes/common_ubo.glsl"
+
+// +------------------------------------------------------------------------------+
+// |   Bound Resources                                                            |
+// +------------------------------------------------------------------------------+
+// layout(set = 0, binding = 0) buffer is contained within common_ubo.glsl
+layout(set = 1, binding = 0) buffer SsboCounters { uint mCounters[4]; } uCounters;
+layout(set = 2, binding = 0) buffer ObjectData   { object_data mElements[]; }  uObjectData;
+layout(set = 2, binding = 1) buffer PxFillParams { px_fill_data mElements[]; } uPxFillParams; 
+layout(set = 2, binding = 2) buffer PxFillCount  { VkDrawIndirectCommand mDrawParams[]; } uPxFillCounts;
+layout(set = 3, binding = 0, r64ui) uniform restrict volatile u64image2D uCombinedAttachment;
+#if STATS_ENABLED
+layout(set = 3, binding = 1, r32ui) uniform restrict uimage2D   uHeatmapImage;
+#endif
+layout(set = 4, binding = 0) buffer TilePatchesBuffer { uint mPatchIndices[]; } uTilePatches;
+
+// ################## compute shader main ###################
+void main()
+{
+	// Go over all the patches => store into uTilePatches at the correct locations
+	const uint numPatches  = uPxFillCounts.mDrawParams[POINT_RENDERED_4XSS_LOCAL_FB_INDEX].instanceCount;
+	const uvec2 tileSizes  = uvec2(PX_FILL_LOCAL_FB_TILE_SIZE_X, PX_FILL_LOCAL_FB_TILE_SIZE_Y);
+	const uvec2 resolution = uvec2(imageSize(uCombinedAttachment));
+	const uvec2 numTiles   = uvec2(resolution.x/PX_FILL_LOCAL_FB_TILE_SIZE_X, resolution.y/PX_FILL_LOCAL_FB_TILE_SIZE_Y);
+	
+	for (uint p = gl_GlobalInvocationID.x; p < numPatches; p += gl_WorkGroupSize.x * 128 /* <-- because we made a dispatch(128u, 1u, 1u) */) {
+		uint elementIndex = p + MAX_INDIRECT_DISPATCHES * POINT_RENDERED_4XSS_LOCAL_FB_INDEX;
+		// Bounds check: 
+		ivec2 minScreenCoords = ivec2(uPxFillParams.mElements[elementIndex].mScreenMinMax.xy);
+		ivec2 maxScreenCoords = ivec2(uPxFillParams.mElements[elementIndex].mScreenMinMax.zw);
+		// Calculate x and y screen bounds IN TERMS OF TILES:
+		uvec2 minTileCoords = minScreenCoords/tileSizes;
+		uvec2 maxTileCoords = maxScreenCoords/tileSizes;
+//		debugPrintfEXT("pxFillId[%u] -> minTileCoords[%d, %d], maxTileCoords[%d, %d]", p,  minTileCoords.x, minTileCoords.y, maxTileCoords.x, maxTileCoords.y);
+		for (uint y = minTileCoords.y; y <= maxTileCoords.y; ++y) {
+			for (uint x = minTileCoords.x; x <= maxTileCoords.x; ++x) {
+				const uint tileIndex = (y * numTiles.x + x) * MAX_PATCHES_PER_TILE;
+				const uint insertIndex = atomicAdd(uTilePatches.mPatchIndices[tileIndex], 1) + 1;
+				uTilePatches.mPatchIndices[tileIndex + insertIndex] = elementIndex;
+//				if (x == 43 && y == 26 && insertIndex > 100)
+//					debugPrintfEXT("x[%d] + y[%d], numTiles[%d, %d] -> tileIndex[%u], insertIndex[%u]", x, y, numTiles.x, numTiles.y, tileIndex, insertIndex);
+//				debugPrintfEXT("tileIndex[%u], insertIndex[%u], pxFillId[%u]", tileIndex, insertIndex, p);
+			}
+		}
+	}
+}

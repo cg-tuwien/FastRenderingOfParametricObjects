@@ -1,0 +1,213 @@
+#version 460
+#extension GL_EXT_shader_16bit_storage                   : require
+#extension GL_EXT_shader_8bit_storage                    : require
+#extension GL_EXT_mesh_shader                            : require
+#extension GL_EXT_nonuniform_qualifier                   : require
+#extension GL_EXT_shader_image_int64                     : require
+#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
+#extension GL_GOOGLE_include_directive                   : enable
+#extension GL_ARB_shader_draw_parameters                 : require
+#extension GL_KHR_shader_subgroup_arithmetic             : require
+#extension GL_KHR_shader_subgroup_ballot                 : require
+#extension GL_KHR_shader_subgroup_shuffle                : require
+#extension GL_KHR_shader_subgroup_vote                   : require
+#extension GL_EXT_debug_printf                           : enable
+
+layout (constant_id = 2) const uint NUM_MESH_SHADER_INVOCATIONS_X = 1;
+layout (constant_id = 3) const uint NUM_MESH_SHADER_INVOCATIONS_Y = 1;
+layout(local_size_x = 5, local_size_y = 5, local_size_z = 1) in;
+
+#include "../shader_includes/util/ui64_conv.glsl"
+#include "../shader_includes/util/glsl_helpers.glsl"
+#include "../shader_includes/types.glsl"
+#include "../shader_includes/param/shape_functions.glsl"
+#include "../shader_includes/common_ubo.glsl"
+#include "../shader_includes/parametric_curve_helpers.glsl"
+#include "../shader_includes/task_mesh_shared_2nd.glsl"
+
+#define MAX_COLORS 7
+vec3 groupcolors[MAX_COLORS] = {
+    vec3(0.7, 0.2, 0.2),
+    vec3(0.2, 0.5, 0.7),
+    vec3(0.9, 0.6, 0.1),
+    vec3(0.5, 0.3, 0.8),
+    vec3(0.8, 0.4, 0.6),
+    vec3(0.3, 0.7, 0.5),
+    vec3(0.6, 0.2, 0.9)
+};
+
+// ###### COMBINED ATTACHMENT #############################
+layout(set = 1, binding = 0, r64ui) uniform restrict u64image2D uCombinedAttachment;
+// -------------------------------------------------------
+
+// ###### INDIIRECT DRAW PARAMS ###########################
+layout(set = 2, binding = 0) buffer DrawMeshTasksParameters { indirect_mesh_task_parameters mValues[]; } uDrawMeshTasksParameters; 
+layout(set = 2, binding = 1) buffer DrawMeshTasksDrawCount  { uint mValue;  } uDrawMeshTasksDrawCount;
+// --------------------------------------------------------
+
+// A struct to hold auxiliary data of the neighboring invocation:
+struct NeighborData 
+{
+	uint  invocationIndex;
+	vec3  screenCoords;
+	ivec2 pixelDist;
+};
+
+bool requiresSeparateMeshInvoc(float pxArea) 
+{
+	return pxArea > 256.0;
+}
+
+shared uint sSpawnIndex;
+
+void main()
+{
+	if (pushConstants.mGatherPipelineStats) {
+		atomicAdd(uCounters.mCounters[2], 1);
+	}
+
+	sSpawnIndex = 0;
+
+	// We split our uv parameter range into x-times-y GROUP-TILES:
+	const vec3  translWS     = uDrawMeshTasksParameters.mValues[gl_DrawID].mTranslationAndCurveIndex.xyz;
+	const int   curveIndex   = floatBitsToInt(uDrawMeshTasksParameters.mValues[gl_DrawID].mTranslationAndCurveIndex.w);
+	const vec2  from         = vec2(uDrawMeshTasksParameters.mValues[gl_DrawID].mParams[0].mFrom, uDrawMeshTasksParameters.mValues[gl_DrawID].mParams[1].mFrom);
+	const vec2  to           = vec2(uDrawMeshTasksParameters.mValues[gl_DrawID].mParams[0].mTo  , uDrawMeshTasksParameters.mValues[gl_DrawID].mParams[1].mTo  );
+//	debugPrintfEXT("Indirect draw call with gl_DrawID[%u] and parameters (%f,%f) -> (%f,%f)", gl_DrawID, from.x, from.y, to.x, to.y);
+	const vec2  quadStep     = (to - from) / 2.0;
+	const vec2  invocStep    = quadStep    / vec2(gl_WorkGroupSize.xy - uvec2(1, 1));
+	const vec2  halfQuadStep = quadStep * 0.5;
+//	debugPrintfEXT("gl_WorkGroupSize[%u, %u]", gl_WorkGroupSize.x, gl_WorkGroupSize.y);
+
+	NeighborData neighborX, neighborY, neighborXY;
+	uint neighborShiftX  = gl_LocalInvocationID.x + 1;
+	if (neighborShiftX  >= gl_WorkGroupSize.x) { neighborShiftX = 0; }
+	uint neighborShiftY  = gl_LocalInvocationID.y + 1;
+	if (neighborShiftY  >= gl_WorkGroupSize.y) { neighborShiftY = 0; }
+	neighborX.invocationIndex  = calcInvocationIndex(neighborShiftX, gl_LocalInvocationID.y);
+	neighborY.invocationIndex  = calcInvocationIndex(gl_LocalInvocationID.x, neighborShiftY);
+	neighborXY.invocationIndex = calcInvocationIndex(neighborShiftX, neighborShiftY);
+
+	vec2  quadFrom[4]    = { from, from + vec2(quadStep.x, 0.0), from + vec2(0.0, quadStep.y), from + quadStep };
+	float quadArea[4]    = { 0.0, 0.0, 0.0, 0.0 };
+	bool  quadSpawned[4] = { false, false, false, false };
+	bool  anySpawned     = false;
+
+	for (int q = 0; q < 4; ++q) {
+		// With each invocation, perform a sample to see how far apart the pixels are
+		vec2  invocParam   = quadFrom[q] + (invocStep * vec2(gl_LocalInvocationID.xy));
+		vec3  posWS        = paramToWS(invocParam.x, invocParam.y, curveIndex, translWS);
+		vec4  posCS        = toCS(posWS);
+
+		uint isOff = is_off_screen(posCS); 
+		bool isInsideFrustum = isOff == 0;
+
+		vec3  vpc          = toScreen(posCS);
+		vec3  screenCoords = vec3(vpc.xy, 0.0);
+
+		uint64_t depthEncoded = depth_to_ui64(vpc.z);
+		uint myInvocationIndex = calcInvocationIndex(gl_LocalInvocationID.x, gl_LocalInvocationID.y); // <-- must result in the same as gl_LocalInvocationIndex
+		uint64_t colorEncoded = color_to_ui64(vec4(groupcolors[myInvocationIndex % MAX_COLORS], 1.0));
+		uint64_t data = combine_depth_and_color(depthEncoded, colorEncoded);
+		imageAtomicMin(uCombinedAttachment, ivec2(screenCoords), data);
+
+		// ### SUBGROUP OPS:
+		neighborX.screenCoords = subgroupShuffle(screenCoords, neighborX.invocationIndex);
+		neighborY.screenCoords = subgroupShuffle(screenCoords, neighborY.invocationIndex);
+		neighborXY.screenCoords = subgroupShuffle(screenCoords, neighborXY.invocationIndex);
+		float triangleArea0    = length(cross(neighborX.screenCoords - screenCoords, screenCoords - neighborY.screenCoords)) * 0.5;
+		float triangleArea1    = length(cross(neighborX.screenCoords - neighborXY.screenCoords, neighborXY.screenCoords - neighborY.screenCoords)) * 0.5;
+		float numPixels        = triangleArea0 + triangleArea1;
+			
+		// Sum with all its neighbors
+		float subqArea = numPixels 
+						+ subgroupShuffle(numPixels, neighborX.invocationIndex)
+						+ subgroupShuffle(numPixels, neighborY.invocationIndex)
+						+ subgroupShuffle(numPixels, neighborXY.invocationIndex);
+
+		bool isDeciderInvoc = (gl_LocalInvocationID.x == 0 || gl_LocalInvocationID.x == 2) && (gl_LocalInvocationID.y == 0 || gl_LocalInvocationID.y == 2);
+		bool shouldSpawn    = isDeciderInvoc && requiresSeparateMeshInvoc(subqArea) && isInsideFrustum;
+		bool doSpawn        = subgroupAny(shouldSpawn);
+//		bool doSpawn        = subgroupAll(shouldSpawn);
+
+		if (doSpawn && isDeciderInvoc) {
+//			debugPrintfEXT("Spawning at level 0 for numPixels[%f], subqArea[%f]", numPixels, subqArea);
+
+			uint insertIndex = atomicAdd(sSpawnIndex, 1);
+			// x:
+			payload[insertIndex].mParams[0].mFrom          = invocParam.x;
+			payload[insertIndex].mParams[0].mTo            = invocParam.x + halfQuadStep.x;
+			// y:
+			payload[insertIndex].mParams[1].mFrom          = invocParam.y;
+			payload[insertIndex].mParams[1].mTo            = invocParam.y + halfQuadStep.y;
+
+			payload[insertIndex].mTranslationAndCurveIndex = uDrawMeshTasksParameters.mValues[gl_DrawID].mTranslationAndCurveIndex;
+			payload[insertIndex].mTaskGroupIndex           = calcGroupIndex(gl_WorkGroupID.x, gl_WorkGroupID.y); // TODO: maybe gl_LocalInvocationID more interesting?
+		}
+
+		if (doSpawn) {
+			quadSpawned[q] = true;
+			anySpawned = true;
+		}
+
+		if (gl_LocalInvocationID.x == 4 || gl_LocalInvocationID.y == 4) {
+			numPixels = 0; // Cancel out the last row and column to  not distort the results!
+		}
+		// Sync and sum quadrant, in preparation for higher level:
+		quadArea[q] = subgroupAdd(numPixels);
+	}
+
+	// Perform a check if we SHOULD spawn here (regardless of whether or not 'anySpawned' has been set or not)
+	bool shouldSpawnHere = false;
+	if (gl_LocalInvocationID.x < 4 && gl_LocalInvocationID.y < 1) { // (only 4 subgroups have still work to do)
+		shouldSpawnHere = requiresSeparateMeshInvoc(quadArea[gl_LocalInvocationID.x]);
+	}
+	bool weShould = subgroupAny(shouldSpawnHere);
+
+	if ((anySpawned || weShould)) { // => spawn all remaining
+		if (gl_LocalInvocationID.x < 4 && gl_LocalInvocationID.y < 1) {
+			if (!quadSpawned[gl_LocalInvocationID.x]) { 
+//				debugPrintfEXT("Spawning at level 1");
+
+				uint insertIndex = atomicAdd(sSpawnIndex, 1);
+				// x:
+				payload[insertIndex].mParams[0].mFrom          = quadFrom[gl_LocalInvocationID.x].x;
+				payload[insertIndex].mParams[0].mTo            = quadFrom[gl_LocalInvocationID.x].x + quadStep.x;
+				// y:
+				payload[insertIndex].mParams[1].mFrom          = quadFrom[gl_LocalInvocationID.x].y;
+				payload[insertIndex].mParams[1].mTo            = quadFrom[gl_LocalInvocationID.x].y + quadStep.y;
+
+				payload[insertIndex].mTranslationAndCurveIndex = uDrawMeshTasksParameters.mValues[gl_DrawID].mTranslationAndCurveIndex;
+				payload[insertIndex].mTaskGroupIndex           = calcGroupIndex(gl_WorkGroupID.x, gl_WorkGroupID.y); // TODO: maybe gl_LocalInvocationID more interesting?
+			}
+		}
+	}
+	else {
+		// Only in this case, spawn one the one and only!
+		if (gl_LocalInvocationID.x == 0) {
+//			debugPrintfEXT("Spawning at level 2");
+
+			uint insertIndex = atomicAdd(sSpawnIndex, 1);
+			payload[insertIndex].mParams[0]		           = uDrawMeshTasksParameters.mValues[gl_DrawID].mParams[0];
+			payload[insertIndex].mParams[1]		           = uDrawMeshTasksParameters.mValues[gl_DrawID].mParams[1];
+			payload[insertIndex].mTranslationAndCurveIndex = uDrawMeshTasksParameters.mValues[gl_DrawID].mTranslationAndCurveIndex;
+			payload[insertIndex].mTaskGroupIndex           = calcGroupIndex(gl_WorkGroupID.x, gl_WorkGroupID.y); // TODO: maybe gl_LocalInvocationID more interesting?
+		}
+	}
+
+	barrier();
+	memoryBarrier();
+
+	EmitMeshTasksEXT(sSpawnIndex, 1, 1);
+	// ^ Additional info from the VK_EXT_mesh_shader spec:
+	// 
+	// > The arguments are taken from the first invocation in each workgroup. Any invocation must 
+	// > execute this instruction exactly once and under uniform control flow. This instruction 
+	// > also serves as an OpControlBarrier instruction, and also performs and adheres to the 
+	// > description and semantics of an OpControlBarrier instruction with the 'Execution' and 
+	// > 'Memory' operands set to Workgroup and the 'Semantics' operand set to a combination of 
+	// > WorkgroupMemory and AcquireRelease. Ceases all further processing: Only instructions 
+	// > executed before OpEmitMeshTasksEXT have observable side effects.
+	// > 
+	// > This instruction must be the last instruction in a block.
+}

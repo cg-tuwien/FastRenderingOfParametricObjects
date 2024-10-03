@@ -1,0 +1,263 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug_Vulkan|x64">
+      <Configuration>Debug_Vulkan</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Publish_Vulkan|x64">
+      <Configuration>Publish_Vulkan</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release_Vulkan|x64">
+      <Configuration>Release_Vulkan</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="host_code\big_dataset.cpp" />
+    <ClCompile Include="host_code\ImGuizmo.cpp" />
+    <ClCompile Include="host_code\main.cpp" />
+    <ClCompile Include="precompiled_headers\cg_stdafx.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Publish_Vulkan|x64'">Create</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug_Vulkan|x64'">Create</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release_Vulkan|x64'">Create</PrecompiledHeader>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="host_code\big_dataset.hpp" />
+    <ClInclude Include="host_code\helpers.hpp" />
+    <ClInclude Include="host_code\ImGuizmo.h" />
+    <ClInclude Include="host_code\perf_tests\test_fiber_curves.hpp" />
+    <ClInclude Include="host_code\perf_tests\test_knit_yarn.hpp" />
+    <ClInclude Include="host_code\perf_tests\test_seashell.hpp" />
+    <ClInclude Include="host_code\types.hpp" />
+    <ClInclude Include="precompiled_headers\cg_stdafx.hpp" />
+    <ClInclude Include="precompiled_headers\cg_targetver.hpp" />
+    <ClInclude Include="shader_includes\host_device_shared.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="Auto-Vk-Toolkit\visual_studio\auto_vk_toolkit\auto_vk_toolkit.vcxproj">
+      <Project>{602f842f-50c1-466d-8696-1707937d8ab9}</Project>
+    </ProjectReference>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Auto-Vk-Toolkit\assets\sponza_and_terrain.fscene" />
+    <None Include="shaders\clear_r64_image.comp" />
+    <None Include="shaders\copy_to_backbuffer.comp" />
+    <None Include="shaders\copy_to_combined_attachment.comp" />
+    <None Include="shaders\full_screen_quad_from_combined_attachment.frag" />
+    <None Include="shaders\pass1_init_knityarn.comp" />
+    <None Include="shaders\pass1_init_patches.comp" />
+    <None Include="shaders\pass1_init_shbrain.comp" />
+    <None Include="shaders\pass2x_patch_lod.comp" />
+    <None Include="shaders\pass3pre_select_tile_patches.comp" />
+    <None Include="shaders\pass3_px_fill.comp" />
+    <None Include="shaders\frag_out.frag" />
+    <None Include="shaders\pass3_px_fill_local_fb.comp" />
+    <None Include="shaders\px-fill-tess\patch_go.tese" />
+    <None Include="shaders\px-fill-tess\patch_ready.vert" />
+    <None Include="shaders\px-fill-tess\patch_set.tesc" />
+    <None Include="shaders\simple.vert" />
+    <None Include="shaders\full_screen_quad.frag" />
+    <None Include="shaders\full_screen_quad.vert" />
+    <None Include="shader_includes\combined_attachment_shared.glsl" />
+    <None Include="shader_includes\common_ubo.glsl" />
+    <None Include="shader_includes\material_handling.glsl" />
+    <None Include="shader_includes\parametric_curve_helpers.glsl" />
+    <None Include="shader_includes\parametric_functions\curtain_fiber_curve.glsl" />
+    <None Include="shader_includes\parametric_functions\curtain_yarn_curve.glsl" />
+    <None Include="shader_includes\parametric_functions\giant_worm.glsl" />
+    <None Include="shader_includes\parametric_functions\johis_heart.glsl" />
+    <None Include="shader_includes\parametric_functions\palm_tree_trunk.glsl" />
+    <None Include="shader_includes\parametric_functions\plane.glsl" />
+    <None Include="shader_includes\parametric_functions\seashells.glsl" />
+    <None Include="shader_includes\parametric_functions\shape_functions.glsl" />
+    <None Include="shader_includes\parametric_functions\sh_glyph.glsl" />
+    <None Include="shader_includes\parametric_functions\single_fiber_curve.glsl" />
+    <None Include="shader_includes\parametric_functions\single_yarn_curve.glsl" />
+    <None Include="shader_includes\parametric_functions\spiky_heart.glsl" />
+    <None Include="shader_includes\shading_model.glsl" />
+    <None Include="shader_includes\types.glsl" />
+    <None Include="shader_includes\util\glsl_helpers.glsl" />
+    <None Include="shader_includes\util\ui64_conv.glsl" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Auto-Vk-Toolkit\assets\3rd_party\fonts\JetBrainsMono-2.304\fonts\ttf\JetBrainsMono-Regular.ttf">
+      <FileType>Document</FileType>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="assets\checkerboard-pattern.jpg" />
+    <Image Include="assets\po-blue-curtain.png" />
+    <Image Include="assets\po-fiber-curve-single.png" />
+    <Image Include="assets\po-giant-worm.png" />
+    <Image Include="assets\po-johis-heart.png" />
+    <Image Include="assets\po-palm-tree.png" />
+    <Image Include="assets\po-seashell1.png" />
+    <Image Include="assets\po-seashell2.png" />
+    <Image Include="assets\po-seashell3.png" />
+    <Image Include="assets\po-sh-brain.png" />
+    <Image Include="assets\po-single-sh-glyph.png" />
+    <Image Include="assets\po-sphere-patches.png" />
+    <Image Include="assets\po-spiky-heart.png" />
+    <Image Include="assets\po-yarn-curve-single.png" />
+    <Image Include="Auto-Vk-Toolkit\assets\3rd_party\textures\rough_cobblestones\brick_floor_tileable_Ambient_Occlusion.jpg" />
+    <Image Include="Auto-Vk-Toolkit\assets\3rd_party\textures\rough_cobblestones\brick_floor_tileable_Base_Color.jpg" />
+    <Image Include="Auto-Vk-Toolkit\assets\3rd_party\textures\rough_cobblestones\brick_floor_tileable_Normal.jpg" />
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>15.0</VCProjectVersion>
+    <ProjectGuid>{098430a3-ebff-403d-87eb-c4ade757b8d4}</ProjectGuid>
+    <Keyword>Win32Proj</Keyword>
+    <RootNamespace>FastRenderingOfParametricObjects</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+    <ProjectName>FastRenderingOfParametricObjects</ProjectName>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug_Vulkan|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release_Vulkan|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Publish_Vulkan|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="Shared" />
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Debug_Vulkan|x64'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+    <Import Project="Auto-Vk-Toolkit\visual_studio\props\solution_directories.props" />
+    <Import Project="Auto-Vk-Toolkit\visual_studio\props\linked_libs_debug.props" />
+    <Import Project="Auto-Vk-Toolkit\visual_studio\props\rendering_api_vulkan.props" />
+    <Import Project="Auto-Vk-Toolkit\visual_studio\props\external_dependencies.props" />
+    <Import Project="Auto-Vk-Toolkit\visual_studio\props\extra_debug_dependencies.props" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Release_Vulkan|x64'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+    <Import Project="Auto-Vk-Toolkit\visual_studio\props\solution_directories.props" />
+    <Import Project="Auto-Vk-Toolkit\visual_studio\props\linked_libs_release.props" />
+    <Import Project="Auto-Vk-Toolkit\visual_studio\props\rendering_api_vulkan.props" />
+    <Import Project="Auto-Vk-Toolkit\visual_studio\props\external_dependencies.props" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Publish_Vulkan|x64'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+    <Import Project="Auto-Vk-Toolkit\visual_studio\props\solution_directories.props" />
+    <Import Project="Auto-Vk-Toolkit\visual_studio\props\linked_libs_release.props" />
+    <Import Project="Auto-Vk-Toolkit\visual_studio\props\rendering_api_vulkan.props" />
+    <Import Project="Auto-Vk-Toolkit\visual_studio\props\external_dependencies.props" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release_Vulkan|x64'">
+    <LinkIncremental>false</LinkIncremental>
+    <OutDir>$(ProjectDir)bin\$(ProjectName)\$(Configuration)_$(Platform)\</OutDir>
+    <IntDir>$(ProjectDir)temp\intermediate\$(ProjectName)\$(Configuration)_$(Platform)\</IntDir>
+    <CustomBuildAfterTargets>Build</CustomBuildAfterTargets>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Publish_Vulkan|x64'">
+    <LinkIncremental>false</LinkIncremental>
+    <OutDir>$(ProjectDir)bin\$(ProjectName)\$(Configuration)_$(Platform)\executable\</OutDir>
+    <IntDir>$(ProjectDir)temp\intermediate\$(ProjectName)\$(Configuration)_$(Platform)\</IntDir>
+    <CustomBuildAfterTargets>Build</CustomBuildAfterTargets>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug_Vulkan|x64'">
+    <LinkIncremental>true</LinkIncremental>
+    <OutDir>$(ProjectDir)bin\$(ProjectName)\$(Configuration)_$(Platform)\</OutDir>
+    <IntDir>$(ProjectDir)temp\intermediate\$(ProjectName)\$(Configuration)_$(Platform)\</IntDir>
+    <CustomBuildAfterTargets>Build</CustomBuildAfterTargets>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release_Vulkan|x64'">
+    <ClCompile>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <WarningLevel>Level3</WarningLevel>
+      <Optimization>MaxSpeed</Optimization>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <ForcedIncludeFiles>cg_stdafx.hpp</ForcedIncludeFiles>
+      <TreatSpecificWarningsAsErrors>4715</TreatSpecificWarningsAsErrors>
+      <PrecompiledHeaderFile>cg_stdafx.hpp</PrecompiledHeaderFile>
+      <AdditionalOptions>/bigobj %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+    <CustomBuildStep>
+      <Command>powershell.exe -ExecutionPolicy Bypass -File "$(ToolsBin)invoke_post_build_helper.ps1" -msbuild "$(MsBuildToolsPath)"  -configuration "$(Configuration)" -framework "$(FrameworkRoot)\"  -platform "$(Platform)" -vcxproj "$(ProjectPath)" -filters "$(ProjectPath).filters" -output "$(OutputPath)\" -executable "$(TargetPath)" -external "$(ExternalRoot)\"</Command>
+      <Outputs>some-non-existant-file-to-always-run-the-custom-build-step.txt;%(Outputs)</Outputs>
+    </CustomBuildStep>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Publish_Vulkan|x64'">
+    <ClCompile>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <WarningLevel>Level3</WarningLevel>
+      <Optimization>MaxSpeed</Optimization>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <ForcedIncludeFiles>cg_stdafx.hpp</ForcedIncludeFiles>
+      <TreatSpecificWarningsAsErrors>4715</TreatSpecificWarningsAsErrors>
+      <PrecompiledHeaderFile>cg_stdafx.hpp</PrecompiledHeaderFile>
+      <AdditionalOptions>/bigobj %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+    <CustomBuildStep>
+      <Command>powershell.exe -ExecutionPolicy Bypass -File "$(ToolsBin)invoke_post_build_helper.ps1" -msbuild "$(MsBuildToolsPath)"  -configuration "$(Configuration)" -framework "$(FrameworkRoot)\"  -platform "$(Platform)" -vcxproj "$(ProjectPath)" -filters "$(ProjectPath).filters" -output "$(OutputPath)\" -executable "$(TargetPath)" -external "$(ExternalRoot)\"</Command>
+      <Outputs>some-non-existant-file-to-always-run-the-custom-build-step.txt;%(Outputs)</Outputs>
+    </CustomBuildStep>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug_Vulkan|x64'">
+    <ClCompile>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <WarningLevel>Level3</WarningLevel>
+      <Optimization>Disabled</Optimization>
+      <SDLCheck>false</SDLCheck>
+      <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <ForcedIncludeFiles>cg_stdafx.hpp</ForcedIncludeFiles>
+      <TreatSpecificWarningsAsErrors>4715</TreatSpecificWarningsAsErrors>
+      <PrecompiledHeaderFile>cg_stdafx.hpp</PrecompiledHeaderFile>
+      <AdditionalOptions>/bigobj %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+    <CustomBuildStep>
+      <Command>powershell.exe -ExecutionPolicy Bypass -File "$(ToolsBin)invoke_post_build_helper.ps1" -msbuild "$(MsBuildToolsPath)"  -configuration "$(Configuration)" -framework "$(FrameworkRoot)\"  -platform "$(Platform)" -vcxproj "$(ProjectPath)" -filters "$(ProjectPath).filters" -output "$(OutputPath)\" -executable "$(TargetPath)" -external "$(ExternalRoot)\"</Command>
+      <Outputs>some-non-existant-file-to-always-run-the-custom-build-step.txt;%(Outputs)</Outputs>
+    </CustomBuildStep>
+  </ItemDefinitionGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>

@@ -1,0 +1,58 @@
+#version 460
+#extension GL_EXT_samplerless_texture_functions : require
+#extension GL_EXT_nonuniform_qualifier                   : require
+#extension GL_EXT_shader_image_int64                     : require
+#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
+#extension GL_GOOGLE_include_directive                   : enable
+
+layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+
+#include "../shader_includes/host_device_shared.h"
+#include "../shader_includes/util/ui64_conv.glsl"
+
+// ###### SRC/DST IMAGES #################################
+layout(set = 0, binding = 0, r64ui)  uniform restrict   u64image2D uCombinedAttachment; // TODO: writeonly possible?!
+layout(set = 1, binding = 0) uniform texture2D uColorSrc;
+layout(set = 1, binding = 1) uniform texture2D uDepthSrc;
+// -------------------------------------------------------
+
+#define NICE_CLEAR_COLOR 0
+
+uint64_t getUint64ForFramebuffer(float depth, vec4 color)
+{
+	uint64_t depthEncoded = depth_to_ui64(depth);
+	uint64_t colorEncoded = color_to_ui64(color);
+	uint64_t data = combine_depth_and_color(depthEncoded, colorEncoded);
+	return data;
+}
+
+// ################## compute shader main ###################
+void main()
+{
+	ivec2 iuv = ivec2(gl_GlobalInvocationID.xy);
+
+	uvec2 imSize = imageSize(uCombinedAttachment);
+	if (iuv.x >= imSize.x || iuv.y >= imSize.y) {
+		return;
+	}
+
+#if NICE_CLEAR_COLOR
+	float f = smoothstep(sin(float(iuv.x)*3.1415/float(imSize.x))*50.0 + float(imSize.y)*0.5        ,
+						 sin(float(iuv.x)*3.1415/float(imSize.x))*60.0 + float(imSize.y)*0.5 - 100.0,
+						 float(imSize.y - gl_GlobalInvocationID.y));
+	float clearDepth = 0.9999999;
+	vec4  clearColor = mix(vec4(0.8, 0.8, 0.8, 1.0), vec4(0.6, 0.6, 0.6, 1.0), f);
+	imageAtomicMin(uCombinedAttachment, iuv, getUint64ForFramebuffer(clearDepth, clearColor));
+#endif
+
+	// Load:
+	vec4  color = texelFetch(uColorSrc, iuv, 0).rgba;
+	float depth = texelFetch(uDepthSrc, iuv, 0).r;
+
+	// Convert into ui64 format for combined attachment:
+//	uint64_t combinedValue = combine_depth_and_color(depth_to_ui64(depth), color_to_ui64(color));
+//	imageStore(uCombinedAttachment, iuv, combinedValue);
+
+	// Store:
+	imageAtomicMin(uCombinedAttachment, iuv, getUint64ForFramebuffer(depth, color));
+}

@@ -1,0 +1,83 @@
+#version 460
+#extension GL_EXT_shader_16bit_storage                   : require
+#extension GL_EXT_shader_8bit_storage                    : require
+#extension GL_EXT_nonuniform_qualifier                   : require
+#extension GL_EXT_shader_image_int64                     : require
+#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
+#extension GL_GOOGLE_include_directive                   : enable
+#extension GL_ARB_shader_draw_parameters                 : require
+#extension GL_KHR_shader_subgroup_arithmetic             : require
+#extension GL_KHR_shader_subgroup_ballot                 : require
+#extension GL_KHR_shader_subgroup_shuffle                : require
+#extension GL_EXT_debug_printf                           : enable
+
+layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+
+#include "../shader_includes/host_device_shared.h"
+#include "../shader_includes/util/ui64_conv.glsl"
+#include "../shader_includes/util/glsl_helpers.glsl"
+#include "../shader_includes/types.glsl"
+#include "../shader_includes/common_ubo.glsl"
+
+// +------------------------------------------------------------------------------+
+// |   Bound Resources                                                            |
+// +------------------------------------------------------------------------------+
+// layout(set = 0, binding = 0) buffer is contained within common_ubo.glsl
+layout(set = 1, binding = 0) buffer SsboCounters { uint mCounters[4]; } uCounters;
+layout(set = 2, binding = 0) buffer ObjectData   { object_data mElements[]; }  uObjectData;
+layout(set = 2, binding = 1) buffer PxFillParams { px_fill_data mElements[]; } uPxFillParams; 
+layout(set = 2, binding = 2) buffer PxFillCount  { VkDrawIndirectCommand mDrawParams[]; } uPxFillCounts;
+layout(set = 3, binding = 0) buffer PatchLodPing { px_fill_data mElements[]; } uPatchLodPing; // initial target
+//layout(set = 3, binding = 1) buffer PatchLodPong { px_fill_data mElements[]; } uPatchLodPong; // unused in this whole shader
+layout(set = 3, binding = 2) buffer PatchLodCount { uvec4 mDispatchCounts[]; } uPatchLodCount; 
+
+#include "../shader_includes/parametric_functions/shape_functions.glsl"
+
+// +------------------------------------------------------------------------------+
+// |   PushConstants                                                              |
+// +------------------------------------------------------------------------------+
+
+layout(push_constant) uniform PushConstants
+{
+    uint mObjectId;
+}
+pushConstants;
+
+
+// ################## compute shader main ###################
+void main()
+{
+	const uvec2 loopsRows = gl_GlobalInvocationID.xy;
+	const int   curveIndex = uObjectData.mElements[pushConstants.mObjectId].mCurveIndex;
+	const vec4  tmp = uObjectData.mElements[pushConstants.mObjectId].mParams;
+	const uvec2 numLoopsRows = uvec2(tmp[0], tmp[1]);
+	const uint  numFibers = uint(tmp[2]);
+	const float threadRadius = tmp[3];
+
+	// in:
+	const vec2 paramsRange = vec2(TWO_PI, TWO_PI);
+
+	if (loopsRows.x >= numLoopsRows.x || loopsRows.y >= numLoopsRows.y) {
+		return; // Nothing to do for this invocation
+	}
+
+	const vec2 rangePerEvalBucket = paramsRange;
+	vec2 paramsFrom = paramsRange * vec2(loopsRows.xy);
+	vec2 paramsTo   = paramsFrom + rangePerEvalBucket;
+
+	// out:
+	if (curveIndex == 7 || curveIndex == 9) { // Yarn Curve
+		const uint insertIdx = atomicAdd(uPatchLodCount.mDispatchCounts[0].x, 1); // start with the first, a.k.a. "firstPing"
+		uPatchLodPing.mElements[insertIdx].mParams                = vec4(paramsFrom[0], paramsTo[0], paramsFrom[1], paramsTo[1]);
+		uPatchLodPing.mElements[insertIdx].mObjectIdUserData      = uvec4(pushConstants.mObjectId, loopsRows.y, 0, floatBitsToUint(threadRadius));
+		uPatchLodPing.mElements[insertIdx].mScreenDistsHybridData = vec4(0.0, 0.0, 0.0, 1.0);
+	}
+	else if (curveIndex == 8 || curveIndex == 10) { // Fiber Curve
+		const uint insertIdx = atomicAdd(uPatchLodCount.mDispatchCounts[0].x, numFibers); // start with the first, a.k.a. "firstPing"
+		for (uint fiberId = 0; fiberId < numFibers; ++fiberId) {
+			uPatchLodPing.mElements[insertIdx + fiberId].mParams                = vec4(paramsFrom[0], paramsTo[0], paramsFrom[1], paramsTo[1]);
+			uPatchLodPing.mElements[insertIdx + fiberId].mObjectIdUserData      = uvec4(pushConstants.mObjectId, loopsRows.y, fiberId, floatBitsToUint(threadRadius)); // Pack additional knit yarn data into UserData
+			uPatchLodPing.mElements[insertIdx + fiberId].mScreenDistsHybridData = vec4(0.0, 0.0, intBitsToFloat(0), 1.0);
+		}
+	}
+}

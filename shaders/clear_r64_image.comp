@@ -1,0 +1,86 @@
+#version 460
+#extension GL_EXT_nonuniform_qualifier                   : require
+#extension GL_EXT_shader_image_int64                     : require
+#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
+#extension GL_GOOGLE_include_directive                   : enable
+
+layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+
+#include "../shader_includes/host_device_shared.h"
+#include "../shader_includes/util/ui64_conv.glsl"
+#include "../shader_includes/types.glsl"
+#include "../shader_includes/host_device_shared.h"
+
+// ###### SRC/DST IMAGES #################################
+layout(set = 0, binding = 0) buffer SsboCounters { uint mCounters[4]; } uCounters;
+layout(set = 1, binding = 0) buffer ObjectData   { object_data mElements[]; }  uObjectData;
+layout(set = 1, binding = 1) buffer PxFillParams { px_fill_data mElements[]; } uPxFillParams; 
+layout(set = 1, binding = 2) buffer PxFillCount  { VkDrawIndirectCommand mDrawParams[]; } uPxFillCounts;
+layout(set = 2, binding = 0, r64ui) uniform restrict u64image2D uCombinedAttachment;
+#if STATS_ENABLED
+layout(set = 2, binding = 1, r32ui) uniform restrict uimage2D   uHeatmapImage;
+#endif
+layout(set = 3, binding = 0) buffer PatchLodPing { px_fill_data mElements[]; } uPatchLodPing; 
+layout(set = 3, binding = 1) buffer PatchLodPong { px_fill_data mElements[]; } uPatchLodPong; 
+layout(set = 3, binding = 2) buffer PatchLodCount { uvec4 mDispatchCounts[]; } uPatchLodCount; 
+#if SEPARATE_PATCH_TILE_ASSIGNMENT_PASS
+layout(set = 4, binding = 0) buffer TilePatchesBuffer { uint mPatchIndices[]; } uTilePatches;
+#endif
+// -------------------------------------------------------
+
+#define NICE_CLEAR_COLOR 0
+
+// ################## compute shader main ###################
+// Clears uImg to a depth of 1.0 and a clear color.
+void main()
+{
+#if NICE_CLEAR_COLOR || SEPARATE_PATCH_TILE_ASSIGNMENT_PASS
+	uvec2 resolution = imageSize(uCombinedAttachment);
+#endif
+
+	ivec2 iuv = ivec2(gl_GlobalInvocationID.xy);
+	float clearDepth = 1.0;
+#if NICE_CLEAR_COLOR
+	float f = smoothstep(sin(float(iuv.x)*3.1415/float(resolution.x))*50.0 + float(resolution.y)*0.5        ,
+						 sin(float(iuv.x)*3.1415/float(resolution.x))*60.0 + float(resolution.y)*0.5 - 100.0,
+						 float(resolution.y - gl_GlobalInvocationID.y));
+	vec4  clearColor = mix(vec4(0.8, 0.8, 0.8, 1.0), vec4(0.6, 0.6, 0.6, 1.0), f);
+#else
+	vec4  clearColor = vec4(0.0);
+#endif
+	uint64_t depthEncoded = depth_to_ui64(clearDepth);
+	uint64_t colorEncoded = color_to_ui64(clearColor);
+	uint64_t data = combine_depth_and_color(depthEncoded, colorEncoded);
+	imageStore(uCombinedAttachment, iuv, u64vec4(data));
+
+#if STATS_ENABLED
+	// Heatmap:
+	imageStore(uHeatmapImage, iuv, uvec4(0));
+#endif
+
+	if (gl_WorkGroupID.x == 0 && gl_WorkGroupID.y == 0) {
+		// This compute shader serves another purpose: Clearing the draw counts in the storage buffer
+		// Do the clear for each of the three entries:
+		if (gl_LocalInvocationIndex < NUM_RENDERING_VARIANTS) {
+			uPxFillCounts.mDrawParams[gl_LocalInvocationIndex] = VkDrawIndirectCommand(4, 0, 1, 1);
+			//                                                  ATTENTION: We need these two ^  ^ for dispatch dimensions in the case of point rendering.
+		}
+	
+		// Clear all the counters here:
+		if (gl_LocalInvocationIndex < 4) {
+			uCounters.mCounters[gl_LocalInvocationIndex] = 0;
+		}
+
+		// For the PatchLod* buffers, we only have to clear the counters:
+		if (gl_LocalInvocationIndex < MAX_PATCH_SUBDIV_STEPS) {
+			uPatchLodCount.mDispatchCounts[gl_LocalInvocationIndex] = uvec4(0, 1, 1, 0xDEAD);
+		}
+	}
+
+#if SEPARATE_PATCH_TILE_ASSIGNMENT_PASS
+	uvec2 numTiles = uvec2(resolution.x/PX_FILL_LOCAL_FB_TILE_SIZE_X, resolution.y/PX_FILL_LOCAL_FB_TILE_SIZE_Y);
+	if (gl_GlobalInvocationID.x <= numTiles.x && gl_GlobalInvocationID.y <= numTiles.y && (gl_GlobalInvocationID.y * numTiles.x + gl_GlobalInvocationID.x) * MAX_PATCHES_PER_TILE < TILE_PATCHES_BUFFER_ELEMENTS) {
+		uTilePatches.mPatchIndices[(gl_GlobalInvocationID.y * numTiles.x + gl_GlobalInvocationID.x) * MAX_PATCHES_PER_TILE] = 0;
+	}
+#endif
+}

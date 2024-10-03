@@ -1,0 +1,254 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="assets">
+      <UniqueIdentifier>{24240a51-8fdb-478f-8c1c-27cbca7adc3f}</UniqueIdentifier>
+      <SourceControlFiles>False</SourceControlFiles>
+    </Filter>
+    <Filter Include="shaders">
+      <UniqueIdentifier>{1d345cf5-0451-42e0-83a8-6a3f5a7203ca}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="precompiled_headers">
+      <UniqueIdentifier>{a498e4bc-580a-49d7-9a8e-ec57803fdcd4}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="host_code">
+      <UniqueIdentifier>{e418dddb-2289-4e42-bcca-3fd989232303}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="shader_includes">
+      <UniqueIdentifier>{da2e5a89-fa48-43c6-a833-e7ed77bad6f8}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="shader_includes\util">
+      <UniqueIdentifier>{f834110d-1fb9-44c5-bf62-1b9d79082a8c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="shaders\px-fill-tess">
+      <UniqueIdentifier>{277f38a7-585c-47df-8f8d-d60d193e8066}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="shader_includes\parametric_functions">
+      <UniqueIdentifier>{f198a94d-488e-43d8-b4c6-7f874add684c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="host_code\perf_tests">
+      <UniqueIdentifier>{b19b560e-20fb-48a9-a89d-fbfb113a3a68}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="shaders\frag_out.frag">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shaders\copy_to_backbuffer.comp">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shaders\clear_r64_image.comp">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shaders\simple.vert">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shader_includes\util\glsl_helpers.glsl">
+      <Filter>shader_includes\util</Filter>
+    </None>
+    <None Include="shader_includes\util\ui64_conv.glsl">
+      <Filter>shader_includes\util</Filter>
+    </None>
+    <None Include="shader_includes\material_handling.glsl">
+      <Filter>shader_includes</Filter>
+    </None>
+    <None Include="shader_includes\shading_model.glsl">
+      <Filter>shader_includes</Filter>
+    </None>
+    <None Include="shader_includes\types.glsl">
+      <Filter>shader_includes</Filter>
+    </None>
+    <None Include="shader_includes\common_ubo.glsl">
+      <Filter>shader_includes</Filter>
+    </None>
+    <None Include="shader_includes\parametric_curve_helpers.glsl">
+      <Filter>shader_includes</Filter>
+    </None>
+    <None Include="shader_includes\combined_attachment_shared.glsl">
+      <Filter>shader_includes</Filter>
+    </None>
+    <None Include="Auto-Vk-Toolkit\assets\3rd_party\fonts\JetBrainsMono-2.304\fonts\ttf\JetBrainsMono-Regular.ttf">
+      <Filter>assets</Filter>
+    </None>
+    <None Include="shaders\pass1_init_patches.comp">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shaders\pass3_px_fill.comp">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shaders\pass2x_patch_lod.comp">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shaders\px-fill-tess\patch_go.tese">
+      <Filter>shaders\px-fill-tess</Filter>
+    </None>
+    <None Include="shaders\px-fill-tess\patch_ready.vert">
+      <Filter>shaders\px-fill-tess</Filter>
+    </None>
+    <None Include="shaders\px-fill-tess\patch_set.tesc">
+      <Filter>shaders\px-fill-tess</Filter>
+    </None>
+    <None Include="Auto-Vk-Toolkit\assets\sponza_and_terrain.fscene">
+      <Filter>assets</Filter>
+    </None>
+    <None Include="shaders\pass1_init_knityarn.comp">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shaders\pass3_px_fill_local_fb.comp">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shaders\pass3pre_select_tile_patches.comp">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shaders\copy_to_combined_attachment.comp">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shaders\full_screen_quad.frag">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shaders\full_screen_quad.vert">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shader_includes\parametric_functions\shape_functions.glsl">
+      <Filter>shader_includes\parametric_functions</Filter>
+    </None>
+    <None Include="shader_includes\parametric_functions\plane.glsl">
+      <Filter>shader_includes\parametric_functions</Filter>
+    </None>
+    <None Include="shader_includes\parametric_functions\curtain_fiber_curve.glsl">
+      <Filter>shader_includes\parametric_functions</Filter>
+    </None>
+    <None Include="shader_includes\parametric_functions\curtain_yarn_curve.glsl">
+      <Filter>shader_includes\parametric_functions</Filter>
+    </None>
+    <None Include="shader_includes\parametric_functions\johis_heart.glsl">
+      <Filter>shader_includes\parametric_functions</Filter>
+    </None>
+    <None Include="shader_includes\parametric_functions\palm_tree_trunk.glsl">
+      <Filter>shader_includes\parametric_functions</Filter>
+    </None>
+    <None Include="shader_includes\parametric_functions\seashells.glsl">
+      <Filter>shader_includes\parametric_functions</Filter>
+    </None>
+    <None Include="shader_includes\parametric_functions\sh_glyph.glsl">
+      <Filter>shader_includes\parametric_functions</Filter>
+    </None>
+    <None Include="shader_includes\parametric_functions\single_fiber_curve.glsl">
+      <Filter>shader_includes\parametric_functions</Filter>
+    </None>
+    <None Include="shader_includes\parametric_functions\single_yarn_curve.glsl">
+      <Filter>shader_includes\parametric_functions</Filter>
+    </None>
+    <None Include="shader_includes\parametric_functions\spiky_heart.glsl">
+      <Filter>shader_includes\parametric_functions</Filter>
+    </None>
+    <None Include="shaders\pass1_init_shbrain.comp">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shader_includes\parametric_functions\giant_worm.glsl">
+      <Filter>shader_includes\parametric_functions</Filter>
+    </None>
+    <None Include="shaders\full_screen_quad_from_combined_attachment.frag">
+      <Filter>shaders</Filter>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="precompiled_headers\cg_stdafx.cpp">
+      <Filter>precompiled_headers</Filter>
+    </ClCompile>
+    <ClCompile Include="host_code\main.cpp">
+      <Filter>host_code</Filter>
+    </ClCompile>
+    <ClCompile Include="host_code\ImGuizmo.cpp">
+      <Filter>host_code</Filter>
+    </ClCompile>
+    <ClCompile Include="host_code\big_dataset.cpp">
+      <Filter>host_code</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="precompiled_headers\cg_stdafx.hpp">
+      <Filter>precompiled_headers</Filter>
+    </ClInclude>
+    <ClInclude Include="precompiled_headers\cg_targetver.hpp">
+      <Filter>precompiled_headers</Filter>
+    </ClInclude>
+    <ClInclude Include="host_code\types.hpp">
+      <Filter>host_code</Filter>
+    </ClInclude>
+    <ClInclude Include="host_code\helpers.hpp">
+      <Filter>host_code</Filter>
+    </ClInclude>
+    <ClInclude Include="shader_includes\host_device_shared.h">
+      <Filter>shader_includes</Filter>
+    </ClInclude>
+    <ClInclude Include="host_code\ImGuizmo.h">
+      <Filter>host_code</Filter>
+    </ClInclude>
+    <ClInclude Include="host_code\big_dataset.hpp">
+      <Filter>host_code</Filter>
+    </ClInclude>
+    <ClInclude Include="host_code\perf_tests\test_fiber_curves.hpp">
+      <Filter>host_code\perf_tests</Filter>
+    </ClInclude>
+    <ClInclude Include="host_code\perf_tests\test_knit_yarn.hpp">
+      <Filter>host_code\perf_tests</Filter>
+    </ClInclude>
+    <ClInclude Include="host_code\perf_tests\test_seashell.hpp">
+      <Filter>host_code\perf_tests</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="assets\po-johis-heart.png">
+      <Filter>assets</Filter>
+    </Image>
+    <Image Include="assets\po-blue-curtain.png">
+      <Filter>assets</Filter>
+    </Image>
+    <Image Include="assets\po-fiber-curve-single.png">
+      <Filter>assets</Filter>
+    </Image>
+    <Image Include="assets\po-seashell1.png">
+      <Filter>assets</Filter>
+    </Image>
+    <Image Include="assets\po-seashell2.png">
+      <Filter>assets</Filter>
+    </Image>
+    <Image Include="assets\po-seashell3.png">
+      <Filter>assets</Filter>
+    </Image>
+    <Image Include="assets\po-sh-brain.png">
+      <Filter>assets</Filter>
+    </Image>
+    <Image Include="assets\po-single-sh-glyph.png">
+      <Filter>assets</Filter>
+    </Image>
+    <Image Include="assets\po-sphere-patches.png">
+      <Filter>assets</Filter>
+    </Image>
+    <Image Include="assets\po-yarn-curve-single.png">
+      <Filter>assets</Filter>
+    </Image>
+    <Image Include="assets\po-giant-worm.png">
+      <Filter>assets</Filter>
+    </Image>
+    <Image Include="assets\po-palm-tree.png">
+      <Filter>assets</Filter>
+    </Image>
+    <Image Include="assets\checkerboard-pattern.jpg">
+      <Filter>assets</Filter>
+    </Image>
+    <Image Include="Auto-Vk-Toolkit\assets\3rd_party\textures\rough_cobblestones\brick_floor_tileable_Ambient_Occlusion.jpg">
+      <Filter>assets</Filter>
+    </Image>
+    <Image Include="Auto-Vk-Toolkit\assets\3rd_party\textures\rough_cobblestones\brick_floor_tileable_Base_Color.jpg">
+      <Filter>assets</Filter>
+    </Image>
+    <Image Include="Auto-Vk-Toolkit\assets\3rd_party\textures\rough_cobblestones\brick_floor_tileable_Normal.jpg">
+      <Filter>assets</Filter>
+    </Image>
+    <Image Include="assets\po-spiky-heart.png">
+      <Filter>assets</Filter>
+    </Image>
+  </ItemGroup>
+</Project>
