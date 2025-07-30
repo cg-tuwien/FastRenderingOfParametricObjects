@@ -58,6 +58,13 @@ vec3 vertexColors[MAX_COLORS] = {
 // ###### MAIN ###########################
 void main() {
 	vec4 posWS = pushConstants.mModelMatrix * vec4(inPosition.xyz, 1.0);
+
+    if (gl_InstanceIndex > 0) {
+        int x = (gl_InstanceIndex - 1) / 71;
+        int y = (gl_InstanceIndex - 1) % 71;
+        posWS += vec4(5.0 * (x - 36), 0.0, 5.0 * (y - 36), 0.0);
+    }
+
 	v_out.positionWS = posWS.xyz;
 	v_out.normalWS   = inNormal;
     v_out.texCoords  = inTexCoord;

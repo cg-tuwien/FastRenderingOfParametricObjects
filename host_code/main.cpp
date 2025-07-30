@@ -414,16 +414,6 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 
 		// Update all the buffers for our drawcall data:
 		add_draw_calls(mSeashellLodDrawCalls, dataForDrawCall);
-
-		auto chosenLodIndex = mSeashellLodDrawCalls.size() - 1;
-		auto mM             = mSeashellLodDrawCalls[chosenLodIndex].mModelMatrix;
-		for (int x = 0; x < 71; ++x) {
-			for (int y = 0; y < 71; ++y) {
-				auto& drawCall = mSeashellLodDrawCalls.emplace_back();
-				drawCall = mSeashellLodDrawCalls[chosenLodIndex]; // Just copy everything from that LOD, overwrite the model matrix:
-				drawCall.mModelMatrix = glm::translate(5.0f * glm::vec3{ static_cast<float>(x - 36), 0.0f, static_cast<float>(y - 36) }) * mM;
-			}
-		}
     }
 
     void create_param_pipes()
@@ -1525,10 +1515,10 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 				ImGui::Text("%.1lf ms/render() CPU time", mRenderDurationMs);
 				ImGui::Separator();
 				
-				if (!mSponzaDrawCalls.empty()) {
+				//if (!mSponzaDrawCalls.empty()) {
 				    ImGui::Separator();
 				    ImGui::Checkbox("Render Sponza + Terrain", &mRenderExtra3DModel);
-				}
+				//}
 
 				ImGui::Separator();
 				bool quakeCamEnabled = mQuakeCam.is_enabled();
@@ -2375,9 +2365,9 @@ ImGui::TextColored(ImVec4(.5f, .3f, .4f, 1.f), "Timestamp Period: %.3f ns", time
 				// 3.111111111111111111..........) Render seashell LODs:
 				command::conditional(
 					[this]() { 
-						return mSeashellLodDrawCalls.size() > 0; 
+						return mRenderExtra3DModel && mSeashellLodDrawCalls.size() > 0; 
 					},
-					[this, inFlightIndex]() { 
+					[this, inFlightIndex, LODINDEX = 1]() { 
 						return command::gather(
 						command::bind_pipeline(mVertexPipeline.as_reference()),
 						command::bind_descriptors(mVertexPipeline->layout(), mDescriptorCache->get_or_create_descriptor_sets({
@@ -2390,22 +2380,20 @@ ImGui::TextColored(ImVec4(.5f, .3f, .4f, 1.f), "Timestamp Period: %.3f ns", time
 #endif
 							descriptor_binding(2, 0, mCountersSsbo->as_storage_buffer())
 						})),
-						command::many_n_times(static_cast<int>(mSeashellLodDrawCalls.size()), [this](int i) {
-							return command::gather(
-								command::push_constants(mVertexPipeline->layout(), vertex_pipe_push_constants{ 
-									mSeashellLodDrawCalls[i].mModelMatrix,
-									mSeashellLodDrawCalls[i].mMaterialIndex
-								}),
-								command::draw_indexed(
-									// Bind and use the index buffer:
-									std::forward_as_tuple(mIndexBuffer.as_reference(), size_t{mSeashellLodDrawCalls[i].mIndexBufferOffset}, mSeashellLodDrawCalls[i].mNumElements),
-									// Bind the vertex input buffers in the right order (corresponding to the layout specifiers in the vertex shader)
-									std::forward_as_tuple(mPositionsBuffer.as_reference(), size_t{mSeashellLodDrawCalls[i].mPositionsBufferOffset}), 
-									std::forward_as_tuple(mTexCoordsBuffer.as_reference(), size_t{mSeashellLodDrawCalls[i].mTexCoordsBufferOffset}),
-									std::forward_as_tuple(mNormalsBuffer.as_reference()  , size_t{mSeashellLodDrawCalls[i].mNormalsBufferOffset})
-								)
-							);
-						} )
+						command::push_constants(mVertexPipeline->layout(), vertex_pipe_push_constants{ 
+							mSeashellLodDrawCalls[LODINDEX].mModelMatrix,
+							mSeashellLodDrawCalls[LODINDEX].mMaterialIndex
+						}),
+						command::draw_indexed(
+							// Bind and use the index buffer:
+							std::forward_as_tuple(mIndexBuffer.as_reference(), size_t{mSeashellLodDrawCalls[LODINDEX].mIndexBufferOffset}, mSeashellLodDrawCalls[LODINDEX].mNumElements),
+							// aNumberOfInstances, aFirstIndex, aVertexOffset, aFirstInstance:
+							    71u * 71u,           0u,           0u,             1u,
+							// Bind the vertex input buffers in the right order (corresponding to the layout specifiers in the vertex shader)
+							std::forward_as_tuple(mPositionsBuffer.as_reference(), size_t{mSeashellLodDrawCalls[LODINDEX].mPositionsBufferOffset}), 
+							std::forward_as_tuple(mTexCoordsBuffer.as_reference(), size_t{mSeashellLodDrawCalls[LODINDEX].mTexCoordsBufferOffset}),
+							std::forward_as_tuple(mNormalsBuffer.as_reference()  , size_t{mSeashellLodDrawCalls[LODINDEX].mNormalsBufferOffset})
+						)
 					); }
 				),
 
