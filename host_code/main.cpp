@@ -47,21 +47,22 @@
 #define TEST_GATHER_TIMER_QUERIES 0
 #define TEST_GATHER_PATCH_COUNTS  0
 
-static std::array<parametric_object, 14> PredefinedParametricObjects {{
-	parametric_object{"Sphere"       , "assets/po-sphere-patches.png",     true , parametric_object_type::Sphere,                 0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>() , glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{ 0.f,  0.f,  0.f})},
-	parametric_object{"Johi's Heart" , "assets/po-johis-heart.png",        false, parametric_object_type::JohisHeart,             0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>(), glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{ 0.f,  0.f, -2.f})},
-	parametric_object{"Spiky Heart"  , "assets/po-spiky-heart.png",        false, parametric_object_type::SpikyHeart,             0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>(), glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{ 0.f,  0.f,  2.f}), -5},
-	parametric_object{"Seashell 1"   , "assets/po-seashell1.png",          false, parametric_object_type::Seashell1,              glm::two_pi<float>() * 8.0f,/* -> */0.0f,   0.0f,/* -> */glm::two_pi<float>(), glm::uvec2{ 1u, 1u }, glm::mat4{ 1.0f }, -3},
-	parametric_object{"Seashell 2"   , "assets/po-seashell2.png",          false, parametric_object_type::Seashell2,              glm::two_pi<float>() * 8.0f,/* -> */0.0f,   0.0f,/* -> */glm::two_pi<float>(), glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{-4.5f, 0.0f, 0.0f }), -4},
-	parametric_object{"Seashell 3"   , "assets/po-seashell3.png",          false, parametric_object_type::Seashell3,              glm::two_pi<float>() * 8.0f,/* -> */0.0f,   0.0f,/* -> */glm::two_pi<float>(), glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{ 4.5f, 0.0f, 0.0f }), -5},
-	parametric_object{"Yarn Curve"   , "assets/po-yarn-curve-single.png",  false, parametric_object_type::SingleYarnCurve,        1.0f, 1.0f,     /* <-- yarn dimensions | n/a yarn -> */ 0.f, /* thickness --> */ 0.8f, glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{-0.3f, 0.0f, 0.0f}) * glm::scale(glm::vec3{ 0.3f }), -5},
-	parametric_object{"Fiber Curve"  , "assets/po-fiber-curve-single.png", false, parametric_object_type::SingleFiberCurve,       1.0f, 1.0f,     /* <-- yarn dimensions | #fibers --> */ 6.f, /* thickness --> */ 0.3f, glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{-0.5f, 0.0f, 0.0f}) * glm::scale(glm::vec3{ 0.3f }), -5},
-	parametric_object{"Yarn Curtain" , "assets/po-blue-curtain.png",       false, parametric_object_type::CurtainYarnCurves,      235.0f, 254.0f, /* <-- yarn dimensions | #fibers --> */ 6.f, /* thickness --> */ 0.8f, glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{-3.35f, 0.08f, 5.32f}) * glm::scale(glm::vec3{ 0.005f }), 19},
-	parametric_object{"Fiber Curtain", "assets/po-blue-curtain.png",       false, parametric_object_type::CurtainFiberCurves,     235.0f, 254.0f, /* <-- yarn dimensions | #fibers --> */ 6.f, /* thickness --> */ 0.8f, glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{-3.35f, 0.08f, 5.32f}) * glm::scale(glm::vec3{ 0.005f }), 19},
-	parametric_object{"Palm Tree"    , "assets/po-palm-tree.png",          false, parametric_object_type::PalmTreeTrunk,          0.0f,   1.0f,            0.0f,  glm::two_pi<float>(), glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{ 0.f,  0.f, -4.f})},
-	parametric_object{"Giant Worm"   , "assets/po-giant-worm.png",         false, parametric_object_type::GiantWorm,              0.0f,   1.0f,            0.0f,  glm::two_pi<float>(), glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{ 0.f,  0.f, -4.f}), -5},
-	parametric_object{"SH Glyph"     , "assets/po-single-sh-glyph.png",    false, parametric_object_type::SHGlyph,                0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>(),     glm::uvec2{ 1u, 1u }, glm::mat4{ 1.0f }, -2},
-	parametric_object{"Brain Scan"   , "assets/po-sh-brain.png",           false, parametric_object_type::SHBrain,                0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>(), glm::uvec2{ SH_BRAIN_DATA_SIZE_X, SH_BRAIN_DATA_SIZE_Y }, glm::mat4{ 1.0f }, -2}
+static std::array<parametric_object, 15> PredefinedParametricObjects {{
+	parametric_object{"Sphere"            , "assets/po-sphere-patches.png",     true , parametric_object_type::Sphere,                 0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>() , glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{ 0.f,  0.f,  0.f})},
+	parametric_object{"Johi's Heart"      , "assets/po-johis-heart.png",        false, parametric_object_type::JohisHeart,             0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>(), glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{ 0.f,  0.f, -2.f})},
+	parametric_object{"Spiky Heart"       , "assets/po-spiky-heart.png",        false, parametric_object_type::SpikyHeart,             0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>(), glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{ 0.f,  0.f,  2.f}), -5},
+	parametric_object{"Seashell 1"        , "assets/po-seashell1.png",          false, parametric_object_type::Seashell1,              glm::two_pi<float>() * 8.0f,/* -> */0.0f,   0.0f,/* -> */glm::two_pi<float>(), glm::uvec2{ 1u, 1u }, glm::mat4{ 1.0f }, -3},
+	parametric_object{"Seashell 2"        , "assets/po-seashell2.png",          false, parametric_object_type::Seashell2,              glm::two_pi<float>() * 8.0f,/* -> */0.0f,   0.0f,/* -> */glm::two_pi<float>(), glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{-4.5f, 0.0f, 0.0f }), -4},
+	parametric_object{"Seashell 3"        , "assets/po-seashell3.png",          false, parametric_object_type::Seashell3,              glm::two_pi<float>() * 8.0f,/* -> */0.0f,   0.0f,/* -> */glm::two_pi<float>(), glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{ 4.5f, 0.0f, 0.0f }), -5},
+	parametric_object{"Yarn Curve"        , "assets/po-yarn-curve-single.png",  false, parametric_object_type::SingleYarnCurve,        1.0f, 1.0f,     /* <-- yarn dimensions | n/a yarn -> */ 0.f, /* thickness --> */ 0.8f, glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{-0.3f, 0.0f, 0.0f}) * glm::scale(glm::vec3{ 0.3f }), -5},
+	parametric_object{"Fiber Curve"       , "assets/po-fiber-curve-single.png", false, parametric_object_type::SingleFiberCurve,       1.0f, 1.0f,     /* <-- yarn dimensions | #fibers --> */ 6.f, /* thickness --> */ 0.3f, glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{-0.5f, 0.0f, 0.0f}) * glm::scale(glm::vec3{ 0.3f }), -5},
+	parametric_object{"Yarn Curtain"      , "assets/po-blue-curtain.png",       false, parametric_object_type::CurtainYarnCurves,      235.0f, 254.0f, /* <-- yarn dimensions | #fibers --> */ 6.f, /* thickness --> */ 0.8f, glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{-3.35f, 0.08f, 5.32f}) * glm::scale(glm::vec3{ 0.005f }), 19},
+	parametric_object{"Fiber Curtain"     , "assets/po-blue-curtain.png",       false, parametric_object_type::CurtainFiberCurves,     235.0f, 254.0f, /* <-- yarn dimensions | #fibers --> */ 6.f, /* thickness --> */ 0.8f, glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{-3.35f, 0.08f, 5.32f}) * glm::scale(glm::vec3{ 0.005f }), 19},
+	parametric_object{"Palm Tree"         , "assets/po-palm-tree.png",          false, parametric_object_type::PalmTreeTrunk,          0.0f,   1.0f,            0.0f,  glm::two_pi<float>(), glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{ 0.f,  0.f, -4.f})},
+	parametric_object{"Giant Worm"        , "assets/po-giant-worm.png",         false, parametric_object_type::GiantWorm,              0.0f,   1.0f,            0.0f,  glm::two_pi<float>(), glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{ 0.f,  0.f, -4.f}), -5},
+	parametric_object{"SH Glyph"          , "assets/po-single-sh-glyph.png",    false, parametric_object_type::SHGlyph,                0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>(),     glm::uvec2{ 1u, 1u }, glm::mat4{ 1.0f }, -2},
+	parametric_object{"Brain Scan"        , "assets/po-sh-brain.png",           false, parametric_object_type::SHBrain,                0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>(), glm::uvec2{ SH_BRAIN_DATA_SIZE_X, SH_BRAIN_DATA_SIZE_Y }, glm::mat4{ 1.0f }, -2},
+	parametric_object{"Grid of Seashells" , "assets/po-seashell3.png",          false, parametric_object_type::GridOfSeashells,        glm::two_pi<float>() * 8.0f,/* -> */0.0f,   0.0f,/* -> */glm::two_pi<float>(), glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{ 4.5f, 0.0f, 0.0f }), -5}
 }};
 
 class vk_parametric_curves_app : public avk::invokee
@@ -743,6 +744,11 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 		return pot == parametric_object_type::GiantWorm;
 	}
 
+	bool is_grid_of_seashells(parametric_object_type pot)
+	{
+		return pot == parametric_object_type::GridOfSeashells;
+	}
+
 	void fill_object_data_buffer()
 	{
 		using namespace avk;
@@ -833,6 +839,16 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 					for (int b = 0; b < 19; ++b) {
 						tmp.mUserData.x = a;
 						tmp.mUserData.y = b;
+						mObjectData[i++] = tmp;
+					}
+				}
+			}
+			else if (is_grid_of_seashells(po.param_obj_type())) {
+				tmp.mCurveIndex = static_cast<std::underlying_type_t<parametric_object_type>>(parametric_object_type::Seashell3);
+				auto baseTransformationMatrix = tmp.mTransformationMatrix;
+				for (int x = 0; x < 71; ++x) {
+					for (int y = 0; y < 71; ++y) {
+						tmp.mTransformationMatrix = baseTransformationMatrix * glm::translate(5.0f * glm::vec3{ static_cast<float>(x - 36), 0.0f, static_cast<float>(y - 36) });
 						mObjectData[i++] = tmp;
 					}
 				}

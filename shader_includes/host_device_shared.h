@@ -7,7 +7,8 @@
 #define NUM_MODELS_PER_DIM			7
 
 // Maximum number of struct object_data entries in the respective buffer:
-#define MAX_OBJECTS					100
+// (5k needed for the grid of seashells; otherwise, < 100 would be sufficient)
+#define MAX_OBJECTS					5200
 
 // Maximum number of subdivision steps that divides patches into smaller parts:
 // (8 steps are enough to subdivide 8192x8192 down into 32x32)
