@@ -80,14 +80,14 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 
 	/** Creates buffers for all the drawcalls.
 	 *  Called after everything has been loaded and split into meshlets properly.
-	 *  @param dataForDrawCall		The loaded data for the drawcalls.
 	 *	@param drawCallsTarget		The target vector for the draw call data.
+	 *  @param dataForDrawCall		The loaded data for the drawcalls.
 	 */
-	void add_draw_calls(std::vector<loaded_model_data>& dataForDrawCall) {
+	void add_draw_calls(std::vector<data_for_draw_call>& drawCallsTarget, const std::vector<loaded_model_data>& dataForDrawCall) {
 		using namespace avk;
 
 		for (auto& drawCallData : dataForDrawCall) {
-			auto& drawCall = mDrawCalls.emplace_back();
+			auto& drawCall = drawCallsTarget.emplace_back();
 			drawCall.mModelMatrix = drawCallData.mModelMatrix;
 			drawCall.mMaterialIndex = drawCallData.mMaterialIndex;
 			drawCall.mPixelsOnMeridian = drawCallData.mPixelsOnMeridian;
@@ -223,7 +223,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 	{
 		using namespace avk;
 
-		if (!mDrawCalls.empty()) {
+		if (!mSponzaDrawCalls.empty()) {
 			LOG_WARNING("Sponza and Terrain already loaded");
 			return;
 		}
@@ -280,7 +280,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 		}
 
 		// Update all the buffers for our drawcall data:
-		add_draw_calls(dataForDrawCall);
+		add_draw_calls(mSponzaDrawCalls, dataForDrawCall);
 
 		mNumMaterials = static_cast<int>(allMatConfigs.size());
 		LOG_INFO_EM(std::format("Number of materials = {}", mNumMaterials));
@@ -366,6 +366,65 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 				std::move(args)...
 		);
 	}
+
+	void load_discrete_lods_of_seashells()
+	{
+		using namespace avk;
+
+		if (!mSeashellLodDrawCalls.empty()) {
+			LOG_WARNING("LODs of Seashells already loaded");
+			return;
+		}
+
+		std::vector<loaded_model_data> dataForDrawCall;
+
+		float translatex = 5.0f;
+
+		std::array<std::string, 6> LodFiles{ { 
+				  "assets/seashell_lod1_256x32.fbx"
+				, "assets/seashell_lod2_512x64.fbx"
+				, "assets/seashell_lod3_1024x128.fbx"
+				//, "assets/seashell_lod4_2048x256.fbx"
+				//, "assets/seashell_lod5_4096x512.fbx"
+				//, "assets/seashell_lod6_8192x1024.fbx"
+			} };
+
+		int lod = 1;
+		for (const auto& lodFile : LodFiles) {
+			if (!std::filesystem::exists(lodFile)) {
+				LOG_WARNING(std::format("LOD 3D model at path '{}' does not exist.", lodFile));
+				continue;
+			}
+
+			auto loadedModel = model_t::load_from_file(lodFile, aiProcess_Triangulate | aiProcess_PreTransformVertices);
+			assert(loadedModel->num_meshes() == 1);
+
+			auto& drawCallData = dataForDrawCall.emplace_back();
+			drawCallData.mMaterialIndex = 0; // TODO: Material?
+			drawCallData.mPixelsOnMeridian = lod++; // TODO: Use this value or delete it?
+			drawCallData.mModelMatrix = glm::translate(glm::vec3{ translatex, 0.0f, 0.0f }) 
+										* loadedModel->transformation_matrix_for_mesh(0) 
+										* glm::rotate(glm::radians(90.0f), glm::vec3{ 1.0f, 0.0f, 0.0f }) * glm::scale(glm::vec3{ 0.01f, 0.01f, 0.01f });
+			translatex += 5.0f;
+			auto selection = make_model_references_and_mesh_indices_selection(loadedModel, 0);
+			std::tie(drawCallData.mPositions, drawCallData.mIndices) = get_vertices_and_indices(selection);
+			drawCallData.mNormals = get_normals(selection);
+			drawCallData.mTexCoords = get_2d_texture_coordinates(selection, 0);
+		}
+
+		// Update all the buffers for our drawcall data:
+		add_draw_calls(mSeashellLodDrawCalls, dataForDrawCall);
+
+		auto chosenLodIndex = mSeashellLodDrawCalls.size() - 1;
+		auto mM             = mSeashellLodDrawCalls[chosenLodIndex].mModelMatrix;
+		for (int x = 0; x < 71; ++x) {
+			for (int y = 0; y < 71; ++y) {
+				auto& drawCall = mSeashellLodDrawCalls.emplace_back();
+				drawCall = mSeashellLodDrawCalls[chosenLodIndex]; // Just copy everything from that LOD, overwrite the model matrix:
+				drawCall.mModelMatrix = glm::translate(5.0f * glm::vec3{ static_cast<float>(x - 36), 0.0f, static_cast<float>(y - 36) }) * mM;
+			}
+		}
+    }
 
     void create_param_pipes()
     {
@@ -1163,8 +1222,9 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 		mDescriptorCache = context().create_descriptor_cache();
 
 		create_buffers();
-		load_sponza_and_terrain();
+		//load_sponza_and_terrain();
 		load_sh_brain_dataset();
+		load_discrete_lods_of_seashells();
 
 		// Define formats for the framebuffer attachments:
         constexpr auto attachmentFormats = make_array<vk::Format>(vk::Format::eB8G8R8A8Unorm, vk::Format::eD32Sfloat);
@@ -1450,9 +1510,9 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 					return;
 				}
 
-				auto numDrawCallsBefore = mDrawCalls.size();
+				auto numDrawCallsBefore = mSponzaDrawCalls.size();
 				draw_parametric_objects_ui(imguiManager);
-				auto numDrawCallsAfter  = mDrawCalls.size();
+				auto numDrawCallsAfter  = mSponzaDrawCalls.size();
 				bool rasterPipesNeedRecreation = numDrawCallsBefore != numDrawCallsAfter;
 
 				ImGui::Begin("Info & Settings");
@@ -1465,7 +1525,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 				ImGui::Text("%.1lf ms/render() CPU time", mRenderDurationMs);
 				ImGui::Separator();
 				
-				if (!mDrawCalls.empty()) {
+				if (!mSponzaDrawCalls.empty()) {
 				    ImGui::Separator();
 				    ImGui::Checkbox("Render Sponza + Terrain", &mRenderExtra3DModel);
 				}
@@ -2287,24 +2347,72 @@ ImGui::TextColored(ImVec4(.5f, .3f, .4f, 1.f), "Timestamp Period: %.3f ns", time
 #endif
 							descriptor_binding(2, 0, mCountersSsbo->as_storage_buffer())
 						})),
-						command::many_n_times(static_cast<int>(mDrawCalls.size()), [this](int i) {
+						command::many_n_times(static_cast<int>(mSponzaDrawCalls.size()), [this](int i) {
 							return command::gather(
 								command::push_constants(mVertexPipeline->layout(), vertex_pipe_push_constants{ 
-									mDrawCalls[i].mModelMatrix,
-									mDrawCalls[i].mMaterialIndex
+									mSponzaDrawCalls[i].mModelMatrix,
+									mSponzaDrawCalls[i].mMaterialIndex
 								}),
 								command::draw_indexed(
 									// Bind and use the index buffer:
-									std::forward_as_tuple(mIndexBuffer.as_reference(), size_t{mDrawCalls[i].mIndexBufferOffset}, mDrawCalls[i].mNumElements),
+									std::forward_as_tuple(mIndexBuffer.as_reference(), size_t{mSponzaDrawCalls[i].mIndexBufferOffset}, mSponzaDrawCalls[i].mNumElements),
 									// Bind the vertex input buffers in the right order (corresponding to the layout specifiers in the vertex shader)
-									std::forward_as_tuple(mPositionsBuffer.as_reference(), size_t{mDrawCalls[i].mPositionsBufferOffset}), 
-									std::forward_as_tuple(mTexCoordsBuffer.as_reference(), size_t{mDrawCalls[i].mTexCoordsBufferOffset}),
-									std::forward_as_tuple(mNormalsBuffer.as_reference()  , size_t{mDrawCalls[i].mNormalsBufferOffset})
+									std::forward_as_tuple(mPositionsBuffer.as_reference(), size_t{mSponzaDrawCalls[i].mPositionsBufferOffset}), 
+									std::forward_as_tuple(mTexCoordsBuffer.as_reference(), size_t{mSponzaDrawCalls[i].mTexCoordsBufferOffset}),
+									std::forward_as_tuple(mNormalsBuffer.as_reference()  , size_t{mSponzaDrawCalls[i].mNormalsBufferOffset})
 								)
 							);
 						} )
 					); }
 				),
+
+
+
+
+
+
+
+				// 3.111111111111111111..........) Render seashell LODs:
+				command::conditional(
+					[this]() { 
+						return mSeashellLodDrawCalls.size() > 0; 
+					},
+					[this, inFlightIndex]() { 
+						return command::gather(
+						command::bind_pipeline(mVertexPipeline.as_reference()),
+						command::bind_descriptors(mVertexPipeline->layout(), mDescriptorCache->get_or_create_descriptor_sets({
+							descriptor_binding(0, 0, mFrameDataBuffers[inFlightIndex]),
+							descriptor_binding(0, 1, as_combined_image_samplers(mImageSamplers, layout::shader_read_only_optimal)),
+							descriptor_binding(0, 2, mMaterialBuffer),
+							descriptor_binding(1, 0, mCombinedAttachmentView->as_storage_image(layout::general)),
+#if STATS_ENABLED
+							descriptor_binding(1, 1, mHeatMapImageView->as_storage_image(layout::general)),
+#endif
+							descriptor_binding(2, 0, mCountersSsbo->as_storage_buffer())
+						})),
+						command::many_n_times(static_cast<int>(mSeashellLodDrawCalls.size()), [this](int i) {
+							return command::gather(
+								command::push_constants(mVertexPipeline->layout(), vertex_pipe_push_constants{ 
+									mSeashellLodDrawCalls[i].mModelMatrix,
+									mSeashellLodDrawCalls[i].mMaterialIndex
+								}),
+								command::draw_indexed(
+									// Bind and use the index buffer:
+									std::forward_as_tuple(mIndexBuffer.as_reference(), size_t{mSeashellLodDrawCalls[i].mIndexBufferOffset}, mSeashellLodDrawCalls[i].mNumElements),
+									// Bind the vertex input buffers in the right order (corresponding to the layout specifiers in the vertex shader)
+									std::forward_as_tuple(mPositionsBuffer.as_reference(), size_t{mSeashellLodDrawCalls[i].mPositionsBufferOffset}), 
+									std::forward_as_tuple(mTexCoordsBuffer.as_reference(), size_t{mSeashellLodDrawCalls[i].mTexCoordsBufferOffset}),
+									std::forward_as_tuple(mNormalsBuffer.as_reference()  , size_t{mSeashellLodDrawCalls[i].mNormalsBufferOffset})
+								)
+							);
+						} )
+					); }
+				),
+
+
+
+
+
 
 #if STATS_ENABLED
 				mTimestampPool->write_timestamp(firstQueryIndex + 4, stage::color_attachment_output), // measure after rendering sponza
@@ -2676,7 +2784,9 @@ private: // v== Member variables ==v
 	avk::buffer mMaterialBuffer;
 	std::vector<avk::image_sampler> mImageSamplers;
 
-	std::vector<data_for_draw_call> mDrawCalls;
+	std::vector<data_for_draw_call> mSponzaDrawCalls;
+
+	std::vector<data_for_draw_call> mSeashellLodDrawCalls;
 
 	avk::compute_pipeline mInitPatchesComputePipe;
 	avk::compute_pipeline mInitKnitYarnComputePipe;
