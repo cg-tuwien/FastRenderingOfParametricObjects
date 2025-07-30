@@ -75,9 +75,6 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 		, mRenderVariantDataTransferEnabled { { true, true, true } }
 		, mOutputResultOfRenderVariantIndex{ 3 }
 	{
-        for (const auto& po : PredefinedParametricObjects) {
-            mParametricObjects.push_back(po);
-        }
 	}
 
 	/** Creates buffers for all the drawcalls.
@@ -323,6 +320,16 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 	{
 		using namespace avk;
 
+		if (!std::filesystem::exists("assets/wmfod.mif"))
+		{
+			LOG_INFO("SH brain data set does not exist and cannot be loaded.");
+
+			// Just create a dummy mBigDataset:
+			mBigDataset = context().create_buffer(memory_usage::device, {}, storage_buffer_meta::create_from_size(1));
+
+			return;
+		}
+
 		auto datasetData = get_big_sh_dataset(SH_BRAIN_DATA_SIZE_X, SH_BRAIN_DATA_SIZE_Y);
 		LOG_WARNING_EM(std::format("Loaded big dataset with {} elements ({}x{})", datasetData.size(), SH_BRAIN_DATA_SIZE_X, SH_BRAIN_DATA_SIZE_Y));
 		assert(datasetData.size() == SH_BRAIN_DATA_SIZE_X * SH_BRAIN_DATA_SIZE_Y);
@@ -380,14 +387,16 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 		);
         mUpdater->on(shader_files_changed_event(mInitKnitYarnComputePipe.as_reference())).update(mInitKnitYarnComputePipe);
 
-		mInitShBrainComputePipe = create_compute_pipe_for_parametric(
-			"shaders/pass1_init_shbrain.comp",
-			descriptor_binding(3, 0, mPatchLodBufferPing->as_storage_buffer()), // Attention: Only ping will be used in pass 1
-			descriptor_binding(3, 1, mPatchLodBufferPong->as_storage_buffer()), //            We don't need pong here.
-			descriptor_binding(3, 2, mPatchLodCountBuffer->as_storage_buffer()),
-			push_constant_binding_data{ shader_type::all, 0, sizeof(uint32_t) }
-		);
-        mUpdater->on(shader_files_changed_event(mInitShBrainComputePipe.as_reference())).update(mInitShBrainComputePipe);
+		if (mDatasetSize > 0) {
+			mInitShBrainComputePipe = create_compute_pipe_for_parametric(
+				"shaders/pass1_init_shbrain.comp",
+				descriptor_binding(3, 0, mPatchLodBufferPing->as_storage_buffer()), // Attention: Only ping will be used in pass 1
+				descriptor_binding(3, 1, mPatchLodBufferPong->as_storage_buffer()), //            We don't need pong here.
+				descriptor_binding(3, 2, mPatchLodCountBuffer->as_storage_buffer()),
+				push_constant_binding_data{ shader_type::all, 0, sizeof(uint32_t) }
+			);
+			mUpdater->on(shader_files_changed_event(mInitShBrainComputePipe.as_reference())).update(mInitShBrainComputePipe);
+		}
 
 		mPatchLodComputePipe = create_compute_pipe_for_parametric(
 			"shaders/pass2x_patch_lod.comp",
@@ -1028,7 +1037,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 					tmpOrder = (tmpOrder / 2) * 2;
 					mDebugSlidersi[0] = tmpOrder;
 				}
-				if (po.param_obj_type() == parametric_object_type::SHBrain) {
+				if (po.param_obj_type() == parametric_object_type::SHBrain && mDatasetSize > 0) {
 					int tmpOrder = mDebugSlidersi[1];
 					ImGui::SliderInt("SH Order", &tmpOrder, 2, 12);
 					tmpOrder = (tmpOrder / 2) * 2;
@@ -1337,12 +1346,20 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 		);
         mUpdater->on(shader_files_changed_event(mCopyToCombinedAttachmentPipe.as_reference())).update(mCopyToCombinedAttachmentPipe);
 
-		mUpdater->on(swapchain_resized_event(context().main_window())).invoke([this]() {
+		mUpdater->on(swapchain_resized_event(context().main_window())).invoke([this, attachmentFormats]() {
 			// Recreate all the resources (framebuffer, aux. image):
             create_framebuffer_and_auxiliary_images(attachmentFormats);
             this->mQuakeCam.set_aspect_ratio(context().main_window()->aspect_ratio());
             this->mOrbitCam.set_aspect_ratio(context().main_window()->aspect_ratio());
 		}).update(mCopyToBackufferPipe, mClearCombinedAttachmentPipe);
+
+		// Add the parametric objects to the scene:
+		for (const auto& po : PredefinedParametricObjects) {
+			if (is_sh_brain(po.param_obj_type()) && mDatasetSize == 0) {
+				continue;
+			}
+            mParametricObjects.push_back(po);
+        }
 
 		// Create a couple of spheres in the scene:
 		constexpr int SPHERE_FACTOR = ((NUM_MODELS_PER_DIM-1) * 3) / 2;
