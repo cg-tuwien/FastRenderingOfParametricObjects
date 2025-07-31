@@ -378,16 +378,16 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 
 		std::vector<loaded_model_data> dataForDrawCall;
 
-		float translatex = 5.0f;
-
-		std::array<std::string, 6> LodFiles{ { 
-				  "assets/seashell_lod1_256x32.fbx"
-				, "assets/seashell_lod2_512x64.fbx"
-				, "assets/seashell_lod3_1024x128.fbx"
-				//, "assets/seashell_lod4_2048x256.fbx"
+		std::vector<std::string> LodFiles { 
+				  "assets/seashell_lod1_64x8.fbx"
+				, "assets/seashell_lod2_128x16.fbx"
+				, "assets/seashell_lod3_256x32.fbx"
+				, "assets/seashell_lod4_512x64.fbx"
 				//, "assets/seashell_lod5_4096x512.fbx"
 				//, "assets/seashell_lod6_8192x1024.fbx"
-			} };
+		};
+
+		std::vector<PaddedVkDrawIndexedIndirectCommand> indirectParameters;
 
 		int lod = 1;
 		for (const auto& lodFile : LodFiles) {
@@ -402,18 +402,38 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 			auto& drawCallData = dataForDrawCall.emplace_back();
 			drawCallData.mMaterialIndex = 0; // TODO: Material?
 			drawCallData.mPixelsOnMeridian = lod++; // TODO: Use this value or delete it?
-			drawCallData.mModelMatrix = glm::translate(glm::vec3{ translatex, 0.0f, 0.0f }) 
-										* loadedModel->transformation_matrix_for_mesh(0) 
+			drawCallData.mModelMatrix = loadedModel->transformation_matrix_for_mesh(0) 
 										* glm::rotate(glm::radians(90.0f), glm::vec3{ 1.0f, 0.0f, 0.0f }) * glm::scale(glm::vec3{ 0.01f, 0.01f, 0.01f });
-			translatex += 5.0f;
 			auto selection = make_model_references_and_mesh_indices_selection(loadedModel, 0);
 			std::tie(drawCallData.mPositions, drawCallData.mIndices) = get_vertices_and_indices(selection);
 			drawCallData.mNormals = get_normals(selection);
 			drawCallData.mTexCoords = get_2d_texture_coordinates(selection, 0);
+
+			auto& ip = indirectParameters.emplace_back();
+			ip.indexCount    = drawCallData.mIndices.size();
+			ip.instanceCount = 0;
+			ip.firstIndex    = 0;
+			ip.vertexOffset  = 0;
+			ip.firstInstance = 1;
 		}
 
 		// Update all the buffers for our drawcall data:
 		add_draw_calls(mSeashellLodDrawCalls, dataForDrawCall);
+
+		mSeashellLodDrawParamsBuffer = context().create_buffer(
+			memory_usage::device, {},
+			indirect_buffer_meta::create_from_num_elements(SEASHELL_MAX_LODS,  sizeof(PaddedVkDrawIndexedIndirectCommand)),
+			storage_buffer_meta::create_from_size(         SEASHELL_MAX_LODS * sizeof(PaddedVkDrawIndexedIndirectCommand))
+		);
+
+		context().record_and_submit_with_fence({
+			mSeashellLodDrawParamsBuffer->fill(indirectParameters.data(), 0, 0, indirectParameters.size() * sizeof(PaddedVkDrawIndexedIndirectCommand))
+		}, *mQueue)->wait_until_signalled();
+
+		mSeashellLodIndexMapping = context().create_buffer(
+			memory_usage::device, {},
+			storage_buffer_meta::create_from_size(         SEASHELL_MAX_LODS * SEASHELL_LOD_IDS_STRIDE * sizeof(uint32_t))
+		);
     }
 
     void create_param_pipes()
@@ -544,7 +564,9 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
                 descriptor_binding(1, 1, mHeatMapImageView->as_storage_image(layout::general)),
 #endif
                 // Buffer for some pipeline statistics:
-			    descriptor_binding(2, 0, mCountersSsbo->as_storage_buffer())
+			    descriptor_binding(2, 0, mCountersSsbo->as_storage_buffer()),
+				descriptor_binding(3, 0, mSeashellLodIndexMapping->as_storage_buffer()),
+				descriptor_binding(3, 1, mSeashellLodDrawParamsBuffer->as_storage_buffer())
 		);
 	}
 
@@ -1397,9 +1419,10 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 			// Ping/pong buffers:
 			descriptor_binding(3, 0, mPatchLodBufferPing->as_storage_buffer()),
 			descriptor_binding(3, 1, mPatchLodBufferPong->as_storage_buffer()),
-			descriptor_binding(3, 2, mPatchLodCountBuffer->as_storage_buffer())
+			descriptor_binding(3, 2, mPatchLodCountBuffer->as_storage_buffer()),
+			descriptor_binding(4, 0, mSeashellLodDrawParamsBuffer->as_storage_buffer())
 #if SEPARATE_PATCH_TILE_ASSIGNMENT_PASS
-			, descriptor_binding(4, 0, mTilePatchesBuffer->as_storage_buffer())
+			, descriptor_binding(4, 1, mTilePatchesBuffer->as_storage_buffer())
 #endif
 		);
         mUpdater->on(shader_files_changed_event(mClearCombinedAttachmentPipe.as_reference())).update(mClearCombinedAttachmentPipe);
@@ -1411,6 +1434,14 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 			descriptor_binding(1, 1, mFramebufferNoAA->image_view_at(1)->as_sampled_image(layout::shader_read_only_optimal))
 		);
         mUpdater->on(shader_files_changed_event(mCopyToCombinedAttachmentPipe.as_reference())).update(mCopyToCombinedAttachmentPipe);
+
+		mSeashellLodSelectionComputePipe = context().create_compute_pipeline_for(
+			"shaders/seashell_lod_selection.comp",
+			descriptor_binding(0, 0, mFrameDataBuffers[0]),
+			descriptor_binding(1, 0, mSeashellLodIndexMapping->as_storage_buffer()),
+			descriptor_binding(1, 1, mSeashellLodDrawParamsBuffer->as_storage_buffer())
+		);
+        mUpdater->on(shader_files_changed_event(mSeashellLodSelectionComputePipe.as_reference())).update(mSeashellLodSelectionComputePipe);
 
 		mUpdater->on(swapchain_resized_event(context().main_window())).invoke([this, attachmentFormats]() {
 			// Recreate all the resources (framebuffer, aux. image):
@@ -2290,9 +2321,10 @@ ImGui::TextColored(ImVec4(.5f, .3f, .4f, 1.f), "Timestamp Period: %.3f ns", time
 #endif
                     descriptor_binding(3, 0, mPatchLodBufferPing->as_storage_buffer()),
                     descriptor_binding(3, 1, mPatchLodBufferPong->as_storage_buffer()),
-                    descriptor_binding(3, 2, mPatchLodCountBuffer->as_storage_buffer())
+                    descriptor_binding(3, 2, mPatchLodCountBuffer->as_storage_buffer()),
+					descriptor_binding(4, 0, mSeashellLodDrawParamsBuffer->as_storage_buffer())
 #if SEPARATE_PATCH_TILE_ASSIGNMENT_PASS
-					, descriptor_binding(4, 0, mTilePatchesBuffer->as_storage_buffer())
+					, descriptor_binding(4, 1, mTilePatchesBuffer->as_storage_buffer())
 #endif
 				})),
 				command::dispatch((resolution.x + 15u) / 16u, (resolution.y + 15u) / 16u, 1u),
@@ -2301,6 +2333,15 @@ ImGui::TextColored(ImVec4(.5f, .3f, .4f, 1.f), "Timestamp Period: %.3f ns", time
 #if STATS_ENABLED
 				mTimestampPool->write_timestamp(firstQueryIndex + 1, stage::compute_shader), // measure after clearing
 #endif
+
+				command::bind_pipeline(mSeashellLodSelectionComputePipe.as_reference()),
+				command::bind_descriptors(mSeashellLodSelectionComputePipe->layout(), mDescriptorCache->get_or_create_descriptor_sets({
+					descriptor_binding(0, 0, mFrameDataBuffers[inFlightIndex]),
+					descriptor_binding(1, 0, mSeashellLodIndexMapping->as_storage_buffer()),
+					descriptor_binding(1, 1, mSeashellLodDrawParamsBuffer->as_storage_buffer())
+				})),
+				command::dispatch(SEASHELL_GRID_DIM * SEASHELL_GRID_DIM / 256, 1u, 1u),
+
 				
 			// 1) Initialize:
 			initCommands,
@@ -2335,13 +2376,16 @@ ImGui::TextColored(ImVec4(.5f, .3f, .4f, 1.f), "Timestamp Period: %.3f ns", time
 #if STATS_ENABLED
 							descriptor_binding(1, 1, mHeatMapImageView->as_storage_image(layout::general)),
 #endif
-							descriptor_binding(2, 0, mCountersSsbo->as_storage_buffer())
+							descriptor_binding(2, 0, mCountersSsbo->as_storage_buffer()),
+							descriptor_binding(3, 0, mSeashellLodIndexMapping->as_storage_buffer()),
+							descriptor_binding(3, 1, mSeashellLodDrawParamsBuffer->as_storage_buffer())
 						})),
 						command::many_n_times(static_cast<int>(mSponzaDrawCalls.size()), [this](int i) {
 							return command::gather(
 								command::push_constants(mVertexPipeline->layout(), vertex_pipe_push_constants{ 
 									mSponzaDrawCalls[i].mModelMatrix,
-									mSponzaDrawCalls[i].mMaterialIndex
+									mSponzaDrawCalls[i].mMaterialIndex,
+									0
 								}),
 								command::draw_indexed(
 									// Bind and use the index buffer:
@@ -2367,7 +2411,7 @@ ImGui::TextColored(ImVec4(.5f, .3f, .4f, 1.f), "Timestamp Period: %.3f ns", time
 					[this]() { 
 						return mRenderExtra3DModel && mSeashellLodDrawCalls.size() > 0; 
 					},
-					[this, inFlightIndex, LODINDEX = 1]() { 
+					[this, inFlightIndex]() { 
 						return command::gather(
 						command::bind_pipeline(mVertexPipeline.as_reference()),
 						command::bind_descriptors(mVertexPipeline->layout(), mDescriptorCache->get_or_create_descriptor_sets({
@@ -2378,22 +2422,42 @@ ImGui::TextColored(ImVec4(.5f, .3f, .4f, 1.f), "Timestamp Period: %.3f ns", time
 #if STATS_ENABLED
 							descriptor_binding(1, 1, mHeatMapImageView->as_storage_image(layout::general)),
 #endif
-							descriptor_binding(2, 0, mCountersSsbo->as_storage_buffer())
+							descriptor_binding(2, 0, mCountersSsbo->as_storage_buffer()),
+							descriptor_binding(3, 0, mSeashellLodIndexMapping->as_storage_buffer()),
+							descriptor_binding(3, 1, mSeashellLodDrawParamsBuffer->as_storage_buffer())
 						})),
-						command::push_constants(mVertexPipeline->layout(), vertex_pipe_push_constants{ 
-							mSeashellLodDrawCalls[LODINDEX].mModelMatrix,
-							mSeashellLodDrawCalls[LODINDEX].mMaterialIndex
-						}),
-						command::draw_indexed(
-							// Bind and use the index buffer:
-							std::forward_as_tuple(mIndexBuffer.as_reference(), size_t{mSeashellLodDrawCalls[LODINDEX].mIndexBufferOffset}, mSeashellLodDrawCalls[LODINDEX].mNumElements),
-							// aNumberOfInstances, aFirstIndex, aVertexOffset, aFirstInstance:
-							    71u * 71u,           0u,           0u,             1u,
-							// Bind the vertex input buffers in the right order (corresponding to the layout specifiers in the vertex shader)
-							std::forward_as_tuple(mPositionsBuffer.as_reference(), size_t{mSeashellLodDrawCalls[LODINDEX].mPositionsBufferOffset}), 
-							std::forward_as_tuple(mTexCoordsBuffer.as_reference(), size_t{mSeashellLodDrawCalls[LODINDEX].mTexCoordsBufferOffset}),
-							std::forward_as_tuple(mNormalsBuffer.as_reference()  , size_t{mSeashellLodDrawCalls[LODINDEX].mNormalsBufferOffset})
-						)
+						command::many_n_times(static_cast<int>(mSeashellLodDrawCalls.size()), [this](int i) {
+							return command::gather(
+								command::push_constants(mVertexPipeline->layout(), vertex_pipe_push_constants{ 
+									mSeashellLodDrawCalls[i].mModelMatrix,
+									mSeashellLodDrawCalls[i].mMaterialIndex,
+									i
+								}),
+								//command::draw_indexed(
+								//	// Bind and use the index buffer:
+								//	std::forward_as_tuple(mIndexBuffer.as_reference(), size_t{mSeashellLodDrawCalls[0].mIndexBufferOffset}, mSeashellLodDrawCalls[0].mNumElements),
+								//	// aNumberOfInstances, aFirstIndex, aVertexOffset, aFirstInstance:
+								//		1u,           0u,           0u,             1u,
+								//	// Bind the vertex input buffers in the right order (corresponding to the layout specifiers in the vertex shader)
+								//	std::forward_as_tuple(mPositionsBuffer.as_reference(), size_t{mSeashellLodDrawCalls[0].mPositionsBufferOffset}), 
+								//	std::forward_as_tuple(mTexCoordsBuffer.as_reference(), size_t{mSeashellLodDrawCalls[0].mTexCoordsBufferOffset}),
+								//	std::forward_as_tuple(mNormalsBuffer.as_reference()  , size_t{mSeashellLodDrawCalls[0].mNormalsBufferOffset})
+								//)
+								command::draw_indexed_indirect(
+									mSeashellLodDrawParamsBuffer.as_reference(),
+									// Bind and use the index buffer:
+									//mIndexBuffer.as_reference(), 
+									std::forward_as_tuple(mIndexBuffer.as_reference(), size_t{mSeashellLodDrawCalls[i].mIndexBufferOffset}, mSeashellLodDrawCalls[i].mNumElements),
+									// uint32_t aNumberOfDraws, vk::DeviceSize aParametersOffset, uint32_t aParametersStride:
+									1u, static_cast<vk::DeviceSize>(i * sizeof(PaddedVkDrawIndexedIndirectCommand)), static_cast<uint32_t>(sizeof(PaddedVkDrawIndexedIndirectCommand)),
+									// Bind the vertex input buffers in the right order (corresponding to the layout specifiers in the vertex shader)
+									std::forward_as_tuple(mPositionsBuffer.as_reference(), size_t{mSeashellLodDrawCalls[i].mPositionsBufferOffset}), 
+									std::forward_as_tuple(mTexCoordsBuffer.as_reference(), size_t{mSeashellLodDrawCalls[i].mTexCoordsBufferOffset}),
+									std::forward_as_tuple(mNormalsBuffer.as_reference()  , size_t{mSeashellLodDrawCalls[i].mNormalsBufferOffset})
+								)
+							);
+						} )
+						
 					); }
 				),
 
@@ -2427,7 +2491,7 @@ ImGui::TextColored(ImVec4(.5f, .3f, .4f, 1.f), "Timestamp Period: %.3f ns", time
 				}),
 				command::draw_vertices_indirect(
 					mIndirectPxFillCountBuffer.as_reference(), 
-					get_rendering_variant_index(rendering_variant::Tess_noAA) * sizeof(VkDrawIndirectCommand), 
+					get_rendering_variant_index(rendering_variant::Tess_noAA) * sizeof(VkDrawIndexedIndirectCommand), 
 					sizeof(VkDrawIndirectCommand), 
 					1u) // <-- Exactly ONE draw (but potentially a lot of instances), use the one at [0]
 				
@@ -2775,6 +2839,9 @@ private: // v== Member variables ==v
 	std::vector<data_for_draw_call> mSponzaDrawCalls;
 
 	std::vector<data_for_draw_call> mSeashellLodDrawCalls;
+	avk::buffer						mSeashellLodDrawParamsBuffer;
+	avk::buffer						mSeashellLodIndexMapping;
+	avk::compute_pipeline			mSeashellLodSelectionComputePipe;
 
 	avk::compute_pipeline mInitPatchesComputePipe;
 	avk::compute_pipeline mInitKnitYarnComputePipe;

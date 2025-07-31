@@ -1,0 +1,43 @@
+#version 460
+#extension GL_EXT_nonuniform_qualifier                   : require
+#extension GL_EXT_shader_image_int64                     : require
+#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
+#extension GL_GOOGLE_include_directive                   : enable
+
+layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
+
+#include "../shader_includes/host_device_shared.h"
+#include "../shader_includes/util/ui64_conv.glsl"
+#include "../shader_includes/types.glsl"
+#include "../shader_includes/host_device_shared.h"
+
+// ###### BOUND RESOURCES #################################
+#include "../shader_includes/common_ubo.glsl"
+layout(set = 1, binding = 0) buffer SeashellLodIndexMapping { uint mMappedIndex[]; } uSeashellLodIndexMapping;
+layout(set = 1, binding = 1) buffer SeashellLodDrawParamsBuffer { PaddedVkDrawIndexedIndirectCommand mDrawParams[]; } uSeashellLodDrawParamsBuffer;
+// -------------------------------------------------------
+
+#define NICE_CLEAR_COLOR 0
+
+// ################## compute shader main ###################
+void main()
+{
+	if (gl_GlobalInvocationID.x >= SEASHELL_GRID_DIM * SEASHELL_GRID_DIM) {
+		return;
+	}
+
+	int seashellIndex = int(gl_GlobalInvocationID.x);
+
+    int x = (seashellIndex - 1) / 71;
+    int y = (seashellIndex - 1) % 71;
+    vec3 seashellPos = vec3(5.0 * (x - 36), 0.0, 5.0 * (y - 36));
+
+	// assign to buckets of LODs:
+	vec3 camPos = ubo.mCameraTransform[3].xyz;
+	float dist = length(seashellPos - camPos);
+
+	int bucket = clamp(3 - int(dist / 30.0), 0, 3);
+//	int bucket = 0;
+	const uint insertIdx = atomicAdd(uSeashellLodDrawParamsBuffer.mDrawParams[bucket].instanceCount, 1);
+	uSeashellLodIndexMapping.mMappedIndex[SEASHELL_LOD_IDS_STRIDE * bucket + insertIdx] = seashellIndex; // < The seashell index defines its position (see simple.vert)
+}

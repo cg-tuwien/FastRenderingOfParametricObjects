@@ -23,8 +23,9 @@ layout(set = 2, binding = 1, r32ui) uniform restrict uimage2D   uHeatmapImage;
 layout(set = 3, binding = 0) buffer PatchLodPing { px_fill_data mElements[]; } uPatchLodPing; 
 layout(set = 3, binding = 1) buffer PatchLodPong { px_fill_data mElements[]; } uPatchLodPong; 
 layout(set = 3, binding = 2) buffer PatchLodCount { uvec4 mDispatchCounts[]; } uPatchLodCount; 
+layout(set = 4, binding = 0) buffer SeashellLodDrawParamsBuffer { PaddedVkDrawIndexedIndirectCommand mDrawParams[]; } uSeashellLodDrawParamsBuffer;
 #if SEPARATE_PATCH_TILE_ASSIGNMENT_PASS
-layout(set = 4, binding = 0) buffer TilePatchesBuffer { uint mPatchIndices[]; } uTilePatches;
+layout(set = 4, binding = 1) buffer TilePatchesBuffer { uint mPatchIndices[]; } uTilePatches;
 #endif
 // -------------------------------------------------------
 
@@ -74,6 +75,11 @@ void main()
 		// For the PatchLod* buffers, we only have to clear the counters:
 		if (gl_LocalInvocationIndex < MAX_PATCH_SUBDIV_STEPS) {
 			uPatchLodCount.mDispatchCounts[gl_LocalInvocationIndex] = uvec4(0, 1, 1, 0xDEAD);
+		}
+
+		// Similar as above, also clear the seashell LOD count buffers:
+		if (gl_LocalInvocationIndex < SEASHELL_MAX_LODS) {
+			uSeashellLodDrawParamsBuffer.mDrawParams[gl_LocalInvocationIndex].instanceCount = 0;
 		}
 	}
 

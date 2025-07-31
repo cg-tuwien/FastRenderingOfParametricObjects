@@ -74,3 +74,8 @@
 #define SH_BRAIN_DATA_SIZE_X      140
 #define SH_BRAIN_DATA_SIZE_Y      140
 #define SH_BRAIN_ELEMENT_OFFSET    25.0
+
+#define SEASHELL_MAX_LODS          10
+// Seashell grid is 71x71 = 5041
+#define SEASHELL_GRID_DIM          71
+#define SEASHELL_LOD_IDS_STRIDE    5200

@@ -11,6 +11,15 @@ struct VkDrawIndirectCommand {
     uint    firstInstance;
 };
 
+struct PaddedVkDrawIndexedIndirectCommand {
+    uint    indexCount;
+    uint    instanceCount;
+    uint    firstIndex;
+    int     vertexOffset;
+    uint    firstInstance;
+    int     _padding[3];
+};
+
 struct object_data
 {
     vec4  mParams;

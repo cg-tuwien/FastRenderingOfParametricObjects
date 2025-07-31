@@ -58,6 +58,7 @@
     <None Include="shaders\px-fill-tess\patch_go.tese" />
     <None Include="shaders\px-fill-tess\patch_ready.vert" />
     <None Include="shaders\px-fill-tess\patch_set.tesc" />
+    <None Include="shaders\seashell_lod_selection.comp" />
     <None Include="shaders\simple.vert" />
     <None Include="shaders\full_screen_quad.frag" />
     <None Include="shaders\full_screen_quad.vert" />

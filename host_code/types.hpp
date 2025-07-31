@@ -333,6 +333,7 @@ struct vertex_pipe_push_constants
 {
 	glm::mat4 mModelMatrix;
     int32_t   mMatIndex;
+    int32_t   mLod;
 };
 
 struct copy_to_backbuffer_push_constants
@@ -364,4 +365,13 @@ struct standalone_tess_push_constants
 struct patch_into_tess_push_constants
 {
     int32_t mPxFillParamsBufferOffset;
+};
+
+struct PaddedVkDrawIndexedIndirectCommand {
+    uint32_t    indexCount;
+    uint32_t    instanceCount;
+    uint32_t    firstIndex;
+    int32_t     vertexOffset;
+    uint32_t    firstInstance;
+    int32_t     _padding[3];
 };
