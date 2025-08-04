@@ -10,6 +10,7 @@ layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
 #include "../shader_includes/util/ui64_conv.glsl"
 #include "../shader_includes/types.glsl"
 #include "../shader_includes/host_device_shared.h"
+#include "../shader_includes/util/glsl_helpers.glsl"
 
 // ###### BOUND RESOURCES #################################
 #include "../shader_includes/common_ubo.glsl"
@@ -32,11 +33,29 @@ void main()
     int y = (seashellIndex - 1) % 71;
     vec3 seashellPos = vec3(5.0 * (x - 36), 0.0, 5.0 * (y - 36));
 
-	// assign to buckets of LODs:
-	vec3 camPos = ubo.mCameraTransform[3].xyz;
-	float dist = length(seashellPos - camPos);
+	vec4 posCS = ubo.mViewProjMatrix * vec4(seashellPos, 1.0);
+	if (is_off_screen(posCS) > 0) {
+		return;
+	}
 
-	int bucket = clamp(3 - int(dist / 30.0), 0, 3);
+	vec3 vpc = cs_to_viewport(posCS, ubo.mResolutionAndCulling.xy);
+	const float quality = 4.0; //px
+	// Move #quality-many pixels towards the center of the screen, then reproject into view space:
+	vec3 vpc2 = vpc;
+	vpc2.y += vpc.y < ubo.mResolutionAndCulling.y ? quality : -quality;
+	vec3 vs2  = viewport_to_vs(vpc2, ubo.mResolutionAndCulling.xy, ubo.mInverseProjMatrix);
+	// Compute the threshold in view space <= The chosen LOD mesh shall provide more detail than this.
+	float thresholdVS = length(vs2 - (ubo.mViewMatrix * vec4(seashellPos, 1.0)).xyz);
+
+	int bucket = 0;
+	for (int i = 0; i < 7; ++i) {
+		if (uSeashellLodDrawParamsBuffer.mDrawParams[i]._padding2 < thresholdVS) {
+			bucket = i;
+			break;
+		}
+	}
+
+//	int bucket = clamp(6 - int(dist / 30.0), 0, 6);
 //	int bucket = 0;
 	const uint insertIdx = atomicAdd(uSeashellLodDrawParamsBuffer.mDrawParams[bucket].instanceCount, 1);
 	uSeashellLodIndexMapping.mMappedIndex[SEASHELL_LOD_IDS_STRIDE * bucket + insertIdx] = seashellIndex; // < The seashell index defines its position (see simple.vert)

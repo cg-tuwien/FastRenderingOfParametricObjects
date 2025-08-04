@@ -17,7 +17,9 @@ struct PaddedVkDrawIndexedIndirectCommand {
     uint    firstIndex;
     int     vertexOffset;
     uint    firstInstance;
-    int     _padding[3];
+    int     _padding0;
+    uint    _padding1;
+    float   _padding2;
 };
 
 struct object_data

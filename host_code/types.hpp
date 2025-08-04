@@ -13,7 +13,6 @@ struct data_for_draw_call
 	glm::mat4 mModelMatrix;
 
 	int32_t mMaterialIndex;
-	int32_t mPixelsOnMeridian;
 };
 
 /** Contains the data for each draw call */
@@ -25,9 +24,7 @@ struct loaded_model_data
 	std::vector<uint32_t> mIndices;
 
 	glm::mat4 mModelMatrix;
-
 	int32_t mMaterialIndex;
-	int32_t mPixelsOnMeridian;
 };
 
 struct frame_data_ubo
@@ -163,7 +160,7 @@ public:
         , mTransformationMatrix{ aTransformationMatrix }
         , mMaterialIndex{ aMaterialIndex }
         , mRenderingMethod{ rendering_variant::Tess_noAA }
-        , mScreenDistanceThreshold{ 84.0f }
+        , mScreenDistanceThreshold{ 64.0f }
         , mParametersEpsilon{ 0.005f, 0.005f }
         , mTessLevels{ 16.0f, 16.0f }
         , mSamplingFactors{ 1.0f, 1.0f }
@@ -373,5 +370,7 @@ struct PaddedVkDrawIndexedIndirectCommand {
     uint32_t    firstIndex;
     int32_t     vertexOffset;
     uint32_t    firstInstance;
-    int32_t     _padding[3];
+    int32_t     _padding0;
+    uint32_t    _padding1;
+    float       _padding2;
 };

@@ -64,10 +64,10 @@ vec3 vertexColors[MAX_COLORS] = {
 void main() {
 	vec4 posWS = pushConstants.mModelMatrix * vec4(inPosition.xyz, 1.0);
 
+    // The following if block is for handling the LODs of seashells; it is inactive for Sponza + Terrain:
     if (gl_InstanceIndex > 0) {
         int mappingIndex  = int(gl_InstanceIndex.x) - 1;
         int seashellIndex = int(uSeashellLodIndexMapping.mMappedIndex[SEASHELL_LOD_IDS_STRIDE * pushConstants.mLod + mappingIndex]);
-//        int seashellIndex = mappingIndex;
 
         int x = (seashellIndex - 1) / 71;
         int y = (seashellIndex - 1) % 71;
@@ -79,7 +79,7 @@ void main() {
 	v_out.normalWS   = inNormal;
     v_out.texCoords  = inTexCoord;
     v_out.shadingUserParams = vec3(0.0);
-    v_out.matIndex   = pushConstants.mMatIndex;
+    v_out.matIndex   = -5 + pushConstants.mLod + (pushConstants.mLod > 2 ? 1 : 0);
 	v_out.color      = vertexColors[gl_VertexIndex % MAX_COLORS];
     gl_Position      = ubo.mViewProjMatrix * posWS;
 }

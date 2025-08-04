@@ -22,6 +22,15 @@ vec3 cs_to_viewport(vec4 pointCS, vec2 resolution)
     return vpc;
 }
 
+// Transforms given viewport coordinates into view space
+vec3 viewport_to_vs(vec3 vpc, vec2 resolution, mat4 inverseProjMat)
+{
+	vec3 cs = vec3((vpc.xy / resolution - 0.5) * 2.0, vpc.z);
+	vec4 ip = inverseProjMat * vec4(cs, 1.0);
+	vec3 vs = ip.xyz / ip.w;
+	return vs;
+}
+
 // ========= vvv   older utilities from previous project(s)   vvv ========= 
 
 struct Plane

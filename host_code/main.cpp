@@ -90,7 +90,6 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 			auto& drawCall = drawCallsTarget.emplace_back();
 			drawCall.mModelMatrix = drawCallData.mModelMatrix;
 			drawCall.mMaterialIndex = drawCallData.mMaterialIndex;
-			drawCall.mPixelsOnMeridian = drawCallData.mPixelsOnMeridian;
 
 			const auto insertIdx = mVertexBuffersOffsetsSizesCount.x++;
 			uint32_t posOffset = 0;
@@ -260,7 +259,6 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 					        auto& drawCallData = dataForDrawCall.emplace_back();
 
 					        drawCallData.mMaterialIndex = static_cast<int32_t>(matIndex);
-					        drawCallData.mPixelsOnMeridian = 1;
 					        drawCallData.mModelMatrix = sceneTransform * orcaInstTransform * curModel->transformation_matrix_for_mesh(meshIndex);
 
 					        auto selection = make_model_references_and_mesh_indices_selection(curModel, meshIndex);
@@ -379,12 +377,14 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 		std::vector<loaded_model_data> dataForDrawCall;
 
 		std::vector<std::string> LodFiles { 
-				  "assets/seashell_lod1_64x8.fbx"
-				, "assets/seashell_lod2_128x16.fbx"
-				, "assets/seashell_lod3_256x32.fbx"
-				, "assets/seashell_lod4_512x64.fbx"
-				//, "assets/seashell_lod5_4096x512.fbx"
-				//, "assets/seashell_lod6_8192x1024.fbx"
+				  "assets/seashell_lod0_746tri.fbx"
+				, "assets/seashell_lod1_3k_tri.fbx"
+				, "assets/seashell_lod2_13k_tri.fbx"
+				, "assets/seashell_lod3_52k_tri.fbx"
+				, "assets/seashell_lod4_209k_tri.fbx"
+				, "assets/seashell_lod5_835k_tri.fbx"
+				, "assets/seashell_lod6_3.3M_tri.fbx"
+				, "assets/seashell_lod7_13.4M_tri.fbx"
 		};
 
 		std::vector<PaddedVkDrawIndexedIndirectCommand> indirectParameters;
@@ -396,12 +396,11 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 				continue;
 			}
 
-			auto loadedModel = model_t::load_from_file(lodFile, aiProcess_Triangulate | aiProcess_PreTransformVertices);
+			auto loadedModel = model_t::load_from_file(lodFile, aiProcess_Triangulate | aiProcess_PreTransformVertices | aiProcess_FlipWindingOrder);
 			assert(loadedModel->num_meshes() == 1);
 
 			auto& drawCallData = dataForDrawCall.emplace_back();
 			drawCallData.mMaterialIndex = 0; // TODO: Material?
-			drawCallData.mPixelsOnMeridian = lod++; // TODO: Use this value or delete it?
 			drawCallData.mModelMatrix = loadedModel->transformation_matrix_for_mesh(0) 
 										* glm::rotate(glm::radians(90.0f), glm::vec3{ 1.0f, 0.0f, 0.0f }) * glm::scale(glm::vec3{ 0.01f, 0.01f, 0.01f });
 			auto selection = make_model_references_and_mesh_indices_selection(loadedModel, 0);
@@ -415,6 +414,29 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 			ip.firstIndex    = 0;
 			ip.vertexOffset  = 0;
 			ip.firstInstance = 1;
+
+			// Calculate the approximate triangle size in WS using the very FIRST/LAST(?) triangle:
+			auto get_triangle_extent = [&](int index) {
+				using namespace glm;
+
+				constexpr int N = 3;
+				std::array<float, N> edgeLengths;
+				std::array<int,   N> indicesFactor  = { { 1, 2, 3 } };
+				std::array<int,   N> indicesDivisor = { { 4, 4, 4 } };
+				for (int i = 0; i < N; ++i) {
+					vec3 v0 = vec3(drawCallData.mModelMatrix * vec4(drawCallData.mPositions[drawCallData.mIndices[index + 0]], 1.0));
+					vec3 v1 = vec3(drawCallData.mModelMatrix * vec4(drawCallData.mPositions[drawCallData.mIndices[index + 1]], 1.0));
+					vec3 v2 = vec3(drawCallData.mModelMatrix * vec4(drawCallData.mPositions[drawCallData.mIndices[index + 2]], 1.0));
+					float maxedge = std::max({ length(v0 - v1), length(v0 - v2), length(v1 - v2) });
+					edgeLengths[i] = maxedge;
+				}
+				std::sort(edgeLengths.begin(), edgeLengths.end());
+				return edgeLengths[N/2];
+			};
+			// Just "hide" the value in plain sight and thereby, transfer it to seashell_lod_selection.comp
+			ip._padding2 = get_triangle_extent(drawCallData.mIndices.size() - 3);
+
+			LOG_INFO_EM(std::format("Triangle extent in '{}' = {}", lodFile, ip._padding2));
 		}
 
 		// Update all the buffers for our drawcall data:
@@ -1828,8 +1850,14 @@ ImGui::TextColored(ImVec4(.5f, .3f, .4f, 1.f), "Timestamp Period: %.3f ns", time
 	{
 		using namespace avk;
 
-		if (!mQuakeCam.is_enabled() && input().key_pressed(key_code::q)) {
+		if (!mQuakeCam.is_enabled()) {
 			mQuakeCam.set_matrix(mOrbitCam.matrix());
+		}
+		else {
+			mOrbitCam.set_matrix(mQuakeCam.matrix());
+		}
+
+		if (!mQuakeCam.is_enabled() && input().key_pressed(key_code::q)) {
 			mQuakeCam.enable();
 			mOrbitCam.disable();
         }
