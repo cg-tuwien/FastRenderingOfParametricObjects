@@ -154,6 +154,12 @@
     <None Include="shaders\seashell_lod_selection.comp">
       <Filter>shaders</Filter>
     </None>
+    <None Include="shaders\color_out.frag">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shaders\to_lines.geom">
+      <Filter>shaders</Filter>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="precompiled_headers\cg_stdafx.cpp">
