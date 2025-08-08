@@ -402,8 +402,8 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 
 			auto& drawCallData = dataForDrawCall.emplace_back();
 			drawCallData.mMaterialIndex = 0; // TODO: Material?
-			drawCallData.mModelMatrix = loadedModel->transformation_matrix_for_mesh(0) 
-										* glm::rotate(glm::radians(90.0f), glm::vec3{ 1.0f, 0.0f, 0.0f }) * glm::scale(glm::vec3{ 0.01f, 0.01f, 0.01f });
+			drawCallData.mModelMatrix = glm::translate(glm::vec3{ 0.0f, 2.0f, 0.0f }) * loadedModel->transformation_matrix_for_mesh(0)
+										* glm::rotate(glm::radians(-70.0f), glm::vec3{ 0.0f, 1.0f, 0.0f }) * glm::rotate(glm::radians(90.0f), glm::vec3{ 1.0f, 0.0f, 0.0f }) * glm::scale(glm::vec3{ 0.01f, 0.01f, 0.01f });
 			auto selection = make_model_references_and_mesh_indices_selection(loadedModel, 0);
 			std::tie(drawCallData.mPositions, drawCallData.mIndices) = get_vertices_and_indices(selection);
 			drawCallData.mNormals = get_normals(selection);
