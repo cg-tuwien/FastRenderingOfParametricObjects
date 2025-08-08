@@ -43,8 +43,9 @@
 //#include "perf_tests/test_knit_yarn.hpp"
 //#include "perf_tests/test_fiber_curves.hpp"
 //#include "perf_tests/test_seashell.hpp"
+#include "perf_tests/test_grid_of_seashells.hpp"
 //#define TEST_RENDERING_METHOD          rendering_variant::PointRendered_direct
-#define TEST_GATHER_TIMER_QUERIES 0
+//#define TEST_GATHER_TIMER_QUERIES 0
 #define TEST_GATHER_PATCH_COUNTS  0
 
 static std::array<parametric_object, 15> PredefinedParametricObjects {{
@@ -62,7 +63,7 @@ static std::array<parametric_object, 15> PredefinedParametricObjects {{
 	parametric_object{"Giant Worm"        , "assets/po-giant-worm.png",         false, parametric_object_type::GiantWorm,              0.0f,   1.0f,            0.0f,  glm::two_pi<float>(), glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{ 0.f,  0.f, -4.f}), -5},
 	parametric_object{"SH Glyph"          , "assets/po-single-sh-glyph.png",    false, parametric_object_type::SHGlyph,                0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>(),     glm::uvec2{ 1u, 1u }, glm::mat4{ 1.0f }, -2},
 	parametric_object{"Brain Scan"        , "assets/po-sh-brain.png",           false, parametric_object_type::SHBrain,                0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>(), glm::uvec2{ SH_BRAIN_DATA_SIZE_X, SH_BRAIN_DATA_SIZE_Y }, glm::mat4{ 1.0f }, -2},
-	parametric_object{"Grid of Seashells" , "assets/po-seashell3.png",          false, parametric_object_type::GridOfSeashells,        glm::two_pi<float>() * 8.0f,/* -> */0.0f,   0.0f,/* -> */glm::two_pi<float>(), glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{ 4.5f, 0.0f, 0.0f }), -5}
+	parametric_object{"Grid of Seashells" , "assets/po-seashell3.png",          false, parametric_object_type::GridOfSeashells,        glm::two_pi<float>() * 8.0f,/* -> */0.0f,   0.0f,/* -> */glm::two_pi<float>(), glm::uvec2{ 1u, 1u }, glm::mat4{ 1.0f }, -5}
 }};
 
 class vk_parametric_curves_app : public avk::invokee
