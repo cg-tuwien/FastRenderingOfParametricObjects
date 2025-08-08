@@ -416,7 +416,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 			ip.vertexOffset  = 0;
 			ip.firstInstance = 1;
 
-			// Calculate the approximate triangle size in WS using the very FIRST/LAST(?) triangle:
+			// Calculate the approximate triangle size in WS using some triangles across the whole model (at 1/4, 1/2, and 3/4 positions):
 			auto get_triangle_extent = [&](int index) {
 				using namespace glm;
 
