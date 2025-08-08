@@ -158,6 +158,9 @@ vec3 shade(int matIndex, int renderVariant, vec3 albedo, vec3 shadingUserParams,
             matIndex == -5 ? vec3(0.2, 0.5, 1.0) :
             matIndex == -4 ? vec3(0.2, 1.0, 0.5) : vec3(1.0, 0.2, 0.5)
         );
+        if (shadingUserParams.z > 0)  {
+            base_color = mix(base_color, vec3(0.0), 0.1);
+        }
         const vec3 incoming = normalize(vec3(1.23, 7.89, 4.56));
         float ambient = 0.04;
         float exposure = 4.0;
