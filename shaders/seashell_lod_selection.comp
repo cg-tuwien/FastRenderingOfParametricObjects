@@ -23,7 +23,7 @@ layout(set = 1, binding = 1) buffer SeashellLodDrawParamsBuffer { PaddedVkDrawIn
 // ################## compute shader main ###################
 void main()
 {
-	if (gl_GlobalInvocationID.x >= SEASHELL_GRID_DIM * SEASHELL_GRID_DIM) {
+	if (gl_GlobalInvocationID.x > 2 ) { // SEASHELL_GRID_DIM * SEASHELL_GRID_DIM) {
 		return;
 	}
 
@@ -34,12 +34,12 @@ void main()
     vec3 seashellPos = vec3(5.0 * (x - 36), 0.0, 5.0 * (y - 36));
 
 	vec4 posCS = ubo.mViewProjMatrix * vec4(seashellPos, 1.0);
-	if (is_off_screen(posCS) > 0) {
-		return;
-	}
+//	if (is_off_screen(posCS) > 0) {
+//		return;
+//	}
 
 	vec3 vpc = cs_to_viewport(posCS, ubo.mResolutionAndCulling.xy);
-	const float quality = 4.0; //px
+	const float quality = 10.0; //px
 	// Move #quality-many pixels towards the center of the screen, then reproject into view space:
 	vec3 vpc2 = vpc;
 	vpc2.y += vpc.y < ubo.mResolutionAndCulling.y ? quality : -quality;
@@ -47,13 +47,13 @@ void main()
 	// Compute the threshold in view space <= The chosen LOD mesh shall provide more detail than this.
 	float thresholdVS = length(vs2 - (ubo.mViewMatrix * vec4(seashellPos, 1.0)).xyz);
 
-	int bucket = 0;
-	for (int i = 0; i < 7; ++i) {
-		if (uSeashellLodDrawParamsBuffer.mDrawParams[i]._padding2 < thresholdVS) {
-			bucket = i;
-			break;
-		}
-	}
+	int bucket = seashellIndex;
+//	for (int i = 0; i < 7; ++i) {
+//		if (uSeashellLodDrawParamsBuffer.mDrawParams[i]._padding2 < thresholdVS) {
+//			bucket = i;
+//			break;
+//		}
+//	}
 
 //	int bucket = clamp(6 - int(dist / 30.0), 0, 6);
 //	int bucket = 0;

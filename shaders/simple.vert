@@ -72,7 +72,8 @@ void main() {
 
         int x = (seashellIndex - 1) / 71;
         int y = (seashellIndex - 1) % 71;
-        vec3 seashellPos = vec3(5.0 * (x - 36), 0.0, 5.0 * (y - 36));
+//        vec3 seashellPos = vec3(5.0 * (x - 36), 0.0, 5.0 * (y - 36));
+        vec3 seashellPos = vec3(-4.0 + 4.0 * seashellIndex, 0.0, 0.0);
         posWS += vec4(seashellPos, 0.0);
     }
 
