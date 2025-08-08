@@ -2369,7 +2369,7 @@ ImGui::TextColored(ImVec4(.5f, .3f, .4f, 1.f), "Timestamp Period: %.3f ns", time
 					descriptor_binding(1, 0, mSeashellLodIndexMapping->as_storage_buffer()),
 					descriptor_binding(1, 1, mSeashellLodDrawParamsBuffer->as_storage_buffer())
 				})),
-				command::dispatch(SEASHELL_GRID_DIM * SEASHELL_GRID_DIM / 256, 1u, 1u),
+				command::dispatch(roundUpToMultipleOf(SEASHELL_GRID_DIM * SEASHELL_GRID_DIM / 256, 256), 1u, 1u),
 
 				
 			// 1) Initialize:
