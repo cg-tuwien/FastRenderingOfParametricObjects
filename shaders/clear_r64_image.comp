@@ -40,14 +40,16 @@ void main()
 #endif
 
 	ivec2 iuv = ivec2(gl_GlobalInvocationID.xy);
-	float clearDepth = 1.0;
+	float clearDepth = 0.9999;
 #if NICE_CLEAR_COLOR
 	float f = smoothstep(sin(float(iuv.x)*3.1415/float(resolution.x))*50.0 + float(resolution.y)*0.5        ,
 						 sin(float(iuv.x)*3.1415/float(resolution.x))*60.0 + float(resolution.y)*0.5 - 100.0,
 						 float(resolution.y - gl_GlobalInvocationID.y));
 	vec4  clearColor = mix(vec4(0.8, 0.8, 0.8, 1.0), vec4(0.6, 0.6, 0.6, 1.0), f);
 #else
-	vec4  clearColor = vec4(0.0);
+	vec4  clearColor = vec4(1.0);
+//	if (iuv[0] % 10 == 0) { clearColor = vec4(0.0, 0.5, 1.0, 1.0); clearDepth = 0.0001; }
+//	if (iuv[1] % 10 == 0) { clearColor = vec4(0.0, 0.5, 1.0, 1.0); clearDepth = 0.0001; }
 #endif
 	uint64_t depthEncoded = depth_to_ui64(clearDepth);
 	uint64_t colorEncoded = color_to_ui64(clearColor);
