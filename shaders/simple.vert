@@ -65,6 +65,7 @@ void main() {
 	vec4 posWS = pushConstants.mModelMatrix * vec4(inPosition.xyz, 1.0);
 
     // The following if block is for handling the LODs of seashells; it is inactive for Sponza + Terrain:
+    // (Note: One could argue that this shader is no longer that simple.vert ^^)
     if (gl_InstanceIndex > 0) {
         int mappingIndex  = int(gl_InstanceIndex.x) - 1;
         int seashellIndex = int(uSeashellLodIndexMapping.mMappedIndex[SEASHELL_LOD_IDS_STRIDE * pushConstants.mLod + mappingIndex]);
@@ -76,7 +77,7 @@ void main() {
     }
 
 	v_out.positionWS = posWS.xyz;
-	v_out.normalWS   = inNormal;
+	v_out.normalWS   = mat3(pushConstants.mModelMatrix) * inNormal;
     v_out.texCoords  = inTexCoord;
     v_out.shadingUserParams = vec3(0.0);
     v_out.matIndex   = -5 + pushConstants.mLod + (pushConstants.mLod > 2 ? 1 : 0);
