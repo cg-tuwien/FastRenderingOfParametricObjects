@@ -1894,7 +1894,7 @@ ImGui::TextColored(ImVec4(.5f, .3f, .4f, 1.f), "Timestamp Period: %.3f ns", time
 		if (avk::input().key_pressed(avk::key_code::space)) {
 			mStartMeasurement = true;
 		}
-#if TEST_DURATION_PER_STEP
+#if defined(TEST_DURATION_PER_STEP)
 		const float MeasureSecsPerStep = TEST_DURATION_PER_STEP;
 #else
 		const float MeasureSecsPerStep = 2.5f;
@@ -1920,7 +1920,7 @@ ImGui::TextColored(ImVec4(.5f, .3f, .4f, 1.f), "Timestamp Period: %.3f ns", time
 						LOG_INFO(std::format(" - Tile factor:   {}x{}", TILE_FACTOR_X, TILE_FACTOR_Y));
 						LOG_INFO(std::format(" - Local FB size: {}x{}", LOCAL_FB_X, LOCAL_FB_Y));
 						break;
-					case rendering_variant::Tess_8xSS:
+					case rendering_variant::Tess_8xMS:
 					case rendering_variant::Tess_4xSS_8xMS:
 						LOG_INFO(std::format(" - SAMPLE_COUNT: {}", vk::to_string(SAMPLE_COUNT)));
 					case rendering_variant::Tess_noAA:
