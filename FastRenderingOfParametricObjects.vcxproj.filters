@@ -154,6 +154,12 @@
     <None Include="shaders\seashell_lod_selection.comp">
       <Filter>shaders</Filter>
     </None>
+    <None Include="shaders\color_out.frag">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shaders\to_lines.geom">
+      <Filter>shaders</Filter>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="precompiled_headers\cg_stdafx.cpp">
@@ -198,6 +204,12 @@
       <Filter>host_code\perf_tests</Filter>
     </ClInclude>
     <ClInclude Include="host_code\perf_tests\test_seashell.hpp">
+      <Filter>host_code\perf_tests</Filter>
+    </ClInclude>
+    <ClInclude Include="host_code\perf_tests\test_grid_of_seashells.hpp">
+      <Filter>host_code\perf_tests</Filter>
+    </ClInclude>
+    <ClInclude Include="host_code\perf_tests\test_grid_of_seashells_discrete_lods.hpp">
       <Filter>host_code\perf_tests</Filter>
     </ClInclude>
   </ItemGroup>

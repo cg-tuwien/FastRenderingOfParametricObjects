@@ -554,14 +554,15 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 #endif
     }
 
-	avk::graphics_pipeline create_vertex_pipe()
+	// Ts ... optional additional shaders/parameters/settings
+	template <typename... Ts>
+	avk::graphics_pipeline create_vertex_pipe(Ts... args)
 	{
 		using namespace avk;
 
 		return context().create_graphics_pipeline_for(
                 vertex_shader("shaders/simple.vert"),
-				fragment_shader("shaders/frag_out.frag"),
-			    // The next 3 lines define the format and location of the vertex shader inputs:
+				// The next 3 lines define the format and location of the vertex shader inputs:
 			    // (The dummy values (like glm::vec3) tell the pipeline the format of the respective input)
 			    from_buffer_binding(0) -> stream_per_vertex<glm::vec3>() -> to_location(0), // <-- corresponds to vertex shader's inPosition
 			    from_buffer_binding(1) -> stream_per_vertex<glm::vec2>() -> to_location(1), // <-- corresponds to vertex shader's inTexCoord
@@ -569,8 +570,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
                 cfg::front_face::define_front_faces_to_be_counter_clockwise(),
 			    mBackfaceCullingOn ? cfg::culling_mode::cull_back_faces : cfg::culling_mode::disabled,
 
-				cfg::viewport_depth_scissors_config::from_framebuffer(mFramebufferNoAA.as_reference()),
-				mRenderpassNoAA, cfg::subpass_index{ 0 },
+				cfg::subpass_index{ 0 },
 				cfg::shade_per_fragment(), 
 			
 				mDisableColorAttachmentOut 
@@ -589,7 +589,10 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
                 // Buffer for some pipeline statistics:
 			    descriptor_binding(2, 0, mCountersSsbo->as_storage_buffer()),
 				descriptor_binding(3, 0, mSeashellLodIndexMapping->as_storage_buffer()),
-				descriptor_binding(3, 1, mSeashellLodDrawParamsBuffer->as_storage_buffer())
+				descriptor_binding(3, 1, mSeashellLodDrawParamsBuffer->as_storage_buffer()),
+
+				// All possible other bindings:
+				std::move(args)...
 		);
 	}
 
@@ -648,7 +651,6 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
                 vertex_shader(aVert),
                 tessellation_control_shader(aTesc),
                 tessellation_evaluation_shader(aTese),
-				fragment_shader("shaders/frag_out.frag"),
                 cfg::front_face::define_front_faces_to_be_counter_clockwise(),
 			    mBackfaceCullingOn ? cfg::culling_mode::cull_back_faces : cfg::culling_mode::disabled,
 
@@ -1355,8 +1357,11 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
         create_param_pipes();
 
 		// VERTEX and TESS. PIPES:
-		mVertexPipeline = create_vertex_pipe();
+		mVertexPipeline = create_vertex_pipe(fragment_shader("shaders/frag_out.frag"), cfg::viewport_depth_scissors_config::from_framebuffer(mFramebufferNoAA.as_reference()), mRenderpassNoAA);
 		mUpdater->on(shader_files_changed_event(mVertexPipeline.as_reference())).update(mVertexPipeline);
+
+		mVertexPipelineOutline = create_vertex_pipe(geometry_shader("shaders/to_lines.geom"), fragment_shader("shaders/color_out.frag"), cfg::viewport_depth_scissors_config::from_framebuffer(mFramebufferSSMS.as_reference()), mRenderpassSSMS);
+		mUpdater->on(shader_files_changed_event(mVertexPipelineOutline.as_reference())).update(mVertexPipelineOutline);
 
 		mFsQuadColorSampler = avk::context().create_sampler(avk::filter_mode::trilinear, avk::border_handling_mode::clamp_to_border, 0.0f);
 		mFsQuadDepthSampler = avk::context().create_sampler(avk::filter_mode::trilinear , avk::border_handling_mode::clamp_to_border, 0.0f);
@@ -1373,6 +1378,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 			cfg::shade_per_fragment(),
 			cfg::viewport_depth_scissors_config::from_framebuffer(mFramebufferNoAA.as_reference()),
 			mRenderpassNoAA, cfg::subpass_index{ 0 }
+			, fragment_shader("shaders/frag_out.frag")
 		);
 		mUpdater->on(shader_files_changed_event(mTessPipelinePxFillNoaa.as_reference())).update(mTessPipelinePxFillNoaa);
 
@@ -1390,6 +1396,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 			mEnableSampleShadingFor8xMS ? cfg::shade_per_sample() : cfg::shade_per_fragment(),
 			cfg::viewport_depth_scissors_config::from_framebuffer(mFramebufferMS.as_reference()),
 			mRenderpassMS, cfg::subpass_index{ 1 }
+			, fragment_shader("shaders/frag_out.frag")
 		);
 		mUpdater->on(shader_files_changed_event(mTessPipelinePxFillMultisampled.as_reference())).update(mTessPipelinePxFillMultisampled);
 
@@ -1407,8 +1414,23 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 			mEnableSampleShadingFor4xSS8xMS ? cfg::shade_per_sample() : cfg::shade_per_fragment(),
 			cfg::viewport_depth_scissors_config::from_framebuffer(mFramebufferSSMS.as_reference()),
 			mRenderpassSSMS, cfg::subpass_index{ 1 }
+			, fragment_shader("shaders/frag_out.frag")
 		);
 		mUpdater->on(shader_files_changed_event(mTessPipelinePxFillSupersampled.as_reference())).update(mTessPipelinePxFillSupersampled);
+
+		mTessPipelinePxFillSupersampledOutline = create_tess_pipe(
+			"shaders/px-fill-tess/patch_ready.vert", 
+			"shaders/px-fill-tess/patch_set.tesc", 
+			"shaders/px-fill-tess/patch_go.tese",
+			push_constant_binding_data{shader_type::all, 0, sizeof(patch_into_tess_push_constants)},
+			mEnableSampleShadingFor4xSS8xMS ? cfg::shade_per_sample() : cfg::shade_per_fragment(),
+			cfg::viewport_depth_scissors_config::from_framebuffer(mFramebufferSSMS.as_reference()),
+			mRenderpassSSMS, cfg::subpass_index{ 1 },
+			geometry_shader("shaders/to_lines.geom"),
+			fragment_shader("shaders/color_out.frag")
+		);
+		mUpdater->on(shader_files_changed_event(mTessPipelinePxFillSupersampledOutline.as_reference())).update(mTessPipelinePxFillSupersampledOutline);
+
 
 		// Create an (almost identical) pipeline to render the scene in wireframe mode
 		mTessPipelinePxFillSupersampledWireframe = context().create_graphics_pipeline_from_template(mTessPipelinePxFillSupersampled.as_reference(), [](graphics_pipeline_t& p) {
@@ -1753,9 +1775,13 @@ ImGui::TextColored(ImVec4(.5f, .3f, .4f, 1.f), "Timestamp Period: %.3f ns", time
 
 				// Do we need to recreate the vertex pipe?
 				if (rasterPipesNeedRecreation) {
-					auto newVertexPipe = create_vertex_pipe();
+					auto newVertexPipe = create_vertex_pipe(fragment_shader("shaders/frag_out.frag"), cfg::viewport_depth_scissors_config::from_framebuffer(mFramebufferNoAA.as_reference()), mRenderpassNoAA);
 					std::swap(*mVertexPipeline, *newVertexPipe); // new pipe is now old pipe
 					context().main_window()->handle_lifetime(std::move(newVertexPipe));
+
+					auto newVertexOutlinePipe = create_vertex_pipe(geometry_shader("shaders/to_lines.geom"), fragment_shader("shaders/color_out.frag"), cfg::viewport_depth_scissors_config::from_framebuffer(mFramebufferSSMS.as_reference()), mRenderpassSSMS);
+					std::swap(*mVertexPipelineOutline, *newVertexOutlinePipe); // new pipe is now old pipe
+					context().main_window()->handle_lifetime(std::move(newVertexOutlinePipe));
 
 					{
 						auto newFsQuadNoaaToMsPipe = create_noaa_to_ms_pipe();
@@ -1778,6 +1804,7 @@ ImGui::TextColored(ImVec4(.5f, .3f, .4f, 1.f), "Timestamp Period: %.3f ns", time
 							cfg::shade_per_fragment(),
 							cfg::viewport_depth_scissors_config::from_framebuffer(mFramebufferNoAA.as_reference()),
 							mRenderpassNoAA, cfg::subpass_index{ 0 }
+							, fragment_shader("shaders/frag_out.frag")
 						);
 						std::swap(*mTessPipelinePxFillNoaa, *newTessPipePxFill);
 						context().main_window()->handle_lifetime(std::move(newTessPipePxFill));
@@ -1798,6 +1825,7 @@ ImGui::TextColored(ImVec4(.5f, .3f, .4f, 1.f), "Timestamp Period: %.3f ns", time
 							mEnableSampleShadingFor8xMS ? cfg::shade_per_sample() : cfg::shade_per_fragment(),
 							cfg::viewport_depth_scissors_config::from_framebuffer(mFramebufferMS.as_reference()),
 							mRenderpassMS, cfg::subpass_index{ 1 }
+							, fragment_shader("shaders/frag_out.frag")
 						);
 						std::swap(*mTessPipelinePxFillMultisampled, *newTessPipePxFillSpS);
 						context().main_window()->handle_lifetime(std::move(newTessPipePxFillSpS));
@@ -1818,9 +1846,24 @@ ImGui::TextColored(ImVec4(.5f, .3f, .4f, 1.f), "Timestamp Period: %.3f ns", time
 							mEnableSampleShadingFor4xSS8xMS ? cfg::shade_per_sample() : cfg::shade_per_fragment(),
 							cfg::viewport_depth_scissors_config::from_framebuffer(mFramebufferSSMS.as_reference()),
 							mRenderpassSSMS, cfg::subpass_index{ 1 }
+							, fragment_shader("shaders/frag_out.frag")
 						);
 						std::swap(*mTessPipelinePxFillSupersampled, *newTessPipePxFillSuSa);
 						context().main_window()->handle_lifetime(std::move(newTessPipePxFillSuSa));
+
+						auto newTessPipePxFillSuSaOutline = create_tess_pipe(
+							"shaders/px-fill-tess/patch_ready.vert", 
+							"shaders/px-fill-tess/patch_set.tesc", 
+							"shaders/px-fill-tess/patch_go.tese",
+							push_constant_binding_data{shader_type::all, 0, sizeof(patch_into_tess_push_constants)},
+							mEnableSampleShadingFor4xSS8xMS ? cfg::shade_per_sample() : cfg::shade_per_fragment(),
+							cfg::viewport_depth_scissors_config::from_framebuffer(mFramebufferSSMS.as_reference()),
+							mRenderpassSSMS, cfg::subpass_index{ 1 },
+							geometry_shader("shaders/to_lines.geom"),
+							fragment_shader("shaders/color_out.frag")
+						);
+						std::swap(*mTessPipelinePxFillSupersampledOutline, *newTessPipePxFillSuSaOutline);
+						context().main_window()->handle_lifetime(std::move(newTessPipePxFillSuSaOutline));
 
 						auto newTessPipePxFillWireSuSa = context().create_graphics_pipeline_from_template(mTessPipelinePxFillSupersampled.as_reference(), [](graphics_pipeline_t& p) {
 							p.rasterization_state_create_info().setPolygonMode(vk::PolygonMode::eLine);
@@ -2720,6 +2763,74 @@ ImGui::TextColored(ImVec4(.5f, .3f, .4f, 1.f), "Timestamp Period: %.3f ns", time
 				mTimestampPool->write_timestamp(firstQueryIndex + 12, stage::color_attachment_output), // measure after copy-over combined attachment back into a framebuffer image
 #endif
 
+
+
+
+				// 3.9999999999999999999999999..........) Render seashell LODs:
+				command::conditional(
+					[this]() { 
+						return mRenderExtra3DModel && mSeashellLodDrawCalls.size() > 0; 
+					},
+					[this, inFlightIndex]() { 
+						return command::gather(
+						command::bind_pipeline(mVertexPipelineOutline.as_reference()),
+						command::bind_descriptors(mVertexPipelineOutline->layout(), mDescriptorCache->get_or_create_descriptor_sets({
+							descriptor_binding(0, 0, mFrameDataBuffers[inFlightIndex]),
+							descriptor_binding(0, 1, as_combined_image_samplers(mImageSamplers, layout::shader_read_only_optimal)),
+							descriptor_binding(0, 2, mMaterialBuffer),
+							descriptor_binding(1, 0, mCombinedAttachmentView->as_storage_image(layout::general)),
+#if STATS_ENABLED
+							descriptor_binding(1, 1, mHeatMapImageView->as_storage_image(layout::general)),
+#endif
+							descriptor_binding(2, 0, mCountersSsbo->as_storage_buffer()),
+							descriptor_binding(3, 0, mSeashellLodIndexMapping->as_storage_buffer()),
+							descriptor_binding(3, 1, mSeashellLodDrawParamsBuffer->as_storage_buffer())
+						})),
+						command::many_n_times(static_cast<int>(mSeashellLodDrawCalls.size()), [this](int i) {
+							return command::gather(
+								command::push_constants(mVertexPipelineOutline->layout(), vertex_pipe_push_constants{ 
+									mSeashellLodDrawCalls[i].mModelMatrix,
+									mSeashellLodDrawCalls[i].mMaterialIndex,
+									i
+								}),
+								//command::draw_indexed(
+								//	// Bind and use the index buffer:
+								//	std::forward_as_tuple(mIndexBuffer.as_reference(), size_t{mSeashellLodDrawCalls[0].mIndexBufferOffset}, mSeashellLodDrawCalls[0].mNumElements),
+								//	// aNumberOfInstances, aFirstIndex, aVertexOffset, aFirstInstance:
+								//		1u,           0u,           0u,             1u,
+								//	// Bind the vertex input buffers in the right order (corresponding to the layout specifiers in the vertex shader)
+								//	std::forward_as_tuple(mPositionsBuffer.as_reference(), size_t{mSeashellLodDrawCalls[0].mPositionsBufferOffset}), 
+								//	std::forward_as_tuple(mTexCoordsBuffer.as_reference(), size_t{mSeashellLodDrawCalls[0].mTexCoordsBufferOffset}),
+								//	std::forward_as_tuple(mNormalsBuffer.as_reference()  , size_t{mSeashellLodDrawCalls[0].mNormalsBufferOffset})
+								//)
+								command::draw_indexed_indirect(
+									mSeashellLodDrawParamsBuffer.as_reference(),
+									// Bind and use the index buffer:
+									//mIndexBuffer.as_reference(), 
+									std::forward_as_tuple(mIndexBuffer.as_reference(), size_t{mSeashellLodDrawCalls[i].mIndexBufferOffset}, mSeashellLodDrawCalls[i].mNumElements),
+									// uint32_t aNumberOfDraws, vk::DeviceSize aParametersOffset, uint32_t aParametersStride:
+									1u, static_cast<vk::DeviceSize>(i * sizeof(PaddedVkDrawIndexedIndirectCommand)), static_cast<uint32_t>(sizeof(PaddedVkDrawIndexedIndirectCommand)),
+									// Bind the vertex input buffers in the right order (corresponding to the layout specifiers in the vertex shader)
+									std::forward_as_tuple(mPositionsBuffer.as_reference(), size_t{mSeashellLodDrawCalls[i].mPositionsBufferOffset}), 
+									std::forward_as_tuple(mTexCoordsBuffer.as_reference(), size_t{mSeashellLodDrawCalls[i].mTexCoordsBufferOffset}),
+									std::forward_as_tuple(mNormalsBuffer.as_reference()  , size_t{mSeashellLodDrawCalls[i].mNormalsBufferOffset})
+								)
+							);
+						} )
+						
+					); }
+				),
+
+
+
+
+
+
+
+
+
+
+
 				// 3.9) Render tessellated patches with SS
                 command::bind_pipeline(tessPipePxFillSupersampledToBeUsed.as_reference()),
 				command::bind_descriptors(tessPipePxFillSupersampledToBeUsed->layout(), mDescriptorCache->get_or_create_descriptor_sets({
@@ -2738,6 +2849,34 @@ ImGui::TextColored(ImVec4(.5f, .3f, .4f, 1.f), "Timestamp Period: %.3f ns", time
 				})),
 
 				command::push_constants(tessPipePxFillSupersampledToBeUsed->layout(), patch_into_tess_push_constants{ 
+					get_rendering_variant_index(rendering_variant::Tess_4xSS_8xMS) * MAX_INDIRECT_DISPATCHES 
+				}),
+				command::draw_vertices_indirect(
+					mIndirectPxFillCountBuffer.as_reference(), 
+					get_rendering_variant_index(rendering_variant::Tess_4xSS_8xMS) * sizeof(VkDrawIndirectCommand), 
+					sizeof(VkDrawIndirectCommand), 
+					1u) // <-- Exactly ONE draw (but potentially a lot of instances), use the one at [1]
+
+
+
+				// 3.999999999999999) Render tessellated patches with SS OUTLINE
+                , command::bind_pipeline(mTessPipelinePxFillSupersampledOutline.as_reference()),
+				command::bind_descriptors(mTessPipelinePxFillSupersampledOutline->layout(), mDescriptorCache->get_or_create_descriptor_sets({
+					descriptor_binding(0, 0, mFrameDataBuffers[inFlightIndex]),
+			        descriptor_binding(0, 1, as_combined_image_samplers(mImageSamplers, layout::shader_read_only_optimal)),
+			        descriptor_binding(0, 2, mMaterialBuffer),
+					descriptor_binding(1, 0, mCombinedAttachmentView->as_storage_image(layout::general)),
+#if STATS_ENABLED
+					descriptor_binding(1, 1, mHeatMapImageView->as_storage_image(layout::general)),
+#endif
+			        descriptor_binding(2, 0, mCountersSsbo->as_storage_buffer()),
+				    descriptor_binding(3, 0, mObjectDataBuffer->as_storage_buffer()),
+					descriptor_binding(3, 1, mIndirectPxFillParamsBuffer->as_storage_buffer()),
+				    descriptor_binding(3, 2, mIndirectPxFillCountBuffer->as_storage_buffer()),
+					descriptor_binding(4, 0, mBigDataset->as_storage_buffer())
+				})),
+
+				command::push_constants(mTessPipelinePxFillSupersampledOutline->layout(), patch_into_tess_push_constants{ 
 					get_rendering_variant_index(rendering_variant::Tess_4xSS_8xMS) * MAX_INDIRECT_DISPATCHES 
 				}),
 				command::draw_vertices_indirect(
@@ -2956,9 +3095,11 @@ private: // v== Member variables ==v
 	avk::buffer mIndirectPxFillCountBuffer;
 
     avk::graphics_pipeline mVertexPipeline;
+    avk::graphics_pipeline mVertexPipelineOutline;
     avk::graphics_pipeline mTessPipelinePxFillNoaa;
     avk::graphics_pipeline mTessPipelinePxFillMultisampled;
     avk::graphics_pipeline mTessPipelinePxFillSupersampled;
+    avk::graphics_pipeline mTessPipelinePxFillSupersampledOutline;
     avk::graphics_pipeline mTessPipelinePxFillNoaaWireframe;
     avk::graphics_pipeline mTessPipelinePxFillMultisampledWireframe;
     avk::graphics_pipeline mTessPipelinePxFillSupersampledWireframe;

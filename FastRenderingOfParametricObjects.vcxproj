@@ -29,6 +29,8 @@
     <ClInclude Include="host_code\helpers.hpp" />
     <ClInclude Include="host_code\ImGuizmo.h" />
     <ClInclude Include="host_code\perf_tests\test_fiber_curves.hpp" />
+    <ClInclude Include="host_code\perf_tests\test_grid_of_seashells.hpp" />
+    <ClInclude Include="host_code\perf_tests\test_grid_of_seashells_discrete_lods.hpp" />
     <ClInclude Include="host_code\perf_tests\test_knit_yarn.hpp" />
     <ClInclude Include="host_code\perf_tests\test_seashell.hpp" />
     <ClInclude Include="host_code\types.hpp" />
@@ -44,6 +46,7 @@
   <ItemGroup>
     <None Include="Auto-Vk-Toolkit\assets\sponza_and_terrain.fscene" />
     <None Include="shaders\clear_r64_image.comp" />
+    <None Include="shaders\color_out.frag" />
     <None Include="shaders\copy_to_backbuffer.comp" />
     <None Include="shaders\copy_to_combined_attachment.comp" />
     <None Include="shaders\full_screen_quad_from_combined_attachment.frag" />
@@ -62,6 +65,7 @@
     <None Include="shaders\simple.vert" />
     <None Include="shaders\full_screen_quad.frag" />
     <None Include="shaders\full_screen_quad.vert" />
+    <None Include="shaders\to_lines.geom" />
     <None Include="shader_includes\combined_attachment_shared.glsl" />
     <None Include="shader_includes\common_ubo.glsl" />
     <None Include="shader_includes\material_handling.glsl" />
