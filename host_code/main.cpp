@@ -397,7 +397,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 				continue;
 			}
 
-			auto loadedModel = model_t::load_from_file(lodFile, aiProcess_Triangulate | aiProcess_PreTransformVertices | aiProcess_FlipWindingOrder);
+			auto loadedModel = model_t::load_from_file(lodFile, aiProcess_Triangulate | aiProcess_PreTransformVertices );
 			assert(loadedModel->num_meshes() == 1);
 
 			auto& drawCallData = dataForDrawCall.emplace_back();
