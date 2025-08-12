@@ -44,9 +44,7 @@
 //#include "perf_tests/test_fiber_curves.hpp"
 //#include "perf_tests/test_seashell.hpp"
 #include "perf_tests/test_grid_of_seashells.hpp"
-//#define TEST_RENDERING_METHOD          rendering_variant::PointRendered_direct
-//#define TEST_GATHER_TIMER_QUERIES 0
-#define TEST_GATHER_PATCH_COUNTS  0
+
 
 static std::array<parametric_object, 15> PredefinedParametricObjects {{
 	parametric_object{"Sphere"            , "assets/po-sphere-patches.png",     true , parametric_object_type::Sphere,                 0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>() , glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{ 0.f,  0.f,  0.f})},
@@ -1906,8 +1904,11 @@ ImGui::TextColored(ImVec4(.5f, .3f, .4f, 1.f), "Timestamp Period: %.3f ns", time
 					mParametricObjects[ii].set_enabled(true);
 					mParametricObjects[ii].set_tessellation_levels({ static_cast<float>(TEST_INNER_TESS_LEVEL), static_cast<float>(TEST_OUTER_TESS_LEVEL) });
 					mParametricObjects[ii].set_screen_distance_threshold(static_cast<float>(TEST_SCREEN_DISTANCE_THRESHOLD));
-					mParametricObjects[ii].set_adaptive_rendering_on(1 == TEST_USEINDIVIDUAL_PATCH_RES);
+					mParametricObjects[ii].set_adaptive_rendering_on(1 == TEST_USE_ADAPTIVE_TESSELLATION);
 					mParametricObjects[ii].set_how_to_render(TEST_RENDERING_METHOD);
+#if defined(TEST_INITIAL_EVAL_DIMS_X) && defined(TEST_INITIAL_EVAL_DIMS_Y)
+					mParametricObjects[ii].set_eval_dims({ TEST_INITIAL_EVAL_DIMS_X, TEST_INITIAL_EVAL_DIMS_Y, 0, 0 });
+#endif
 
 					mParametricObjects[ii].set_transformation_matrix(glm::mat4{ 1.0f }); // TODO: Use an appropriate one
 
@@ -1936,6 +1937,53 @@ ImGui::TextColored(ImVec4(.5f, .3f, .4f, 1.f), "Timestamp Period: %.3f ns", time
 			fill_object_data_buffer();
 			mRenderExtra3DModel = 1 == TEST_ENABLE_3D_MODEL;
 			mGatherPipelineStats = 1 == TEST_GATHER_PIPELINE_STATS;
+
+#if TEST_SET_OPTIMAL_COPY_AND_OUTPUT_CONFIG
+#if TEST_RESET_COPY_AND_OUTPUT_CONFIG_AFTER_TEST
+			mSavedRenderVariantDataTransferEnabled = mRenderVariantDataTransferEnabled;
+			mSavedOutputResultOfRenderVariantIndex = mOutputResultOfRenderVariantIndex;
+#endif
+			// Do not perform useless data transfers:
+			// Reminder: 
+			//	ImGui::Checkbox("Tess. noAA -> Point-based", &mRenderVariantDataTransferEnabled[0]);
+			//	ImGui::Checkbox("Point-based -> 8xMS", &mRenderVariantDataTransferEnabled[1]);
+			//	ImGui::Checkbox("8xMS -> 4xSS+8xMS", &mRenderVariantDataTransferEnabled[2]);
+			//	ImGui::Unindent();
+			//
+			//	ImGui::Combo("-> results -> backbuffer", &mOutputResultOfRenderVariantIndex, "After tess. noAA\0After point-based\0After 8xMS\0After 4xSS+8xMS\0");
+			switch (TEST_RENDERING_METHOD)
+			{
+				case rendering_variant::Tess_noAA:
+					mRenderVariantDataTransferEnabled[0] = false;
+					mRenderVariantDataTransferEnabled[1] = false;
+					mRenderVariantDataTransferEnabled[2] = false;
+					mOutputResultOfRenderVariantIndex = 0;
+					break;
+				case rendering_variant::Tess_8xMS:
+					mRenderVariantDataTransferEnabled[0] = false;
+					mRenderVariantDataTransferEnabled[1] = false;
+					mRenderVariantDataTransferEnabled[2] = false;
+					mOutputResultOfRenderVariantIndex = 2;
+					break;
+				case rendering_variant::Tess_4xSS_8xMS:
+					mRenderVariantDataTransferEnabled[0] = false;
+					mRenderVariantDataTransferEnabled[1] = false;
+					mRenderVariantDataTransferEnabled[2] = false;
+					mOutputResultOfRenderVariantIndex = 3;
+					break;
+				case rendering_variant::PointRendered_direct:
+					break;
+				case rendering_variant::PointRendered_4xSS_local_fb:
+					break;
+				case rendering_variant::Hybrid:
+					mRenderVariantDataTransferEnabled[0] = true;
+					mRenderVariantDataTransferEnabled[1] = true;
+					mRenderVariantDataTransferEnabled[2] = true;
+					mOutputResultOfRenderVariantIndex = 3;
+					break;
+			}
+#endif
+
 #endif
 #if TEST_MODE_ON && !TEST_ALLOW_GATHER_STATS
 			if(mGatherPipelineStats) {
@@ -2024,6 +2072,13 @@ ImGui::TextColored(ImVec4(.5f, .3f, .4f, 1.f), "Timestamp Period: %.3f ns", time
 					}
 				}
 #endif
+
+#if TEST_SET_OPTIMAL_COPY_AND_OUTPUT_CONFIG
+#if TEST_RESET_COPY_AND_OUTPUT_CONFIG_AFTER_TEST
+				mRenderVariantDataTransferEnabled = mSavedRenderVariantDataTransferEnabled;
+				mOutputResultOfRenderVariantIndex = mSavedOutputResultOfRenderVariantIndex;
+#endif
+#endif
 			}
             else {
 				// FLY & MEASURE!
@@ -2049,7 +2104,7 @@ ImGui::TextColored(ImVec4(.5f, .3f, .4f, 1.f), "Timestamp Period: %.3f ns", time
             	auto f = static_cast<float>((curTime - curIdx * MeasureSecsPerStep - mMeasurementStartTime) / MeasureSecsPerStep);
 
 #if TEST_MODE_ON
-            	float camCoords = TEST_CAMDIST * glm::pow(TEST_CAMERA_DELTA_POW, static_cast<float>(curIdx));
+            	float camCoords = TEST_CAMERA_DELTA_FACTOR * static_cast<float>(curIdx) + TEST_CAMDIST * glm::pow(TEST_CAMERA_DELTA_POW, static_cast<float>(curIdx));
 				bool translateY = TEST_TRANSLATE_Y;
 				bool translateZ = TEST_TRANSLATE_Z;
 				auto camPos = glm::angleAxis(f * glm::two_pi<float>(), avk::up())
@@ -2064,7 +2119,7 @@ ImGui::TextColored(ImVec4(.5f, .3f, .4f, 1.f), "Timestamp Period: %.3f ns", time
 				mOrbitCam.set_translation(camPos);
 				mOrbitCam.set_pivot_distance(glm::length(camPos));
 #if TEST_MODE_ON
-				mOrbitCam.look_at(glm::vec3{0.0f, TEST_CAM_Y_SHIFT, 0.0f});
+				mOrbitCam.look_at(glm::vec3{0.0f, TEST_CAM_Y_LOOKAT, 0.0f});
 #else
 				mOrbitCam.look_at(glm::vec3{0.0f});
 #endif
@@ -3039,6 +3094,10 @@ private: // v== Member variables ==v
 	bool mEnableSampleShadingFor4xSS8xMS;
 	std::array<bool, 3> mRenderVariantDataTransferEnabled;
 	int  mOutputResultOfRenderVariantIndex;
+#if TEST_MODE_ON
+	std::array<bool, 3> mSavedRenderVariantDataTransferEnabled;
+	int  mSavedOutputResultOfRenderVariantIndex;
+#endif
 
 }; // vk_parametric_curves_app
 
