@@ -7,6 +7,7 @@
 
 #include "../shader_includes/host_device_shared.h"
 #include "../shader_includes/util/ui64_conv.glsl"
+#include "../shader_includes/util/glsl_helpers.glsl"
 #include "../shader_includes/common_ubo.glsl"
 #include "../shader_includes/material_handling.glsl"
 

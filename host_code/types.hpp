@@ -38,6 +38,8 @@ struct frame_data_ubo
     // Debug sliders:
     glm::vec4            mDebugSliders;
     glm::ivec4           mDebugSlidersi;
+    // Frustum culling for LODs of seashells:
+	std::array<glm::vec4, 6> mFrustumPlanes;
     // Common, global settings:
     VkBool32             mHeatMapEnabled;
     VkBool32             mGatherPipelineStats;

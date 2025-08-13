@@ -29,6 +29,8 @@
     <ClInclude Include="host_code\helpers.hpp" />
     <ClInclude Include="host_code\ImGuizmo.h" />
     <ClInclude Include="host_code\perf_tests\test_fiber_curves.hpp" />
+    <ClInclude Include="host_code\perf_tests\test_grid_of_seashells.hpp" />
+    <ClInclude Include="host_code\perf_tests\test_grid_of_seashells_discrete_lods.hpp" />
     <ClInclude Include="host_code\perf_tests\test_knit_yarn.hpp" />
     <ClInclude Include="host_code\perf_tests\test_seashell.hpp" />
     <ClInclude Include="host_code\types.hpp" />

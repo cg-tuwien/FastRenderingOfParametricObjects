@@ -43,7 +43,7 @@
 //#include "perf_tests/test_knit_yarn.hpp"
 //#include "perf_tests/test_fiber_curves.hpp"
 //#include "perf_tests/test_seashell.hpp"
-#include "perf_tests/test_grid_of_seashells.hpp"
+#include "perf_tests/test_grid_of_seashells_discrete_lods.hpp"
 
 
 static std::array<parametric_object, 15> PredefinedParametricObjects {{
@@ -1459,8 +1459,9 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 		mSeashellLodSelectionComputePipe = context().create_compute_pipeline_for(
 			"shaders/seashell_lod_selection.comp",
 			descriptor_binding(0, 0, mFrameDataBuffers[0]),
-			descriptor_binding(1, 0, mSeashellLodIndexMapping->as_storage_buffer()),
-			descriptor_binding(1, 1, mSeashellLodDrawParamsBuffer->as_storage_buffer())
+			descriptor_binding(1, 0, mCountersSsbo->as_storage_buffer()),
+			descriptor_binding(2, 0, mSeashellLodIndexMapping->as_storage_buffer()),
+			descriptor_binding(2, 1, mSeashellLodDrawParamsBuffer->as_storage_buffer())
 		);
         mUpdater->on(shader_files_changed_event(mSeashellLodSelectionComputePipe.as_reference())).update(mSeashellLodSelectionComputePipe);
 
@@ -1521,6 +1522,8 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 		}
 		// Upload everything to the GPU:
 		context().record_and_submit_with_fence({ std::move(imageUploadCommands) }, *mQueue)->wait_until_signalled();
+
+		mSavedFrustumPlanes = extract_planes_from_projmat(mQuakeCam.projection_and_view_matrix());
 
 		std::locale::global(std::locale("en_US.UTF-8"));
 		auto imguiManager = current_composition()->element_by_type<imgui_manager>();
@@ -2092,7 +2095,11 @@ ImGui::TextColored(ImVec4(.5f, .3f, .4f, 1.f), "Timestamp Period: %.3f ns", time
 				std::get<2>(mMeasurementFrameCounters[curIdx]) += mLastTotalRenderDuration;
 				std::get<3>(mMeasurementFrameCounters[curIdx]) += mLastLodStageDuration;
 #else
+#if defined(TEST_COUNT_SEASHELL_COUNTER) && TEST_COUNT_SEASHELL_COUNTER == 1
+				std::get<2>(mMeasurementFrameCounters[curIdx]) += mCounterValues[3];
+#else
 				std::get<2>(mMeasurementFrameCounters[curIdx]) += mCounterValues[1];
+#endif
 				std::get<3>(mMeasurementFrameCounters[curIdx]) += mNumPxFillPatchesCreated[0] + mNumPxFillPatchesCreated[1] + mNumPxFillPatchesCreated[2] + mNumPxFillPatchesCreated[3] + mNumPxFillPatchesCreated[4];
 #endif 
 #if TEST_GATHER_PATCH_COUNTS
@@ -2298,6 +2305,10 @@ ImGui::TextColored(ImVec4(.5f, .3f, .4f, 1.f), "Timestamp Period: %.3f ns", time
         uboData.mGatherPipelineStats                       = mGatherPipelineStats;
         uboData.mAbsoluteTime                              = (mAnimationPaused ? mAnimationPauseTime : time().absolute_time()) - mTimeToSubtract;
         uboData.mDeltaTime                                 = time().delta_time();
+		if (!input().key_down(key_code::f)) { // If [F] is NOT pressed, the current frustum are updated to the current view/projection matrices
+			mSavedFrustumPlanes = extract_planes_from_projmat(mQuakeCam.projection_and_view_matrix());
+		}
+		uboData.mFrustumPlanes                             = mSavedFrustumPlanes;
 		// Update in host-coherent buffer:
         auto emptyCmd = mFrameDataBuffers[inFlightIndex]->fill(&uboData, 0);
 		
@@ -2421,8 +2432,9 @@ ImGui::TextColored(ImVec4(.5f, .3f, .4f, 1.f), "Timestamp Period: %.3f ns", time
 				command::bind_pipeline(mSeashellLodSelectionComputePipe.as_reference()),
 				command::bind_descriptors(mSeashellLodSelectionComputePipe->layout(), mDescriptorCache->get_or_create_descriptor_sets({
 					descriptor_binding(0, 0, mFrameDataBuffers[inFlightIndex]),
-					descriptor_binding(1, 0, mSeashellLodIndexMapping->as_storage_buffer()),
-					descriptor_binding(1, 1, mSeashellLodDrawParamsBuffer->as_storage_buffer())
+					descriptor_binding(1, 0, mCountersSsbo->as_storage_buffer()),
+					descriptor_binding(2, 0, mSeashellLodIndexMapping->as_storage_buffer()),
+					descriptor_binding(2, 1, mSeashellLodDrawParamsBuffer->as_storage_buffer())
 				})),
 				command::dispatch(roundUpToMultipleOf(SEASHELL_GRID_DIM * SEASHELL_GRID_DIM / 256, 256), 1u, 1u),
 
@@ -3098,6 +3110,8 @@ private: // v== Member variables ==v
 	std::array<bool, 3> mSavedRenderVariantDataTransferEnabled;
 	int  mSavedOutputResultOfRenderVariantIndex;
 #endif
+
+	std::array<glm::vec4, 6> mSavedFrustumPlanes;
 
 }; // vk_parametric_curves_app
 

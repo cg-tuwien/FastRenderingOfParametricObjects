@@ -200,6 +200,12 @@
     <ClInclude Include="host_code\perf_tests\test_seashell.hpp">
       <Filter>host_code\perf_tests</Filter>
     </ClInclude>
+    <ClInclude Include="host_code\perf_tests\test_grid_of_seashells.hpp">
+      <Filter>host_code\perf_tests</Filter>
+    </ClInclude>
+    <ClInclude Include="host_code\perf_tests\test_grid_of_seashells_discrete_lods.hpp">
+      <Filter>host_code\perf_tests</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Image Include="assets\po-johis-heart.png">

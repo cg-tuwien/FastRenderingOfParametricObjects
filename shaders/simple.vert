@@ -9,6 +9,7 @@
 #include "../shader_includes/types.glsl"
 
 // ###### BOUND RESOURCES #################################
+#include "../shader_includes/util/glsl_helpers.glsl"
 #include "../shader_includes/common_ubo.glsl"
 layout(set = 3, binding = 0) buffer SeashellLodIndexMapping { uint mMappedIndex[]; } uSeashellLodIndexMapping;
 layout(set = 3, binding = 1) buffer SeashellLodDrawParamsBuffer { VkDrawIndirectCommand mDrawParams[]; } uSeashellLodDrawParamsBuffer;
@@ -80,7 +81,7 @@ void main() {
 	v_out.normalWS   = mat3(pushConstants.mModelMatrix) * inNormal;
     v_out.texCoords  = inTexCoord;
     v_out.shadingUserParams = vec3(0.0);
-    v_out.matIndex   = -5 + pushConstants.mLod + (pushConstants.mLod > 2 ? 1 : 0);
+    v_out.matIndex   = -5; // + pushConstants.mLod + (pushConstants.mLod > 2 ? 1 : 0);
 	v_out.color      = vertexColors[gl_VertexIndex % MAX_COLORS];
     gl_Position      = ubo.mViewProjMatrix * posWS;
 }
