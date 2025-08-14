@@ -36,7 +36,7 @@ void main()
     vec3 seashellPos = vec3(5.0 * (x - 36), 0.0, 5.0 * (y - 36));
 
 	// ==== VIEW FRUSTUM CULLING   BEGIN ====
-	const float radius = -5.0;
+	const float radius = -10.0;
 	for (int f = 0; f < 6; ++f) {
 		if (classify_point(ubo.mFrustumPlanes[f], seashellPos) < radius)
 			return;
@@ -60,6 +60,10 @@ void main()
 			break;
 		}
 	}
+
+#if STATS_ENABLED
+	atomicAdd(uCounters.mCounters[3], 1);
+#endif
 
 //	int bucket = clamp(6 - int(dist / 30.0), 0, 6);
 //	int bucket = 0;
