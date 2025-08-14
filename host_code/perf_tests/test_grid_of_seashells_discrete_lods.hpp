@@ -1,15 +1,15 @@
 
 #define TEST_MODE_ON                   1
-#define TEST_GATHER_PIPELINE_STATS     1
-#define TEST_ALLOW_GATHER_STATS        1
+#define TEST_GATHER_PIPELINE_STATS     0
+#define TEST_ALLOW_GATHER_STATS        0
 #define TEST_DURATION_PER_STEP          2.5f
 #define TEST_GATHER_TIMER_QUERIES      0
 #define TEST_GATHER_PATCH_COUNTS       0
 
 // UNCOMMENT FOR SEASHELL MEASUREMENT:
 #define TEST_CAMDIST                     5.0f
-#define TEST_CAMERA_DELTA_FACTOR        36.0f
-#define TEST_CAMERA_DELTA_POW            1.9f
+#define TEST_CAMERA_DELTA_FACTOR        17.0f
+#define TEST_CAMERA_DELTA_POW            2.1f
 #define TEST_TRANSLATE_Y               true
 #define TEST_TRANSLATE_Z               true
 #define TEST_CAM_Y_SHIFT               7.5f
