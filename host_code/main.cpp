@@ -20,6 +20,8 @@
 #include "ImGuizmo.h"
 #include "big_dataset.hpp"
 
+#define NUM_CONCURRENT_FRAMES 3
+
 #define NUM_PREDEFINED_MATERIALS 5
 #define NUM_TIMESTAMP_QUERIES 14
 #define NUM_DIFFERENT_RENDER_VARIANTS 5
@@ -43,7 +45,8 @@
 //#include "perf_tests/test_knit_yarn.hpp"
 //#include "perf_tests/test_fiber_curves.hpp"
 //#include "perf_tests/test_seashell.hpp"
-#include "perf_tests/test_grid_of_seashells_discrete_lods.hpp"
+//#include "perf_tests/test_grid_of_seashells_discrete_lods.hpp"
+#include "perf_tests/test_grid_of_seashells.hpp"
 
 
 static std::array<parametric_object, 15> PredefinedParametricObjects {{
@@ -1847,6 +1850,33 @@ ImGui::TextColored(ImVec4(.5f, .3f, .4f, 1.f), "Timestamp Period: %.3f ns", time
 		);
 #endif
 	}
+
+	// Sets the camera to some test cam position
+	// Parameters: curIdx ... basically the test distance
+	//             f ........ circular position
+	void set_test_cam_pos(int curIdx, float f = 0.0f)
+	{
+#if TEST_MODE_ON
+        float camCoords = TEST_CAMERA_DELTA_FACTOR * static_cast<float>(curIdx) + TEST_CAMDIST * glm::pow(TEST_CAMERA_DELTA_POW, static_cast<float>(curIdx));
+		bool translateY = TEST_TRANSLATE_Y;
+		bool translateZ = TEST_TRANSLATE_Z;
+		auto camPos = glm::angleAxis(f * glm::two_pi<float>(), avk::up())
+            				* glm::vec3{ 0.0f, translateY ? camCoords : TEST_CAM_Y_SHIFT, translateZ ? camCoords : 0.0f };
+		//auto camPos = glm::vec3{ 0.0f, translateY ? camCoords : TEST_CAM_Y_SHIFT, translateZ ? camCoords : 0.0f };
+#else
+		auto curDist = (mDistanceFromOrigin + mMeasurementMoveCameraDelta * curIdx);
+		auto camPos = glm::angleAxis(f * glm::two_pi<float>(), up()) * glm::vec3{ 0.0f, 4.0f, 20.0f };
+		camPos *= curDist / glm::length(camPos);
+#endif
+
+		mOrbitCam.set_translation(camPos);
+		mOrbitCam.set_pivot_distance(glm::length(camPos));
+#if TEST_MODE_ON
+		mOrbitCam.look_at(glm::vec3{0.0f, TEST_CAM_Y_LOOKAT, 0.0f});
+#else
+		mOrbitCam.look_at(glm::vec3{0.0f});
+#endif
+	}
 	
 	void update() override
 	{
@@ -1882,6 +1912,40 @@ ImGui::TextColored(ImVec4(.5f, .3f, .4f, 1.f), "Timestamp Period: %.3f ns", time
 			mWhatToCopyToBackbuffer = 3;
         }
 
+		if (input().key_down(key_code::left_control) || input().key_down(key_code::right_control) ||  input().key_down(key_code::right_alt)) {
+			float f = input().key_down(key_code::left_shift) || input().key_down(key_code::right_shift) ? glm::half_pi<float>() : 0.0f;
+			if (input().key_pressed(key_code::num0)) {
+				set_test_cam_pos(0, f);
+			}
+			if (input().key_pressed(key_code::num1)) {
+				set_test_cam_pos(1, f);
+			}
+			if (input().key_pressed(key_code::num2)) {
+				set_test_cam_pos(2, f);
+			}
+			if (input().key_pressed(key_code::num3)) {
+				set_test_cam_pos(3, f);
+			}
+			if (input().key_pressed(key_code::num4)) {
+				set_test_cam_pos(4, f);
+			}
+			if (input().key_pressed(key_code::num5)) {
+				set_test_cam_pos(5, f);
+			}
+			if (input().key_pressed(key_code::num6)) {
+				set_test_cam_pos(6, f);
+			}
+			if (input().key_pressed(key_code::num7)) {
+				set_test_cam_pos(7, f);
+			}
+			if (input().key_pressed(key_code::num8)) {
+				set_test_cam_pos(8, f);
+			}
+			if (input().key_pressed(key_code::num9)) {
+				set_test_cam_pos(9, f);
+			}
+		}
+
 		if (avk::input().key_pressed(avk::key_code::i)) {
 			LOG_INFO(std::format("O orbitCam pos: {:.5}f, {:.5}f, {:.5}f | distance from origin: {:.5}f", 
 				mOrbitCam.translation().x, mOrbitCam.translation().y, mOrbitCam.translation().z, glm::length(mOrbitCam.translation())));
@@ -1893,7 +1957,10 @@ ImGui::TextColored(ImVec4(.5f, .3f, .4f, 1.f), "Timestamp Period: %.3f ns", time
 		}
 
 		if (avk::input().key_pressed(avk::key_code::space)) {
+#if TEST_SET_CAM_TO_POS
+#else
 			mStartMeasurement = true;
+#endif
 		}
 #if defined(TEST_DURATION_PER_STEP)
 		const float MeasureSecsPerStep = TEST_DURATION_PER_STEP;
@@ -2020,6 +2087,7 @@ ImGui::TextColored(ImVec4(.5f, .3f, .4f, 1.f), "Timestamp Period: %.3f ns", time
 			std::get<double>(mMeasurementFrameCounters[0]) = curTime;
 			std::get<float>(mMeasurementFrameCounters[0]) = mDistanceFromOrigin;
 			mMeasurementIndexLastFrame = 0;
+			mIgnoreFramesCounter = NUM_CONCURRENT_FRAMES;
 		}
 		if (mMeasurementInProgress) {
 			auto curTime = time().absolute_time_dp();
@@ -2056,7 +2124,11 @@ ImGui::TextColored(ImVec4(.5f, .3f, .4f, 1.f), "Timestamp Period: %.3f ns", time
 					}
 			    }
 #else
+#if TEST_COUNT_SEASHELL_COUNTER
+				LOG_INFO("Measurement results (elapsed time, camera distance, num seashells rendered (avg.),       whatever         , FPS):");
+#else
 				LOG_INFO("Measurement results (elapsed time, camera distance, unique pixels (avg.), num patches out to render (avg.), FPS):");
+#endif
 			    for (auto [elapsedTime, dist, numGlyphs, numPatches, cnt] : mMeasurementFrameCounters) {
 					if (cnt != 0 && elapsedTime != 0.0) {
 						LOG_INFO(std::format("({:5.2f}, \t{:5.1f}, \t{:12}, \t{:12}, \t{:7.2f}", elapsedTime, dist, numGlyphs / cnt, numPatches / cnt, cnt / elapsedTime));
@@ -2090,46 +2162,31 @@ ImGui::TextColored(ImVec4(.5f, .3f, .4f, 1.f), "Timestamp Period: %.3f ns", time
 				if (curIdx != mMeasurementIndexLastFrame) {
 					std::get<double>(mMeasurementFrameCounters[curIdx-1]) = curTime;
 					std::get<float>(mMeasurementFrameCounters[curIdx]) = glm::length(glm::vec3{ mOrbitCam.translation().x, 0.0f, mOrbitCam.translation().z });
+					mIgnoreFramesCounter = NUM_CONCURRENT_FRAMES;
 				}
+				if (mIgnoreFramesCounter-- < 0) {
 #if TEST_GATHER_TIMER_QUERIES && STATS_ENABLED
-				std::get<2>(mMeasurementFrameCounters[curIdx]) += mLastTotalRenderDuration;
-				std::get<3>(mMeasurementFrameCounters[curIdx]) += mLastLodStageDuration;
+					std::get<2>(mMeasurementFrameCounters[curIdx]) += mLastTotalRenderDuration;
+					std::get<3>(mMeasurementFrameCounters[curIdx]) += mLastLodStageDuration;
 #else
 #if defined(TEST_COUNT_SEASHELL_COUNTER) && TEST_COUNT_SEASHELL_COUNTER == 1
-				std::get<2>(mMeasurementFrameCounters[curIdx]) += mCounterValues[3];
+					LOG_INFO(std::format("seashells visible = {}", mCounterValues[3]));
+					std::get<2>(mMeasurementFrameCounters[curIdx]) += mCounterValues[3];
 #else
-				std::get<2>(mMeasurementFrameCounters[curIdx]) += mCounterValues[1];
+					std::get<2>(mMeasurementFrameCounters[curIdx]) += mCounterValues[1];
 #endif
-				std::get<3>(mMeasurementFrameCounters[curIdx]) += mNumPxFillPatchesCreated[0] + mNumPxFillPatchesCreated[1] + mNumPxFillPatchesCreated[2] + mNumPxFillPatchesCreated[3] + mNumPxFillPatchesCreated[4];
+					std::get<3>(mMeasurementFrameCounters[curIdx]) += mNumPxFillPatchesCreated[0] + mNumPxFillPatchesCreated[1] + mNumPxFillPatchesCreated[2] + mNumPxFillPatchesCreated[3] + mNumPxFillPatchesCreated[4];
 #endif 
 #if TEST_GATHER_PATCH_COUNTS
-				for (int b = 0; b < MAX_PATCH_SUBDIV_STEPS; ++b) {
-					mMeasurementPatchCounts[curIdx][b] += mPatchesCreatedPerLevel[b];
+					for (int b = 0; b < MAX_PATCH_SUBDIV_STEPS; ++b) {
+						mMeasurementPatchCounts[curIdx][b] += mPatchesCreatedPerLevel[b];
+					}
+#endif
+					std::get<int>(mMeasurementFrameCounters[curIdx]) += 1;
 				}
-#endif
-				std::get<int>(mMeasurementFrameCounters[curIdx]) += 1;
-            	auto f = static_cast<float>((curTime - curIdx * MeasureSecsPerStep - mMeasurementStartTime) / MeasureSecsPerStep);
 
-#if TEST_MODE_ON
-            	float camCoords = TEST_CAMERA_DELTA_FACTOR * static_cast<float>(curIdx) + TEST_CAMDIST * glm::pow(TEST_CAMERA_DELTA_POW, static_cast<float>(curIdx));
-				bool translateY = TEST_TRANSLATE_Y;
-				bool translateZ = TEST_TRANSLATE_Z;
-				auto camPos = glm::angleAxis(f * glm::two_pi<float>(), avk::up())
-            						* glm::vec3{ 0.0f, translateY ? camCoords : TEST_CAM_Y_SHIFT, translateZ ? camCoords : 0.0f };
-				//auto camPos = glm::vec3{ 0.0f, translateY ? camCoords : TEST_CAM_Y_SHIFT, translateZ ? camCoords : 0.0f };
-#else
-				auto curDist = (mDistanceFromOrigin + mMeasurementMoveCameraDelta * curIdx);
-				auto camPos = glm::angleAxis(f * glm::two_pi<float>(), up()) * glm::vec3{ 0.0f, 4.0f, 20.0f };
-				camPos *= curDist / glm::length(camPos);
-#endif
-
-				mOrbitCam.set_translation(camPos);
-				mOrbitCam.set_pivot_distance(glm::length(camPos));
-#if TEST_MODE_ON
-				mOrbitCam.look_at(glm::vec3{0.0f, TEST_CAM_Y_LOOKAT, 0.0f});
-#else
-				mOrbitCam.look_at(glm::vec3{0.0f});
-#endif
+				auto f = static_cast<float>((curTime - curIdx * MeasureSecsPerStep - mMeasurementStartTime) / MeasureSecsPerStep);
+				set_test_cam_pos(curIdx, f);
 				mMeasurementIndexLastFrame = curIdx;
 			}
 		}
@@ -3045,6 +3102,7 @@ private: // v== Member variables ==v
 	std::vector<glm::vec3> mSpherePositions;
 
 	bool mStartMeasurement = false;
+	int  mIgnoreFramesCounter = 3; //< A counter to ignore some frames after switching to another distance (to prevent wrong results)
 	float mDistanceFromOrigin = 22.0f;
 	bool mMeasurementInProgress = false;
 	double mMeasurementStartTime = 0.0;
@@ -3133,7 +3191,7 @@ int main() // <== Starting point ==
 		mainWnd->request_srgb_framebuffer(false);
 		mainWnd->enable_resizing(true);
 		mainWnd->set_presentaton_mode(avk::presentation_mode::mailbox);
-		mainWnd->set_number_of_concurrent_frames(3u);
+		mainWnd->set_number_of_concurrent_frames(NUM_CONCURRENT_FRAMES);
 		mainWnd->set_image_usage_properties(avk::image_usage::general_storage_image | avk::image_usage::color_attachment);
 		mainWnd->open();
 
