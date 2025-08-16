@@ -45,6 +45,7 @@ void main()
 
 	vec4 posCS = ubo.mViewProjMatrix * vec4(seashellPos, 1.0);
 	vec3 vpc = cs_to_viewport(posCS, ubo.mResolutionAndCulling.xy);
+
 	const float quality = 4.0; //px
 	// Move #quality-many pixels towards the center of the screen, then reproject into view space:
 	vec3 vpc2 = vpc;
@@ -54,9 +55,8 @@ void main()
 	float thresholdVS = length(vs2 - (ubo.mViewMatrix * vec4(seashellPos, 1.0)).xyz);
 
 	int bucket = 0;
-	for (int i = 0; i < 7; ++i) {
-		if (uSeashellLodDrawParamsBuffer.mDrawParams[i]._padding2 < thresholdVS) {
-			bucket = i;
+	for (; bucket < 7; ++bucket) {
+		if (uSeashellLodDrawParamsBuffer.mDrawParams[bucket]._padding2 < thresholdVS) {
 			break;
 		}
 	}
