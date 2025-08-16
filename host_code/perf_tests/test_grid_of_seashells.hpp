@@ -2,7 +2,7 @@
 #define TEST_MODE_ON                   1
 #define TEST_GATHER_PIPELINE_STATS     0
 #define TEST_ALLOW_GATHER_STATS        0
-#define TEST_DURATION_PER_STEP          2.5f
+#define TEST_DURATION_PER_STEP          5.0f
 #define TEST_GATHER_TIMER_QUERIES      0
 #define TEST_GATHER_PATCH_COUNTS       0
 
@@ -23,7 +23,7 @@
 #define TEST_INITIAL_EVAL_DIMS_X        3
 #define TEST_INITIAL_EVAL_DIMS_Y        2
 
-#define TEST_RENDERING_METHOD          rendering_variant::Tess_4xSS_8xMS
+#define TEST_RENDERING_METHOD          rendering_variant::Tess_noAA
 #define TEST_SET_OPTIMAL_COPY_AND_OUTPUT_CONFIG       1
 #define TEST_RESET_COPY_AND_OUTPUT_CONFIG_AFTER_TEST  0
 
