@@ -2600,7 +2600,7 @@ ImGui::TextColored(ImVec4(.5f, .3f, .4f, 1.f), "Timestamp Period: %.3f ns", time
 									mSeashellLodDrawParamsBuffer.as_reference(),
 									// Bind and use the index buffer:
 									//mIndexBuffer.as_reference(), 
-									std::forward_as_tuple(mIndexBuffer.as_reference(), size_t{mSeashellLodDrawCalls[i].mIndexBufferOffset}, mSeashellLodDrawCalls[i].mNumElements),
+									std::forward_as_tuple(mIndexBuffer.as_reference(), size_t{mSeashellLodDrawCalls[i].mIndexBufferOffset}),
 									// uint32_t aNumberOfDraws, vk::DeviceSize aParametersOffset, uint32_t aParametersStride:
 									1u, static_cast<vk::DeviceSize>(i * sizeof(PaddedVkDrawIndexedIndirectCommand)), static_cast<uint32_t>(sizeof(PaddedVkDrawIndexedIndirectCommand)),
 									// Bind the vertex input buffers in the right order (corresponding to the layout specifiers in the vertex shader)
