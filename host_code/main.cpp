@@ -69,6 +69,7 @@ static std::array<parametric_object, 15> PredefinedParametricObjects {{
 
 class vk_parametric_curves_app : public avk::invokee
 {
+	enum struct grid_of_seashells_rendering_variant { dont, parametric, discrete_lods };
 
 public: // v== avk::invokee overrides which will be invoked by the framework ==v
 	vk_parametric_curves_app(avk::queue& aQueue)
@@ -555,7 +556,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 #endif
     }
 
-	avk::graphics_pipeline create_vertex_pipe()
+	avk::graphics_pipeline create_vertex_pipe(const avk::renderpass& rp, const avk::framebuffer& fp)
 	{
 		using namespace avk;
 
@@ -570,8 +571,8 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
                 cfg::front_face::define_front_faces_to_be_counter_clockwise(),
 			    mBackfaceCullingOn ? cfg::culling_mode::cull_back_faces : cfg::culling_mode::disabled,
 
-				cfg::viewport_depth_scissors_config::from_framebuffer(mFramebufferNoAA.as_reference()),
-				mRenderpassNoAA, cfg::subpass_index{ 0 },
+				cfg::viewport_depth_scissors_config::from_framebuffer(fp.as_reference()), 
+				rp, cfg::subpass_index{ 0 },
 				cfg::shade_per_fragment(), 
 			
 				mDisableColorAttachmentOut 
@@ -938,7 +939,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 					}
 				}
 			}
-			else if (is_grid_of_seashells(po.param_obj_type())) {
+			else if (is_grid_of_seashells(po.param_obj_type()) && mGridOfSeashellsRenderingVariant == grid_of_seashells_rendering_variant::parametric) {
 				tmp.mCurveIndex = static_cast<std::underlying_type_t<parametric_object_type>>(parametric_object_type::Seashell3);
 				auto baseTransformationMatrix = tmp.mTransformationMatrix;
 				for (int x = 0; x < 71; ++x) {
@@ -1136,7 +1137,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 				ImGui::PopID();
 			}
 
-			// One more row just for SH glyphs:
+			// One more row just for SH glyphs and grid of seashells:
 			ImGui::TableNextRow();
 			poId = 0;
 			for (auto& po : mParametricObjects) {
@@ -1153,6 +1154,15 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 					ImGui::SliderInt("SH Order", &tmpOrder, 2, 12);
 					tmpOrder = (tmpOrder / 2) * 2;
 					mDebugSlidersi[1] = tmpOrder;
+				}
+				if (po.param_obj_type() == parametric_object_type::GridOfSeashells) {
+					int gridOfSeashellVariant = mGridOfSeashellsRenderingVariant == grid_of_seashells_rendering_variant::parametric ? 0 : 1;
+					if (ImGui::Combo("How rendered?", &gridOfSeashellVariant, "Parametric models\0Discrete 3D meshes\0")) {
+						updateObjects = true;
+					}
+					mGridOfSeashellsRenderingVariant = !po.is_enabled() ? grid_of_seashells_rendering_variant::dont 
+						: (gridOfSeashellVariant == 0 ? grid_of_seashells_rendering_variant::parametric : grid_of_seashells_rendering_variant::discrete_lods);
+					mGridOfSeashellsAAVariant = po.how_to_render();
 				}
 				ImGui::PopID();
 			}
@@ -1356,8 +1366,12 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
         create_param_pipes();
 
 		// VERTEX and TESS. PIPES:
-		mVertexPipeline = create_vertex_pipe();
+		mVertexPipeline = create_vertex_pipe(mRenderpassNoAA, mFramebufferNoAA);
 		mUpdater->on(shader_files_changed_event(mVertexPipeline.as_reference())).update(mVertexPipeline);
+		mVertexPipelineSS = create_vertex_pipe(mRenderpassMS, mFramebufferMS);
+		mUpdater->on(shader_files_changed_event(mVertexPipelineSS.as_reference())).update(mVertexPipelineSS);
+		mVertexPipelineMSSS = create_vertex_pipe(mRenderpassSSMS, mFramebufferSSMS);
+		mUpdater->on(shader_files_changed_event(mVertexPipelineMSSS.as_reference())).update(mVertexPipelineMSSS);
 
 		mFsQuadColorSampler = avk::context().create_sampler(avk::filter_mode::trilinear, avk::border_handling_mode::clamp_to_border, 0.0f);
 		mFsQuadDepthSampler = avk::context().create_sampler(avk::filter_mode::trilinear , avk::border_handling_mode::clamp_to_border, 0.0f);
@@ -1573,10 +1587,10 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 				ImGui::Text("%.1lf ms/render() CPU time", mRenderDurationMs);
 				ImGui::Separator();
 				
-				//if (!mSponzaDrawCalls.empty()) {
+				if (!mSponzaDrawCalls.empty()) {
 				    ImGui::Separator();
 				    ImGui::Checkbox("Render Sponza + Terrain", &mRenderExtra3DModel);
-				//}
+				}
 
 				ImGui::Separator();
 				bool quakeCamEnabled = mQuakeCam.is_enabled();
@@ -1757,9 +1771,15 @@ ImGui::TextColored(ImVec4(.5f, .3f, .4f, 1.f), "Timestamp Period: %.3f ns", time
 
 				// Do we need to recreate the vertex pipe?
 				if (rasterPipesNeedRecreation) {
-					auto newVertexPipe = create_vertex_pipe();
+					auto newVertexPipe = create_vertex_pipe(mRenderpassNoAA, mFramebufferNoAA);
 					std::swap(*mVertexPipeline, *newVertexPipe); // new pipe is now old pipe
 					context().main_window()->handle_lifetime(std::move(newVertexPipe));
+					auto newVertexPipeSS = create_vertex_pipe(mRenderpassMS, mFramebufferMS);
+					std::swap(*mVertexPipelineSS, *newVertexPipeSS); // new pipe is now old pipe
+					context().main_window()->handle_lifetime(std::move(newVertexPipeSS));
+					auto newVertexPipeMSSS = create_vertex_pipe(mRenderpassSSMS, mFramebufferSSMS);
+					std::swap(*mVertexPipelineMSSS, *newVertexPipeMSSS); // new pipe is now old pipe
+					context().main_window()->handle_lifetime(std::move(newVertexPipeMSSS));
 
 					{
 						auto newFsQuadNoaaToMsPipe = create_noaa_to_ms_pipe();
@@ -2445,6 +2465,50 @@ ImGui::TextColored(ImVec4(.5f, .3f, .4f, 1.f), "Timestamp Period: %.3f ns", time
 		}
 #endif
 
+		std::vector<recorded_commands_t> commandsnoAA;
+		std::vector<recorded_commands_t> commands8xSS;
+		std::vector<recorded_commands_t> commands4xSS8xMS;
+		if (mGridOfSeashellsRenderingVariant == grid_of_seashells_rendering_variant::discrete_lods && mSeashellLodDrawCalls.size() > 0) {
+			std::vector<recorded_commands_t>& targetVec = mGridOfSeashellsAAVariant == rendering_variant::Tess_noAA ? commandsnoAA    : mGridOfSeashellsAAVariant == rendering_variant::Tess_8xMS ? commands8xSS      : commands4xSS8xMS;
+			avk::graphics_pipeline& vtxPipe             = mGridOfSeashellsAAVariant == rendering_variant::Tess_noAA ? mVertexPipeline : mGridOfSeashellsAAVariant == rendering_variant::Tess_8xMS ? mVertexPipelineSS : mVertexPipelineMSSS;
+			targetVec = command::gather(
+				command::bind_pipeline(vtxPipe.as_reference()),
+				command::bind_descriptors(vtxPipe->layout(), mDescriptorCache->get_or_create_descriptor_sets({
+					descriptor_binding(0, 0, mFrameDataBuffers[inFlightIndex]),
+					descriptor_binding(0, 1, as_combined_image_samplers(mImageSamplers, layout::shader_read_only_optimal)),
+					descriptor_binding(0, 2, mMaterialBuffer),
+					descriptor_binding(1, 0, mCombinedAttachmentView->as_storage_image(layout::general)),
+#if STATS_ENABLED
+					descriptor_binding(1, 1, mHeatMapImageView->as_storage_image(layout::general)),
+#endif
+					descriptor_binding(2, 0, mCountersSsbo->as_storage_buffer()),
+					descriptor_binding(3, 0, mSeashellLodIndexMapping->as_storage_buffer()),
+					descriptor_binding(3, 1, mSeashellLodDrawParamsBuffer->as_storage_buffer())
+				})),
+				command::many_n_times(static_cast<int>(mSeashellLodDrawCalls.size()), [this,&vtxPipe](int i) {
+					return command::gather(
+						command::push_constants(vtxPipe->layout(), vertex_pipe_push_constants{ 
+							mSeashellLodDrawCalls[i].mModelMatrix,
+							mSeashellLodDrawCalls[i].mMaterialIndex,
+							i
+						}),
+						command::draw_indexed_indirect(
+							mSeashellLodDrawParamsBuffer.as_reference(),
+							// Bind and use the index buffer:
+							//mIndexBuffer.as_reference(), 
+							std::forward_as_tuple(mIndexBuffer.as_reference(), size_t{mSeashellLodDrawCalls[i].mIndexBufferOffset}),
+							// uint32_t aNumberOfDraws, vk::DeviceSize aParametersOffset, uint32_t aParametersStride:
+							1u, static_cast<vk::DeviceSize>(i * sizeof(PaddedVkDrawIndexedIndirectCommand)), static_cast<uint32_t>(sizeof(PaddedVkDrawIndexedIndirectCommand)),
+							// Bind the vertex input buffers in the right order (corresponding to the layout specifiers in the vertex shader)
+							std::forward_as_tuple(mPositionsBuffer.as_reference(), size_t{mSeashellLodDrawCalls[i].mPositionsBufferOffset}), 
+							std::forward_as_tuple(mTexCoordsBuffer.as_reference(), size_t{mSeashellLodDrawCalls[i].mTexCoordsBufferOffset}),
+							std::forward_as_tuple(mNormalsBuffer.as_reference()  , size_t{mSeashellLodDrawCalls[i].mNormalsBufferOffset})
+						)
+					);
+				} )
+			);
+		}
+
 		// Perform the LOD stage:
 		auto [lodStageCommands, firstPing, finalPong] = get_lod_stage_commands();
 
@@ -2553,71 +2617,7 @@ ImGui::TextColored(ImVec4(.5f, .3f, .4f, 1.f), "Timestamp Period: %.3f ns", time
 					); }
 				),
 
-
-
-
-
-
-
-				// 3.111111111111111111..........) Render seashell LODs:
-				command::conditional(
-					[this]() { 
-						return mRenderExtra3DModel && mSeashellLodDrawCalls.size() > 0; 
-					},
-					[this, inFlightIndex]() { 
-						return command::gather(
-						command::bind_pipeline(mVertexPipeline.as_reference()),
-						command::bind_descriptors(mVertexPipeline->layout(), mDescriptorCache->get_or_create_descriptor_sets({
-							descriptor_binding(0, 0, mFrameDataBuffers[inFlightIndex]),
-							descriptor_binding(0, 1, as_combined_image_samplers(mImageSamplers, layout::shader_read_only_optimal)),
-							descriptor_binding(0, 2, mMaterialBuffer),
-							descriptor_binding(1, 0, mCombinedAttachmentView->as_storage_image(layout::general)),
-#if STATS_ENABLED
-							descriptor_binding(1, 1, mHeatMapImageView->as_storage_image(layout::general)),
-#endif
-							descriptor_binding(2, 0, mCountersSsbo->as_storage_buffer()),
-							descriptor_binding(3, 0, mSeashellLodIndexMapping->as_storage_buffer()),
-							descriptor_binding(3, 1, mSeashellLodDrawParamsBuffer->as_storage_buffer())
-						})),
-						command::many_n_times(static_cast<int>(mSeashellLodDrawCalls.size()), [this](int i) {
-							return command::gather(
-								command::push_constants(mVertexPipeline->layout(), vertex_pipe_push_constants{ 
-									mSeashellLodDrawCalls[i].mModelMatrix,
-									mSeashellLodDrawCalls[i].mMaterialIndex,
-									i
-								}),
-								//command::draw_indexed(
-								//	// Bind and use the index buffer:
-								//	std::forward_as_tuple(mIndexBuffer.as_reference(), size_t{mSeashellLodDrawCalls[0].mIndexBufferOffset}, mSeashellLodDrawCalls[0].mNumElements),
-								//	// aNumberOfInstances, aFirstIndex, aVertexOffset, aFirstInstance:
-								//		1u,           0u,           0u,             1u,
-								//	// Bind the vertex input buffers in the right order (corresponding to the layout specifiers in the vertex shader)
-								//	std::forward_as_tuple(mPositionsBuffer.as_reference(), size_t{mSeashellLodDrawCalls[0].mPositionsBufferOffset}), 
-								//	std::forward_as_tuple(mTexCoordsBuffer.as_reference(), size_t{mSeashellLodDrawCalls[0].mTexCoordsBufferOffset}),
-								//	std::forward_as_tuple(mNormalsBuffer.as_reference()  , size_t{mSeashellLodDrawCalls[0].mNormalsBufferOffset})
-								//)
-								command::draw_indexed_indirect(
-									mSeashellLodDrawParamsBuffer.as_reference(),
-									// Bind and use the index buffer:
-									//mIndexBuffer.as_reference(), 
-									std::forward_as_tuple(mIndexBuffer.as_reference(), size_t{mSeashellLodDrawCalls[i].mIndexBufferOffset}),
-									// uint32_t aNumberOfDraws, vk::DeviceSize aParametersOffset, uint32_t aParametersStride:
-									1u, static_cast<vk::DeviceSize>(i * sizeof(PaddedVkDrawIndexedIndirectCommand)), static_cast<uint32_t>(sizeof(PaddedVkDrawIndexedIndirectCommand)),
-									// Bind the vertex input buffers in the right order (corresponding to the layout specifiers in the vertex shader)
-									std::forward_as_tuple(mPositionsBuffer.as_reference(), size_t{mSeashellLodDrawCalls[i].mPositionsBufferOffset}), 
-									std::forward_as_tuple(mTexCoordsBuffer.as_reference(), size_t{mSeashellLodDrawCalls[i].mTexCoordsBufferOffset}),
-									std::forward_as_tuple(mNormalsBuffer.as_reference()  , size_t{mSeashellLodDrawCalls[i].mNormalsBufferOffset})
-								)
-							);
-						} )
-						
-					); }
-				),
-
-
-
-
-
+				commandsnoAA,
 
 #if STATS_ENABLED
 				mTimestampPool->write_timestamp(firstQueryIndex + 4, stage::color_attachment_output), // measure after rendering sponza
@@ -2815,6 +2815,8 @@ ImGui::TextColored(ImVec4(.5f, .3f, .4f, 1.f), "Timestamp Period: %.3f ns", time
 					sizeof(VkDrawIndirectCommand), 
 					1u) // <-- Exactly ONE draw (but potentially a lot of instances), use the one at [1]
 
+
+				, commands8xSS
 			)),
 
 
@@ -2870,6 +2872,8 @@ ImGui::TextColored(ImVec4(.5f, .3f, .4f, 1.f), "Timestamp Period: %.3f ns", time
 					sizeof(VkDrawIndirectCommand), 
 					1u) // <-- Exactly ONE draw (but potentially a lot of instances), use the one at [1]
 
+
+				, commands4xSS8xMS
 			)),
 #else 
 #if STATS_ENABLED
@@ -3080,6 +3084,8 @@ private: // v== Member variables ==v
 	avk::buffer mIndirectPxFillCountBuffer;
 
     avk::graphics_pipeline mVertexPipeline;
+    avk::graphics_pipeline mVertexPipelineSS;
+    avk::graphics_pipeline mVertexPipelineMSSS;
     avk::graphics_pipeline mTessPipelinePxFillNoaa;
     avk::graphics_pipeline mTessPipelinePxFillMultisampled;
     avk::graphics_pipeline mTessPipelinePxFillSupersampled;
@@ -3170,6 +3176,8 @@ private: // v== Member variables ==v
 #endif
 
 	std::array<glm::vec4, 6> mSavedFrustumPlanes;
+	grid_of_seashells_rendering_variant mGridOfSeashellsRenderingVariant = grid_of_seashells_rendering_variant::dont;
+	rendering_variant mGridOfSeashellsAAVariant;
 
 }; // vk_parametric_curves_app
 
