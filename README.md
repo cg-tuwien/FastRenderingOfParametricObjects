@@ -2,6 +2,9 @@
 by Johannes Unterguggenberger, Lukas Lipp, Michael Wimmer, Bernhard Kerbl, and Markus Schütz      
 TU Wien
 
+![Screenshot of the UI section to enable/disable parametric objects](parametric_objects_screenshot.png "Parametric Objects UI section")      
+_Figure 1:_ A screenshot of the UI section which allows enabling and disabling of different kinds of parametric objects.
+
 # Setup
 
 Requirements:

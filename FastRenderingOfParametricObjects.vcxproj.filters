@@ -277,5 +277,8 @@
     <Image Include="assets\po-spiky-heart.png">
       <Filter>assets</Filter>
     </Image>
+    <Image Include="assets\po-grid-of-seashells.png">
+      <Filter>assets</Filter>
+    </Image>
   </ItemGroup>
 </Project>
