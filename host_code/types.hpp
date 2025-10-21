@@ -376,3 +376,9 @@ struct PaddedVkDrawIndexedIndirectCommand {
     uint32_t    _padding1;
     float       _padding2;
 };
+
+struct seashell_lod_selection_push_constants
+{
+    int   mNumLods;
+    float mQuality;
+};

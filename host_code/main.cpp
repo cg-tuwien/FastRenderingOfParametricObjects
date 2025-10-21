@@ -64,7 +64,7 @@ static std::array<parametric_object, 15> PredefinedParametricObjects {{
 	parametric_object{"Giant Worm"        , "assets/po-giant-worm.png",         false, parametric_object_type::GiantWorm,              0.0f,   1.0f,            0.0f,  glm::two_pi<float>(), glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{ 0.f,  0.f, -4.f}), -5},
 	parametric_object{"SH Glyph"          , "assets/po-single-sh-glyph.png",    false, parametric_object_type::SHGlyph,                0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>(),     glm::uvec2{ 1u, 1u }, glm::mat4{ 1.0f }, -2},
 	parametric_object{"Brain Scan"        , "assets/po-sh-brain.png",           false, parametric_object_type::SHBrain,                0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>(), glm::uvec2{ SH_BRAIN_DATA_SIZE_X, SH_BRAIN_DATA_SIZE_Y }, glm::mat4{ 1.0f }, -2},
-	parametric_object{"Grid of Seashells" , "assets/po-seashell3.png",          false, parametric_object_type::GridOfSeashells,        glm::two_pi<float>() * 8.0f,/* -> */0.0f,   0.0f,/* -> */glm::two_pi<float>(), glm::uvec2{ 1u, 1u }, glm::mat4{ 1.0f }, -5}
+	parametric_object{"Grid of Seashells" , "assets/po-seashell3.png",          false, parametric_object_type::GridOfSeashells,        glm::two_pi<float>() * 8.0f,/* -> */0.0f,   0.0f,/* -> */glm::two_pi<float>(), glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{0.0f, 5.0f, 0.0f}), -5}
 }};
 
 class vk_parametric_curves_app : public avk::invokee
@@ -444,6 +444,17 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 
 		// Update all the buffers for our drawcall data:
 		add_draw_calls(mSeashellLodDrawCalls, dataForDrawCall);
+
+		// Find GridOfSeashells parametric object and then set initial matrices and material indices:
+		for (const auto& po : PredefinedParametricObjects) {
+			if (is_grid_of_seashells(po.param_obj_type())) {
+				for (auto& loddc : mSeashellLodDrawCalls) {
+					loddc.mModelMatrix   = po.transformation_matrix() * loddc.mModelMatrix;
+					loddc.mMaterialIndex = po.material_index();
+				}
+				break;
+			}
+		}
 
 		mSeashellLodDrawParamsBuffer = context().create_buffer(
 			memory_usage::device, {},
@@ -939,13 +950,16 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 					}
 				}
 			}
-			else if (is_grid_of_seashells(po.param_obj_type()) && mGridOfSeashellsRenderingVariant == grid_of_seashells_rendering_variant::parametric) {
-				tmp.mCurveIndex = static_cast<std::underlying_type_t<parametric_object_type>>(parametric_object_type::Seashell3);
-				auto baseTransformationMatrix = tmp.mTransformationMatrix;
-				for (int x = 0; x < 71; ++x) {
-					for (int y = 0; y < 71; ++y) {
-						tmp.mTransformationMatrix = baseTransformationMatrix * glm::translate(5.0f * glm::vec3{ static_cast<float>(x - 36), 0.0f, static_cast<float>(y - 36) });
-						mObjectData[i++] = tmp;
+			else if (is_grid_of_seashells(po.param_obj_type())) {
+				if (mGridOfSeashellsRenderingVariant == grid_of_seashells_rendering_variant::parametric) {
+					tmp.mCurveIndex = static_cast<std::underlying_type_t<parametric_object_type>>(parametric_object_type::Seashell3);
+					auto baseTransformationMatrix = tmp.mTransformationMatrix;
+					for (int x = 0; x < 71; ++x) {
+						for (int y = 0; y < 71; ++y) {
+							tmp.mTransformationMatrix = baseTransformationMatrix * glm::translate(5.0f * glm::vec3{ static_cast<float>(x - 36), 0.0f, static_cast<float>(y - 36) });
+							tmp.mMaterialIndex = po.material_index();
+							mObjectData[i++] = tmp;
+						}
 					}
 				}
 			}
@@ -1060,9 +1074,18 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 				bool modifying = po.is_modifying();
 				if (modifying) {
 					glm::mat4 modelMatrix = po.transformation_matrix();
-					if (ImGuizmo::Manipulate(glm::value_ptr(viewMatrix), glm::value_ptr(projMatrix), ImGuizmo::UNIVERSAL, ImGuizmo::LOCAL, glm::value_ptr(modelMatrix))) {
+					auto prevTM = po.transformation_matrix();
+
+					auto imguizmoOperation = is_grid_of_seashells(po.param_obj_type()) ? ImGuizmo::TRANSLATE : ImGuizmo::UNIVERSAL;
+					if (ImGuizmo::Manipulate(glm::value_ptr(viewMatrix), glm::value_ptr(projMatrix), imguizmoOperation, ImGuizmo::LOCAL, glm::value_ptr(modelMatrix))) {
 						po.set_transformation_matrix(modelMatrix);
 						updateObjects = true;
+
+						if (is_grid_of_seashells(po.param_obj_type())) {
+							for (auto& loddc : mSeashellLodDrawCalls) {
+								loddc.mModelMatrix = po.transformation_matrix() * glm::inverse(prevTM) * loddc.mModelMatrix;
+							}
+						}
 					}
 				}
 			}
@@ -1133,6 +1156,12 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 					LOG_INFO(std::format("Set {}'s (actual) material index to: {}", po.name(), newActualMatIndex));
 					po.set_material_index(newActualMatIndex);
 					updateObjects = true;
+
+					if (is_grid_of_seashells(po.param_obj_type())) {
+						for (auto& loddc : mSeashellLodDrawCalls) {
+							loddc.mMaterialIndex = po.material_index();
+						}
+					}
 				}
 				ImGui::PopID();
 			}
@@ -1156,7 +1185,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 					mDebugSlidersi[1] = tmpOrder;
 				}
 				if (po.param_obj_type() == parametric_object_type::GridOfSeashells) {
-					int gridOfSeashellVariant = mGridOfSeashellsRenderingVariant == grid_of_seashells_rendering_variant::parametric ? 0 : 1;
+					int gridOfSeashellVariant = mGridOfSeashellsRenderingVariant == grid_of_seashells_rendering_variant::discrete_lods ? 1 : 0;
 					if (ImGui::Combo("How rendered?", &gridOfSeashellVariant, "Parametric models\0Discrete 3D meshes\0")) {
 						updateObjects = true;
 					}
@@ -1268,7 +1297,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 		mDescriptorCache = context().create_descriptor_cache();
 
 		create_buffers();
-		//load_sponza_and_terrain();
+		load_sponza_and_terrain();
 		load_sh_brain_dataset();
 		load_discrete_lods_of_seashells();
 
@@ -1475,6 +1504,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 
 		mSeashellLodSelectionComputePipe = context().create_compute_pipeline_for(
 			"shaders/seashell_lod_selection.comp",
+			push_constant_binding_data{ shader_type::all, 0, sizeof(seashell_lod_selection_push_constants) },
 			descriptor_binding(0, 0, mFrameDataBuffers[0]),
 			descriptor_binding(1, 0, mCountersSsbo->as_storage_buffer()),
 			descriptor_binding(2, 0, mSeashellLodIndexMapping->as_storage_buffer()),
@@ -1666,6 +1696,11 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 				//ImGui::Text("##lololo");
 				//ImGui::SliderFloat("Terrain height (aka float dbg slider #2)", &mDebugSliders[1], 0.0f, 10.0f);
 				//ImGui::PopItemWidth();
+
+				ImGui::Separator();
+				ImGui::TextColored(ImVec4(1.0f, 0.75f, 0.1f, 1.0f), "Discrete LOD 3D Models Info & Settings:");
+				ImGui::Text("Number of LODs: "); ImGui::SameLine(); ImGui::TextColored(ImVec4(0.75f, 0.5f, 0.05f, 1.0f), "%d", static_cast<int>(mSeashellLodDrawCalls.size()));
+				ImGui::SliderFloat("Quality setting (pixel distance when to switch to next LOD)", &mGridOfSeashellsQualitySetting, 1.0f, 8.0f);
 
 				// Automatic performance measurement, camera flight:
 				ImGui::Separator();
@@ -2557,6 +2592,10 @@ ImGui::TextColored(ImVec4(.5f, .3f, .4f, 1.f), "Timestamp Period: %.3f ns", time
 					descriptor_binding(2, 0, mSeashellLodIndexMapping->as_storage_buffer()),
 					descriptor_binding(2, 1, mSeashellLodDrawParamsBuffer->as_storage_buffer())
 				})),
+				command::push_constants(mSeashellLodSelectionComputePipe->layout(), seashell_lod_selection_push_constants {
+					static_cast<int>(mSeashellLodDrawCalls.size()),
+					mGridOfSeashellsQualitySetting
+				}),
 				command::dispatch(roundUpToMultipleOf(SEASHELL_GRID_DIM * SEASHELL_GRID_DIM / 256, 256), 1u, 1u),
 
 				
@@ -2782,6 +2821,9 @@ ImGui::TextColored(ImVec4(.5f, .3f, .4f, 1.f), "Timestamp Period: %.3f ns", time
 					// Draw a a full-screen quad:
 					command::draw(6, 1, 0, 1)
 				); }),
+
+				
+				commands8xSS,
 				
 				command::next_subpass(),
 
@@ -2814,9 +2856,6 @@ ImGui::TextColored(ImVec4(.5f, .3f, .4f, 1.f), "Timestamp Period: %.3f ns", time
 					get_rendering_variant_index(rendering_variant::Tess_8xMS) * sizeof(VkDrawIndirectCommand), 
 					sizeof(VkDrawIndirectCommand), 
 					1u) // <-- Exactly ONE draw (but potentially a lot of instances), use the one at [1]
-
-
-				, commands8xSS
 			)),
 
 
@@ -2839,6 +2878,8 @@ ImGui::TextColored(ImVec4(.5f, .3f, .4f, 1.f), "Timestamp Period: %.3f ns", time
 					// Draw a a full-screen quad:
 					command::draw(6, 1, 0, 1)
 				); }),
+
+				commands4xSS8xMS,
 				
 				command::next_subpass(),
 
@@ -2871,9 +2912,6 @@ ImGui::TextColored(ImVec4(.5f, .3f, .4f, 1.f), "Timestamp Period: %.3f ns", time
 					get_rendering_variant_index(rendering_variant::Tess_4xSS_8xMS) * sizeof(VkDrawIndirectCommand), 
 					sizeof(VkDrawIndirectCommand), 
 					1u) // <-- Exactly ONE draw (but potentially a lot of instances), use the one at [1]
-
-
-				, commands4xSS8xMS
 			)),
 #else 
 #if STATS_ENABLED
@@ -3178,6 +3216,8 @@ private: // v== Member variables ==v
 	std::array<glm::vec4, 6> mSavedFrustumPlanes;
 	grid_of_seashells_rendering_variant mGridOfSeashellsRenderingVariant = grid_of_seashells_rendering_variant::dont;
 	rendering_variant mGridOfSeashellsAAVariant;
+	int mGridOfSeashellsMaterialIndex;
+	float mGridOfSeashellsQualitySetting = 4.0f;
 
 }; // vk_parametric_curves_app
 

@@ -22,6 +22,17 @@ layout(set = 2, binding = 1) buffer SeashellLodDrawParamsBuffer { PaddedVkDrawIn
 
 #define NICE_CLEAR_COLOR 0
 
+// +------------------------------------------------------------------------------+
+// |   PushConstants                                                              |
+// +------------------------------------------------------------------------------+
+
+layout(push_constant) uniform PushConstants
+{
+    int   mNumLods;
+    float mQuality;
+}
+pushConstants;
+
 // ################## compute shader main ###################
 void main()
 {
@@ -46,7 +57,7 @@ void main()
 	vec4 posCS = ubo.mViewProjMatrix * vec4(seashellPos, 1.0);
 	vec3 vpc = cs_to_viewport(posCS, ubo.mResolutionAndCulling.xy);
 
-	const float quality = 4.0; //px
+	const float quality = pushConstants.mQuality; // default is 4.0 (set from host side)
 	// Move #quality-many pixels towards the center of the screen, then reproject into view space:
 	vec3 vpc2 = vpc;
 	vpc2.y += vpc.y < ubo.mResolutionAndCulling.y ? quality : -quality;
@@ -54,12 +65,15 @@ void main()
 	// Compute the threshold in view space <= The chosen LOD mesh shall provide more detail than this.
 	float thresholdVS = length(vs2 - (ubo.mViewMatrix * vec4(seashellPos, 1.0)).xyz);
 
+	const int numBuckets = pushConstants.mNumLods; // number of actually loaded discrete 3D models
 	int bucket = 0;
-	for (; bucket < 7; ++bucket) {
+	for (; bucket < numBuckets; ++bucket) {
 		if (uSeashellLodDrawParamsBuffer.mDrawParams[bucket]._padding2 < thresholdVS) {
 			break;
 		}
 	}
+	// If it overshot, it points at an invalid LOD => reset to LOD 0 to indicate it to the user:
+	bucket = bucket < numBuckets ? bucket : 0;
 
 #if STATS_ENABLED
 	atomicAdd(uCounters.mCounters[3], 1);
