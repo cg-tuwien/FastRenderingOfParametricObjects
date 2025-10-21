@@ -1686,17 +1686,6 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
                     }
                 }
 
-				//// Just some Debug stuff:
-				//ImGui::Separator();
-				//ImGui::Text("DEBUG SLIDERS:");
-    //            ImGui::PushItemWidth(imGuiWindowWidth * 0.6f);
-				//ImGui::SliderFloat("LERP SH <-> Sphere (aka float dbg slider #1)", &mDebugSliders[0], 0.0f, 1.0f);
-				//ImGui::SliderInt("SH Band           (aka int dbg slider #1)", &mDebugSlidersi[0],  0, 31);
-				//ImGui::SliderInt("SH Basis Function (aka int dbg slider #2)", &mDebugSlidersi[1], -mDebugSlidersi[0], mDebugSlidersi[0]);
-				//ImGui::Text("##lololo");
-				//ImGui::SliderFloat("Terrain height (aka float dbg slider #2)", &mDebugSliders[1], 0.0f, 10.0f);
-				//ImGui::PopItemWidth();
-
 				ImGui::Separator();
 				ImGui::TextColored(ImVec4(1.0f, 0.75f, 0.1f, 1.0f), "Discrete LOD 3D Models Info & Settings:");
 				ImGui::Text("Number of LODs: "); ImGui::SameLine(); ImGui::TextColored(ImVec4(0.75f, 0.5f, 0.05f, 1.0f), "%d", static_cast<int>(mSeashellLodDrawCalls.size()));
