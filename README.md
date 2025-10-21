@@ -10,7 +10,10 @@ _Figure 1:_ A screenshot of the UI section which allows enabling and disabling o
 Requirements:
 - Visual Studio 2022
 - MSVC C++ compiler
-- Vulkan SDK with VMA header (optional component => select during SDK install)
+- Vulkan 1.3 or 1.4 SDK with VMA header (optional component => select during SDK install)
+- A GPU with at least 3 gigabytes of video memory*
+
+*) Some buffers are pre-allocated, totalling approximately 3 gigabytes. See `MAX_VERTICES` and `MAX_INDICES` in code.
 
 Setup:
 - Clone this repository

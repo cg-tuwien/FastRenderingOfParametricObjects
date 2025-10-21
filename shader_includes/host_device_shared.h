@@ -27,12 +27,10 @@
 // Index that represents the hybrid variant:
 #define HYBRID_VARIANT_INDEX		5
 
-// The vertex buffers offer  space for 67M vertices each (=> 800MB for positions data):
-//#define MAX_VERTICES				 67108864
-#define MAX_VERTICES				 268000000
+// The vertex buffers offer  space for 67M vertices each (=> 800MB for positions data, 500MB for texture coordinates, 800MB for normals):
+#define MAX_VERTICES				 67108864
 // The index  buffer  offers space for 67M vertices (=> 500MB for index data):
-//#define MAX_INDICES					134217728
-#define MAX_INDICES					536870912
+#define MAX_INDICES					134217728
 
 //// Whether statistics are enabled at all
 #define STATS_ENABLED               1
