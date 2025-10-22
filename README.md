@@ -52,7 +52,8 @@ Parametric functions are evaluated on the fly during rendering in the file [`par
 - `vec3 get_seashell1(float u, float v)`, `vec3 get_seashell2(float u, float v)`, or `vec3 get_seashell3(float u, float v)` in [`parametric_functions/seashells.glsl`](./shader_includes/parametric_functions/seashells.glsl)
 - `vec3 get_giant_worm_body(float u, float v, uvec3 userData, out vec3 pos, out vec3 outward, out vec3 forward)`, `vec3 get_giant_worm_jaws(float u, float v, float offset, float flipStrength, float dragToInnerRadius, uvec3 userData)`, or  `vec3 get_giant_worm_tongue(float u, float v, uvec3 userData)` in [`parametric_functions/giant_worm.glsl`](./shader_includes/parametric_functions/giant_worm.glsl)
 
-### Configuration
+### Configuration options in source code
+Besides the configuration options which are controllable through the UI, there are several configuration options that can be changed in source files:
 The file [`host_device_shared.h`](./shader_includes/host_device_shared.h) is included from both, the C++ side and the GLSL side. It contains several relevant configuration options, which are documented in source code. For example, it contains `MAX_VERTICES` and `MAX_INDICES` which indicate the sizes of pre-allocated buffers. There are also some configuration options at the top of the [`main.cpp`](./host_code/main.cpp) file, like settings for multi sampling or super sampling. Furthermore, some of the GLSL files contain configuration settings which are relevant to the specific file.
 
 ### Can more discrete level-of-detail (LOD) meshes be added?
