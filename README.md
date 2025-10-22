@@ -7,7 +7,7 @@ _Figure 1:_ A screenshot of the UI section which allows enabling and disabling o
 
 This technique allows fast rendering of various parametrically defined objects like the following:
 
-Parametric Seashell | Parametric Fiber Curve | Curtain of Fiber Curves | Spherical Harmonics (SH) Glyph
+Parametric Seashell | Parametric Fiber Curves | Curtain of Fiber Curves | Spherical Harmonics (SH) Glyph
 :-------------------------:|:-------------------------:|:-------------------------:|:-------------------------:
 ![Parametrically defined seashell model](./assets/po-seashell3.png)  |  ![Parametrically defined fiber curves](./assets/po-fiber-curve-single.png) |  ![Curtain made of hundreds of thousands of fiber curves](./assets/po-blue-curtain.png) |  ![Spherical Harmonics glyph can be parametrically defined](./assets/po-single-sh-glyph.png)
 | Parametric description of a seashell model | Parametric description of six intertwined fiber curves | A curtain made of 358k fiber curves, which are rendered fully opaque | SH functions classify as parametric functions; can be used for detailed medical visualization
