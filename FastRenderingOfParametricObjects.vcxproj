@@ -29,6 +29,8 @@
     <ClInclude Include="host_code\helpers.hpp" />
     <ClInclude Include="host_code\ImGuizmo.h" />
     <ClInclude Include="host_code\perf_tests\test_fiber_curves.hpp" />
+    <ClInclude Include="host_code\perf_tests\test_grid_of_seashells.hpp" />
+    <ClInclude Include="host_code\perf_tests\test_grid_of_seashells_discrete_lods.hpp" />
     <ClInclude Include="host_code\perf_tests\test_knit_yarn.hpp" />
     <ClInclude Include="host_code\perf_tests\test_seashell.hpp" />
     <ClInclude Include="host_code\types.hpp" />
@@ -42,6 +44,12 @@
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>
+    <None Include="assets\seashell_lod0_746tri.fbx" />
+    <None Include="assets\seashell_lod1_3k_tri.fbx" />
+    <None Include="assets\seashell_lod2_13k_tri.fbx" />
+    <None Include="assets\seashell_lod3_52k_tri.fbx" />
+    <None Include="assets\seashell_lod4_209k_tri.fbx" />
+    <None Include="assets\seashell_lod5_835k_tri.fbx" />
     <None Include="Auto-Vk-Toolkit\assets\sponza_and_terrain.fscene" />
     <None Include="shaders\clear_r64_image.comp" />
     <None Include="shaders\copy_to_backbuffer.comp" />
@@ -58,6 +66,7 @@
     <None Include="shaders\px-fill-tess\patch_go.tese" />
     <None Include="shaders\px-fill-tess\patch_ready.vert" />
     <None Include="shaders\px-fill-tess\patch_set.tesc" />
+    <None Include="shaders\seashell_lod_selection.comp" />
     <None Include="shaders\simple.vert" />
     <None Include="shaders\full_screen_quad.frag" />
     <None Include="shaders\full_screen_quad.vert" />
@@ -92,6 +101,7 @@
     <Image Include="assets\po-blue-curtain.png" />
     <Image Include="assets\po-fiber-curve-single.png" />
     <Image Include="assets\po-giant-worm.png" />
+    <Image Include="assets\po-grid-of-seashells.png" />
     <Image Include="assets\po-johis-heart.png" />
     <Image Include="assets\po-palm-tree.png" />
     <Image Include="assets\po-seashell1.png" />

@@ -1,4 +1,5 @@
 
+
 // +------------------------------------------------------------------------------+
 // |   Uniform Buffer:                                                            |
 // +------------------------------------------------------------------------------+
@@ -14,6 +15,8 @@ layout(set = 0, binding = 0) uniform FrameData
     // Debug sliders:
     vec4    mDebugSliders;
     ivec4   mDebugSlidersi;
+    // Frustum culling for LODs of seashells:
+    vec4    mFrustumPlanes[6];
     // Common, global settings:
     bool    mHeatMapEnabled;
     bool    mGatherPipelineStats;

@@ -20,6 +20,8 @@
 #include "ImGuizmo.h"
 #include "big_dataset.hpp"
 
+#define NUM_CONCURRENT_FRAMES 3
+
 #define NUM_PREDEFINED_MATERIALS 5
 #define NUM_TIMESTAMP_QUERIES 14
 #define NUM_DIFFERENT_RENDER_VARIANTS 5
@@ -43,29 +45,31 @@
 //#include "perf_tests/test_knit_yarn.hpp"
 //#include "perf_tests/test_fiber_curves.hpp"
 //#include "perf_tests/test_seashell.hpp"
-//#define TEST_RENDERING_METHOD          rendering_variant::PointRendered_direct
-#define TEST_GATHER_TIMER_QUERIES 0
-#define TEST_GATHER_PATCH_COUNTS  0
+//#include "perf_tests/test_grid_of_seashells_discrete_lods.hpp"
+#include "perf_tests/test_grid_of_seashells.hpp"
 
-static std::array<parametric_object, 14> PredefinedParametricObjects {{
-	parametric_object{"Sphere"       , "assets/po-sphere-patches.png",     true , parametric_object_type::Sphere,                 0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>() , glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{ 0.f,  0.f,  0.f})},
-	parametric_object{"Johi's Heart" , "assets/po-johis-heart.png",        false, parametric_object_type::JohisHeart,             0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>(), glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{ 0.f,  0.f, -2.f})},
-	parametric_object{"Spiky Heart"  , "assets/po-spiky-heart.png",        false, parametric_object_type::SpikyHeart,             0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>(), glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{ 0.f,  0.f,  2.f}), -5},
-	parametric_object{"Seashell 1"   , "assets/po-seashell1.png",          false, parametric_object_type::Seashell1,              glm::two_pi<float>() * 8.0f,/* -> */0.0f,   0.0f,/* -> */glm::two_pi<float>(), glm::uvec2{ 1u, 1u }, glm::mat4{ 1.0f }, -3},
-	parametric_object{"Seashell 2"   , "assets/po-seashell2.png",          false, parametric_object_type::Seashell2,              glm::two_pi<float>() * 8.0f,/* -> */0.0f,   0.0f,/* -> */glm::two_pi<float>(), glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{-4.5f, 0.0f, 0.0f }), -4},
-	parametric_object{"Seashell 3"   , "assets/po-seashell3.png",          false, parametric_object_type::Seashell3,              glm::two_pi<float>() * 8.0f,/* -> */0.0f,   0.0f,/* -> */glm::two_pi<float>(), glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{ 4.5f, 0.0f, 0.0f }), -5},
-	parametric_object{"Yarn Curve"   , "assets/po-yarn-curve-single.png",  false, parametric_object_type::SingleYarnCurve,        1.0f, 1.0f,     /* <-- yarn dimensions | n/a yarn -> */ 0.f, /* thickness --> */ 0.8f, glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{-0.3f, 0.0f, 0.0f}) * glm::scale(glm::vec3{ 0.3f }), -5},
-	parametric_object{"Fiber Curve"  , "assets/po-fiber-curve-single.png", false, parametric_object_type::SingleFiberCurve,       1.0f, 1.0f,     /* <-- yarn dimensions | #fibers --> */ 6.f, /* thickness --> */ 0.3f, glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{-0.5f, 0.0f, 0.0f}) * glm::scale(glm::vec3{ 0.3f }), -5},
-	parametric_object{"Yarn Curtain" , "assets/po-blue-curtain.png",       false, parametric_object_type::CurtainYarnCurves,      235.0f, 254.0f, /* <-- yarn dimensions | #fibers --> */ 6.f, /* thickness --> */ 0.8f, glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{-3.35f, 0.08f, 5.32f}) * glm::scale(glm::vec3{ 0.005f }), 19},
-	parametric_object{"Fiber Curtain", "assets/po-blue-curtain.png",       false, parametric_object_type::CurtainFiberCurves,     235.0f, 254.0f, /* <-- yarn dimensions | #fibers --> */ 6.f, /* thickness --> */ 0.8f, glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{-3.35f, 0.08f, 5.32f}) * glm::scale(glm::vec3{ 0.005f }), 19},
-	parametric_object{"Palm Tree"    , "assets/po-palm-tree.png",          false, parametric_object_type::PalmTreeTrunk,          0.0f,   1.0f,            0.0f,  glm::two_pi<float>(), glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{ 0.f,  0.f, -4.f})},
-	parametric_object{"Giant Worm"   , "assets/po-giant-worm.png",         false, parametric_object_type::GiantWorm,              0.0f,   1.0f,            0.0f,  glm::two_pi<float>(), glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{ 0.f,  0.f, -4.f}), -5},
-	parametric_object{"SH Glyph"     , "assets/po-single-sh-glyph.png",    false, parametric_object_type::SHGlyph,                0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>(),     glm::uvec2{ 1u, 1u }, glm::mat4{ 1.0f }, -2},
-	parametric_object{"Brain Scan"   , "assets/po-sh-brain.png",           false, parametric_object_type::SHBrain,                0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>(), glm::uvec2{ SH_BRAIN_DATA_SIZE_X, SH_BRAIN_DATA_SIZE_Y }, glm::mat4{ 1.0f }, -2}
+
+static std::array<parametric_object, 15> PredefinedParametricObjects {{
+	parametric_object{"Sphere"            , "assets/po-sphere-patches.png",     true , parametric_object_type::Sphere,                 0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>() , glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{ 0.f,  0.f,  0.f})},
+	parametric_object{"Johi's Heart"      , "assets/po-johis-heart.png",        false, parametric_object_type::JohisHeart,             0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>(), glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{ 0.f,  0.f, -2.f})},
+	parametric_object{"Spiky Heart"       , "assets/po-spiky-heart.png",        false, parametric_object_type::SpikyHeart,             0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>(), glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{ 0.f,  0.f,  2.f}), -5},
+	parametric_object{"Seashell 1"        , "assets/po-seashell1.png",          false, parametric_object_type::Seashell1,              glm::two_pi<float>() * 8.0f,/* -> */0.0f,   0.0f,/* -> */glm::two_pi<float>(), glm::uvec2{ 1u, 1u }, glm::mat4{ 1.0f }, -3},
+	parametric_object{"Seashell 2"        , "assets/po-seashell2.png",          false, parametric_object_type::Seashell2,              glm::two_pi<float>() * 8.0f,/* -> */0.0f,   0.0f,/* -> */glm::two_pi<float>(), glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{-4.5f, 0.0f, 0.0f }), -4},
+	parametric_object{"Seashell 3"        , "assets/po-seashell3.png",          false, parametric_object_type::Seashell3,              glm::two_pi<float>() * 8.0f,/* -> */0.0f,   0.0f,/* -> */glm::two_pi<float>(), glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{ 4.5f, 0.0f, 0.0f }), -5},
+	parametric_object{"Yarn Curve"        , "assets/po-yarn-curve-single.png",  false, parametric_object_type::SingleYarnCurve,        1.0f, 1.0f,     /* <-- yarn dimensions | n/a yarn -> */ 0.f, /* thickness --> */ 0.8f, glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{-0.3f, 0.0f, 0.0f}) * glm::scale(glm::vec3{ 0.3f }), -5},
+	parametric_object{"Fiber Curve"       , "assets/po-fiber-curve-single.png", false, parametric_object_type::SingleFiberCurve,       1.0f, 1.0f,     /* <-- yarn dimensions | #fibers --> */ 6.f, /* thickness --> */ 0.3f, glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{-0.5f, 0.0f, 0.0f}) * glm::scale(glm::vec3{ 0.3f }), -5},
+	parametric_object{"Yarn Curtain"      , "assets/po-blue-curtain.png",       false, parametric_object_type::CurtainYarnCurves,      235.0f, 254.0f, /* <-- yarn dimensions | #fibers --> */ 6.f, /* thickness --> */ 0.8f, glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{-3.35f, 0.08f, 5.32f}) * glm::scale(glm::vec3{ 0.005f }), 19},
+	parametric_object{"Fiber Curtain"     , "assets/po-blue-curtain.png",       false, parametric_object_type::CurtainFiberCurves,     235.0f, 254.0f, /* <-- yarn dimensions | #fibers --> */ 6.f, /* thickness --> */ 0.8f, glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{-3.35f, 0.08f, 5.32f}) * glm::scale(glm::vec3{ 0.005f }), 19},
+	parametric_object{"Palm Tree"         , "assets/po-palm-tree.png",          false, parametric_object_type::PalmTreeTrunk,          0.0f,   1.0f,            0.0f,  glm::two_pi<float>(), glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{ 0.f,  0.f, -4.f})},
+	parametric_object{"Giant Worm"        , "assets/po-giant-worm.png",         false, parametric_object_type::GiantWorm,              0.0f,   1.0f,            0.0f,  glm::two_pi<float>(), glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{ 0.f,  0.f, -4.f}), -5},
+	parametric_object{"SH Glyph"          , "assets/po-single-sh-glyph.png",    false, parametric_object_type::SHGlyph,                0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>(),     glm::uvec2{ 1u, 1u }, glm::mat4{ 1.0f }, -2},
+	parametric_object{"Brain Scan"        , "assets/po-sh-brain.png",           false, parametric_object_type::SHBrain,                0.0f, glm::pi<float>(),  0.0f,  glm::two_pi<float>(), glm::uvec2{ SH_BRAIN_DATA_SIZE_X, SH_BRAIN_DATA_SIZE_Y }, glm::mat4{ 1.0f }, -2},
+	parametric_object{"Grid of Seashells" , "assets/po-grid-of-seashells.png",  false, parametric_object_type::GridOfSeashells,        glm::two_pi<float>() * 8.0f,/* -> */0.0f,   0.0f,/* -> */glm::two_pi<float>(), glm::uvec2{ 1u, 1u }, glm::translate(glm::vec3{0.0f, 5.0f, 0.0f}), -5}
 }};
 
 class vk_parametric_curves_app : public avk::invokee
 {
+	enum struct grid_of_seashells_rendering_variant { dont, parametric, discrete_lods };
 
 public: // v== avk::invokee overrides which will be invoked by the framework ==v
 	vk_parametric_curves_app(avk::queue& aQueue)
@@ -79,17 +83,16 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 
 	/** Creates buffers for all the drawcalls.
 	 *  Called after everything has been loaded and split into meshlets properly.
-	 *  @param dataForDrawCall		The loaded data for the drawcalls.
 	 *	@param drawCallsTarget		The target vector for the draw call data.
+	 *  @param dataForDrawCall		The loaded data for the drawcalls.
 	 */
-	void add_draw_calls(std::vector<loaded_model_data>& dataForDrawCall) {
+	void add_draw_calls(std::vector<data_for_draw_call>& drawCallsTarget, const std::vector<loaded_model_data>& dataForDrawCall) {
 		using namespace avk;
 
 		for (auto& drawCallData : dataForDrawCall) {
-			auto& drawCall = mDrawCalls.emplace_back();
+			auto& drawCall = drawCallsTarget.emplace_back();
 			drawCall.mModelMatrix = drawCallData.mModelMatrix;
 			drawCall.mMaterialIndex = drawCallData.mMaterialIndex;
-			drawCall.mPixelsOnMeridian = drawCallData.mPixelsOnMeridian;
 
 			const auto insertIdx = mVertexBuffersOffsetsSizesCount.x++;
 			uint32_t posOffset = 0;
@@ -222,7 +225,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 	{
 		using namespace avk;
 
-		if (!mDrawCalls.empty()) {
+		if (!mSponzaDrawCalls.empty()) {
 			LOG_WARNING("Sponza and Terrain already loaded");
 			return;
 		}
@@ -259,7 +262,6 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 					        auto& drawCallData = dataForDrawCall.emplace_back();
 
 					        drawCallData.mMaterialIndex = static_cast<int32_t>(matIndex);
-					        drawCallData.mPixelsOnMeridian = 1;
 					        drawCallData.mModelMatrix = sceneTransform * orcaInstTransform * curModel->transformation_matrix_for_mesh(meshIndex);
 
 					        auto selection = make_model_references_and_mesh_indices_selection(curModel, meshIndex);
@@ -279,7 +281,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 		}
 
 		// Update all the buffers for our drawcall data:
-		add_draw_calls(dataForDrawCall);
+		add_draw_calls(mSponzaDrawCalls, dataForDrawCall);
 
 		mNumMaterials = static_cast<int>(allMatConfigs.size());
 		LOG_INFO_EM(std::format("Number of materials = {}", mNumMaterials));
@@ -365,6 +367,110 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 				std::move(args)...
 		);
 	}
+
+	void load_discrete_lods_of_seashells()
+	{
+		using namespace avk;
+
+		if (!mSeashellLodDrawCalls.empty()) {
+			LOG_WARNING("LODs of Seashells already loaded");
+			return;
+		}
+
+		std::vector<loaded_model_data> dataForDrawCall;
+
+		std::vector<std::string> LodFiles { 
+				  "assets/seashell_lod0_746tri.fbx"
+				, "assets/seashell_lod1_3k_tri.fbx"
+				, "assets/seashell_lod2_13k_tri.fbx"
+				, "assets/seashell_lod3_52k_tri.fbx"
+				, "assets/seashell_lod4_209k_tri.fbx"
+				, "assets/seashell_lod5_835k_tri.fbx"
+				, "assets/seashell_lod6_3.3M_tri.fbx"
+				, "assets/seashell_lod7_13.4M_tri.fbx"
+		};
+
+		std::vector<PaddedVkDrawIndexedIndirectCommand> indirectParameters;
+
+		int lod = 1;
+		for (const auto& lodFile : LodFiles) {
+			if (!std::filesystem::exists(lodFile)) {
+				LOG_WARNING(std::format("LOD 3D model at path '{}' does not exist.", lodFile));
+				continue;
+			}
+
+			auto loadedModel = model_t::load_from_file(lodFile, aiProcess_Triangulate | aiProcess_PreTransformVertices );
+			assert(loadedModel->num_meshes() == 1);
+
+			auto& drawCallData = dataForDrawCall.emplace_back();
+			drawCallData.mMaterialIndex = 0; // TODO: Material?
+			drawCallData.mModelMatrix = loadedModel->transformation_matrix_for_mesh(0) 
+										* glm::rotate(glm::radians(90.0f), glm::vec3{ 1.0f, 0.0f, 0.0f }) * glm::scale(glm::vec3{ 0.01f, 0.01f, 0.01f });
+			auto selection = make_model_references_and_mesh_indices_selection(loadedModel, 0);
+			std::tie(drawCallData.mPositions, drawCallData.mIndices) = get_vertices_and_indices(selection);
+			drawCallData.mNormals = get_normals(selection);
+			drawCallData.mTexCoords = get_2d_texture_coordinates(selection, 0);
+
+			auto& ip = indirectParameters.emplace_back();
+			ip.indexCount    = drawCallData.mIndices.size();
+			ip.instanceCount = 0;
+			ip.firstIndex    = 0;
+			ip.vertexOffset  = 0;
+			ip.firstInstance = 1;
+
+			// Calculate the approximate triangle size in WS using some triangles across the whole model (at 1/4, 1/2, and 3/4 positions):
+			auto get_triangle_extent = [&](int index) {
+				using namespace glm;
+
+				constexpr int N = 3;
+				std::array<float, N> edgeLengths;
+				std::array<int,   N> indicesFactor  = { { 1, 2, 3 } };
+				std::array<int,   N> indicesDivisor = { { 4, 4, 4 } };
+				for (int i = 0; i < N; ++i) {
+					vec3 v0 = vec3(drawCallData.mModelMatrix * vec4(drawCallData.mPositions[drawCallData.mIndices[index + 0]], 1.0));
+					vec3 v1 = vec3(drawCallData.mModelMatrix * vec4(drawCallData.mPositions[drawCallData.mIndices[index + 1]], 1.0));
+					vec3 v2 = vec3(drawCallData.mModelMatrix * vec4(drawCallData.mPositions[drawCallData.mIndices[index + 2]], 1.0));
+					float maxedge = std::max({ length(v0 - v1), length(v0 - v2), length(v1 - v2) });
+					edgeLengths[i] = maxedge;
+				}
+				std::sort(edgeLengths.begin(), edgeLengths.end());
+				return edgeLengths[N/2];
+			};
+			// Just "hide" the value in plain sight and thereby, transfer it to seashell_lod_selection.comp
+			ip._padding2 = get_triangle_extent(drawCallData.mIndices.size() - 3);
+
+			LOG_INFO_EM(std::format("Triangle extent in '{}' = {}", lodFile, ip._padding2));
+		}
+
+		// Update all the buffers for our drawcall data:
+		add_draw_calls(mSeashellLodDrawCalls, dataForDrawCall);
+
+		// Find GridOfSeashells parametric object and then set initial matrices and material indices:
+		for (const auto& po : PredefinedParametricObjects) {
+			if (is_grid_of_seashells(po.param_obj_type())) {
+				for (auto& loddc : mSeashellLodDrawCalls) {
+					loddc.mModelMatrix   = po.transformation_matrix() * loddc.mModelMatrix;
+					loddc.mMaterialIndex = po.material_index();
+				}
+				break;
+			}
+		}
+
+		mSeashellLodDrawParamsBuffer = context().create_buffer(
+			memory_usage::device, {},
+			indirect_buffer_meta::create_from_num_elements(SEASHELL_MAX_LODS,  sizeof(PaddedVkDrawIndexedIndirectCommand)),
+			storage_buffer_meta::create_from_size(         SEASHELL_MAX_LODS * sizeof(PaddedVkDrawIndexedIndirectCommand))
+		);
+
+		context().record_and_submit_with_fence({
+			mSeashellLodDrawParamsBuffer->fill(indirectParameters.data(), 0, 0, indirectParameters.size() * sizeof(PaddedVkDrawIndexedIndirectCommand))
+		}, *mQueue)->wait_until_signalled();
+
+		mSeashellLodIndexMapping = context().create_buffer(
+			memory_usage::device, {},
+			storage_buffer_meta::create_from_size(         SEASHELL_MAX_LODS * SEASHELL_LOD_IDS_STRIDE * sizeof(uint32_t))
+		);
+    }
 
     void create_param_pipes()
     {
@@ -461,7 +567,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 #endif
     }
 
-	avk::graphics_pipeline create_vertex_pipe()
+	avk::graphics_pipeline create_vertex_pipe(const avk::renderpass& rp, const avk::framebuffer& fp)
 	{
 		using namespace avk;
 
@@ -476,8 +582,8 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
                 cfg::front_face::define_front_faces_to_be_counter_clockwise(),
 			    mBackfaceCullingOn ? cfg::culling_mode::cull_back_faces : cfg::culling_mode::disabled,
 
-				cfg::viewport_depth_scissors_config::from_framebuffer(mFramebufferNoAA.as_reference()),
-				mRenderpassNoAA, cfg::subpass_index{ 0 },
+				cfg::viewport_depth_scissors_config::from_framebuffer(fp.as_reference()), 
+				rp, cfg::subpass_index{ 0 },
 				cfg::shade_per_fragment(), 
 			
 				mDisableColorAttachmentOut 
@@ -494,7 +600,9 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
                 descriptor_binding(1, 1, mHeatMapImageView->as_storage_image(layout::general)),
 #endif
                 // Buffer for some pipeline statistics:
-			    descriptor_binding(2, 0, mCountersSsbo->as_storage_buffer())
+			    descriptor_binding(2, 0, mCountersSsbo->as_storage_buffer()),
+				descriptor_binding(3, 0, mSeashellLodIndexMapping->as_storage_buffer()),
+				descriptor_binding(3, 1, mSeashellLodDrawParamsBuffer->as_storage_buffer())
 		);
 	}
 
@@ -743,6 +851,11 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 		return pot == parametric_object_type::GiantWorm;
 	}
 
+	bool is_grid_of_seashells(parametric_object_type pot)
+	{
+		return pot == parametric_object_type::GridOfSeashells;
+	}
+
 	void fill_object_data_buffer()
 	{
 		using namespace avk;
@@ -834,6 +947,19 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 						tmp.mUserData.x = a;
 						tmp.mUserData.y = b;
 						mObjectData[i++] = tmp;
+					}
+				}
+			}
+			else if (is_grid_of_seashells(po.param_obj_type())) {
+				if (mGridOfSeashellsRenderingVariant == grid_of_seashells_rendering_variant::parametric) {
+					tmp.mCurveIndex = static_cast<std::underlying_type_t<parametric_object_type>>(parametric_object_type::Seashell3);
+					auto baseTransformationMatrix = tmp.mTransformationMatrix;
+					for (int x = 0; x < 71; ++x) {
+						for (int y = 0; y < 71; ++y) {
+							tmp.mTransformationMatrix = baseTransformationMatrix * glm::translate(5.0f * glm::vec3{ static_cast<float>(x - 36), 0.0f, static_cast<float>(y - 36) });
+							tmp.mMaterialIndex = po.material_index();
+							mObjectData[i++] = tmp;
+						}
 					}
 				}
 			}
@@ -948,9 +1074,18 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 				bool modifying = po.is_modifying();
 				if (modifying) {
 					glm::mat4 modelMatrix = po.transformation_matrix();
-					if (ImGuizmo::Manipulate(glm::value_ptr(viewMatrix), glm::value_ptr(projMatrix), ImGuizmo::UNIVERSAL, ImGuizmo::LOCAL, glm::value_ptr(modelMatrix))) {
+					auto prevTM = po.transformation_matrix();
+
+					auto imguizmoOperation = is_grid_of_seashells(po.param_obj_type()) ? ImGuizmo::TRANSLATE : ImGuizmo::UNIVERSAL;
+					if (ImGuizmo::Manipulate(glm::value_ptr(viewMatrix), glm::value_ptr(projMatrix), imguizmoOperation, ImGuizmo::LOCAL, glm::value_ptr(modelMatrix))) {
 						po.set_transformation_matrix(modelMatrix);
 						updateObjects = true;
+
+						if (is_grid_of_seashells(po.param_obj_type())) {
+							for (auto& loddc : mSeashellLodDrawCalls) {
+								loddc.mModelMatrix = po.transformation_matrix() * glm::inverse(prevTM) * loddc.mModelMatrix;
+							}
+						}
 					}
 				}
 			}
@@ -1021,11 +1156,17 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 					LOG_INFO(std::format("Set {}'s (actual) material index to: {}", po.name(), newActualMatIndex));
 					po.set_material_index(newActualMatIndex);
 					updateObjects = true;
+
+					if (is_grid_of_seashells(po.param_obj_type())) {
+						for (auto& loddc : mSeashellLodDrawCalls) {
+							loddc.mMaterialIndex = po.material_index();
+						}
+					}
 				}
 				ImGui::PopID();
 			}
 
-			// One more row just for SH glyphs:
+			// One more row just for SH glyphs and grid of seashells:
 			ImGui::TableNextRow();
 			poId = 0;
 			for (auto& po : mParametricObjects) {
@@ -1042,6 +1183,15 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 					ImGui::SliderInt("SH Order", &tmpOrder, 2, 12);
 					tmpOrder = (tmpOrder / 2) * 2;
 					mDebugSlidersi[1] = tmpOrder;
+				}
+				if (po.param_obj_type() == parametric_object_type::GridOfSeashells) {
+					int gridOfSeashellVariant = mGridOfSeashellsRenderingVariant == grid_of_seashells_rendering_variant::discrete_lods ? 1 : 0;
+					if (ImGui::Combo("How rendered?", &gridOfSeashellVariant, "Parametric models\0Discrete 3D meshes\0")) {
+						updateObjects = true;
+					}
+					mGridOfSeashellsRenderingVariant = !po.is_enabled() ? grid_of_seashells_rendering_variant::dont 
+						: (gridOfSeashellVariant == 0 ? grid_of_seashells_rendering_variant::parametric : grid_of_seashells_rendering_variant::discrete_lods);
+					mGridOfSeashellsAAVariant = po.how_to_render();
 				}
 				ImGui::PopID();
 			}
@@ -1149,6 +1299,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 		create_buffers();
 		load_sponza_and_terrain();
 		load_sh_brain_dataset();
+		load_discrete_lods_of_seashells();
 
 		// Define formats for the framebuffer attachments:
         constexpr auto attachmentFormats = make_array<vk::Format>(vk::Format::eB8G8R8A8Unorm, vk::Format::eD32Sfloat);
@@ -1244,8 +1395,12 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
         create_param_pipes();
 
 		// VERTEX and TESS. PIPES:
-		mVertexPipeline = create_vertex_pipe();
+		mVertexPipeline = create_vertex_pipe(mRenderpassNoAA, mFramebufferNoAA);
 		mUpdater->on(shader_files_changed_event(mVertexPipeline.as_reference())).update(mVertexPipeline);
+		mVertexPipelineSS = create_vertex_pipe(mRenderpassMS, mFramebufferMS);
+		mUpdater->on(shader_files_changed_event(mVertexPipelineSS.as_reference())).update(mVertexPipelineSS);
+		mVertexPipelineMSSS = create_vertex_pipe(mRenderpassSSMS, mFramebufferSSMS);
+		mUpdater->on(shader_files_changed_event(mVertexPipelineMSSS.as_reference())).update(mVertexPipelineMSSS);
 
 		mFsQuadColorSampler = avk::context().create_sampler(avk::filter_mode::trilinear, avk::border_handling_mode::clamp_to_border, 0.0f);
 		mFsQuadDepthSampler = avk::context().create_sampler(avk::filter_mode::trilinear , avk::border_handling_mode::clamp_to_border, 0.0f);
@@ -1331,9 +1486,10 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 			// Ping/pong buffers:
 			descriptor_binding(3, 0, mPatchLodBufferPing->as_storage_buffer()),
 			descriptor_binding(3, 1, mPatchLodBufferPong->as_storage_buffer()),
-			descriptor_binding(3, 2, mPatchLodCountBuffer->as_storage_buffer())
+			descriptor_binding(3, 2, mPatchLodCountBuffer->as_storage_buffer()),
+			descriptor_binding(4, 0, mSeashellLodDrawParamsBuffer->as_storage_buffer())
 #if SEPARATE_PATCH_TILE_ASSIGNMENT_PASS
-			, descriptor_binding(4, 0, mTilePatchesBuffer->as_storage_buffer())
+			, descriptor_binding(4, 1, mTilePatchesBuffer->as_storage_buffer())
 #endif
 		);
         mUpdater->on(shader_files_changed_event(mClearCombinedAttachmentPipe.as_reference())).update(mClearCombinedAttachmentPipe);
@@ -1345,6 +1501,16 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 			descriptor_binding(1, 1, mFramebufferNoAA->image_view_at(1)->as_sampled_image(layout::shader_read_only_optimal))
 		);
         mUpdater->on(shader_files_changed_event(mCopyToCombinedAttachmentPipe.as_reference())).update(mCopyToCombinedAttachmentPipe);
+
+		mSeashellLodSelectionComputePipe = context().create_compute_pipeline_for(
+			"shaders/seashell_lod_selection.comp",
+			push_constant_binding_data{ shader_type::all, 0, sizeof(seashell_lod_selection_push_constants) },
+			descriptor_binding(0, 0, mFrameDataBuffers[0]),
+			descriptor_binding(1, 0, mCountersSsbo->as_storage_buffer()),
+			descriptor_binding(2, 0, mSeashellLodIndexMapping->as_storage_buffer()),
+			descriptor_binding(2, 1, mSeashellLodDrawParamsBuffer->as_storage_buffer())
+		);
+        mUpdater->on(shader_files_changed_event(mSeashellLodSelectionComputePipe.as_reference())).update(mSeashellLodSelectionComputePipe);
 
 		mUpdater->on(swapchain_resized_event(context().main_window())).invoke([this, attachmentFormats]() {
 			// Recreate all the resources (framebuffer, aux. image):
@@ -1404,6 +1570,8 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 		// Upload everything to the GPU:
 		context().record_and_submit_with_fence({ std::move(imageUploadCommands) }, *mQueue)->wait_until_signalled();
 
+		mSavedFrustumPlanes = extract_planes_from_projmat(mQuakeCam.projection_and_view_matrix());
+
 		std::locale::global(std::locale("en_US.UTF-8"));
 		auto imguiManager = current_composition()->element_by_type<imgui_manager>();
         if (nullptr != imguiManager) {
@@ -1434,9 +1602,9 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 					return;
 				}
 
-				auto numDrawCallsBefore = mDrawCalls.size();
+				auto numDrawCallsBefore = mSponzaDrawCalls.size();
 				draw_parametric_objects_ui(imguiManager);
-				auto numDrawCallsAfter  = mDrawCalls.size();
+				auto numDrawCallsAfter  = mSponzaDrawCalls.size();
 				bool rasterPipesNeedRecreation = numDrawCallsBefore != numDrawCallsAfter;
 
 				ImGui::Begin("Info & Settings");
@@ -1449,7 +1617,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 				ImGui::Text("%.1lf ms/render() CPU time", mRenderDurationMs);
 				ImGui::Separator();
 				
-				if (!mDrawCalls.empty()) {
+				if (!mSponzaDrawCalls.empty()) {
 				    ImGui::Separator();
 				    ImGui::Checkbox("Render Sponza + Terrain", &mRenderExtra3DModel);
 				}
@@ -1518,16 +1686,11 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
                     }
                 }
 
-				//// Just some Debug stuff:
-				//ImGui::Separator();
-				//ImGui::Text("DEBUG SLIDERS:");
-    //            ImGui::PushItemWidth(imGuiWindowWidth * 0.6f);
-				//ImGui::SliderFloat("LERP SH <-> Sphere (aka float dbg slider #1)", &mDebugSliders[0], 0.0f, 1.0f);
-				//ImGui::SliderInt("SH Band           (aka int dbg slider #1)", &mDebugSlidersi[0],  0, 31);
-				//ImGui::SliderInt("SH Basis Function (aka int dbg slider #2)", &mDebugSlidersi[1], -mDebugSlidersi[0], mDebugSlidersi[0]);
-				//ImGui::Text("##lololo");
-				//ImGui::SliderFloat("Terrain height (aka float dbg slider #2)", &mDebugSliders[1], 0.0f, 10.0f);
-				//ImGui::PopItemWidth();
+				ImGui::Separator();
+				ImGui::TextColored(ImVec4(1.0f, 0.75f, 0.1f, 1.0f), "Discrete LOD 3D Models Info & Settings:");
+				ImGui::Text("Number of LODs: "); ImGui::SameLine(); ImGui::TextColored(ImVec4(0.75f, 0.5f, 0.05f, 1.0f), "%d", static_cast<int>(mSeashellLodDrawCalls.size()));
+				ImGui::SetNextItemWidth(100.0f);
+				ImGui::SliderFloat("Quality setting (pixel distance when to switch to next LOD)", &mGridOfSeashellsQualitySetting, 1.0f, 8.0f);
 
 				// Automatic performance measurement, camera flight:
 				ImGui::Separator();
@@ -1633,9 +1796,15 @@ ImGui::TextColored(ImVec4(.5f, .3f, .4f, 1.f), "Timestamp Period: %.3f ns", time
 
 				// Do we need to recreate the vertex pipe?
 				if (rasterPipesNeedRecreation) {
-					auto newVertexPipe = create_vertex_pipe();
+					auto newVertexPipe = create_vertex_pipe(mRenderpassNoAA, mFramebufferNoAA);
 					std::swap(*mVertexPipeline, *newVertexPipe); // new pipe is now old pipe
 					context().main_window()->handle_lifetime(std::move(newVertexPipe));
+					auto newVertexPipeSS = create_vertex_pipe(mRenderpassMS, mFramebufferMS);
+					std::swap(*mVertexPipelineSS, *newVertexPipeSS); // new pipe is now old pipe
+					context().main_window()->handle_lifetime(std::move(newVertexPipeSS));
+					auto newVertexPipeMSSS = create_vertex_pipe(mRenderpassSSMS, mFramebufferSSMS);
+					std::swap(*mVertexPipelineMSSS, *newVertexPipeMSSS); // new pipe is now old pipe
+					context().main_window()->handle_lifetime(std::move(newVertexPipeMSSS));
 
 					{
 						auto newFsQuadNoaaToMsPipe = create_noaa_to_ms_pipe();
@@ -1726,13 +1895,46 @@ ImGui::TextColored(ImVec4(.5f, .3f, .4f, 1.f), "Timestamp Period: %.3f ns", time
 		);
 #endif
 	}
+
+	// Sets the camera to some test cam position
+	// Parameters: curIdx ... basically the test distance
+	//             f ........ circular position
+	void set_test_cam_pos(int curIdx, float f = 0.0f)
+	{
+#if TEST_MODE_ON
+        float camCoords = TEST_CAMERA_DELTA_FACTOR * static_cast<float>(curIdx) + TEST_CAMDIST * glm::pow(TEST_CAMERA_DELTA_POW, static_cast<float>(curIdx));
+		bool translateY = TEST_TRANSLATE_Y;
+		bool translateZ = TEST_TRANSLATE_Z;
+		auto camPos = glm::angleAxis(f * glm::two_pi<float>(), avk::up())
+            				* glm::vec3{ 0.0f, translateY ? camCoords : TEST_CAM_Y_SHIFT, translateZ ? camCoords : 0.0f };
+		//auto camPos = glm::vec3{ 0.0f, translateY ? camCoords : TEST_CAM_Y_SHIFT, translateZ ? camCoords : 0.0f };
+#else
+		auto curDist = (mDistanceFromOrigin + mMeasurementMoveCameraDelta * curIdx);
+		auto camPos = glm::angleAxis(f * glm::two_pi<float>(), up()) * glm::vec3{ 0.0f, 4.0f, 20.0f };
+		camPos *= curDist / glm::length(camPos);
+#endif
+
+		mOrbitCam.set_translation(camPos);
+		mOrbitCam.set_pivot_distance(glm::length(camPos));
+#if TEST_MODE_ON
+		mOrbitCam.look_at(glm::vec3{0.0f, TEST_CAM_Y_LOOKAT, 0.0f});
+#else
+		mOrbitCam.look_at(glm::vec3{0.0f});
+#endif
+	}
 	
 	void update() override
 	{
 		using namespace avk;
 
-		if (!mQuakeCam.is_enabled() && input().key_pressed(key_code::q)) {
+		if (!mQuakeCam.is_enabled()) {
 			mQuakeCam.set_matrix(mOrbitCam.matrix());
+		}
+		else {
+			mOrbitCam.set_matrix(mQuakeCam.matrix());
+		}
+
+		if (!mQuakeCam.is_enabled() && input().key_pressed(key_code::q)) {
 			mQuakeCam.enable();
 			mOrbitCam.disable();
         }
@@ -1755,6 +1957,40 @@ ImGui::TextColored(ImVec4(.5f, .3f, .4f, 1.f), "Timestamp Period: %.3f ns", time
 			mWhatToCopyToBackbuffer = 3;
         }
 
+		if (input().key_down(key_code::left_control) || input().key_down(key_code::right_control) ||  input().key_down(key_code::right_alt)) {
+			float f = input().key_down(key_code::left_shift) || input().key_down(key_code::right_shift) ? glm::half_pi<float>() : 0.0f;
+			if (input().key_pressed(key_code::num0)) {
+				set_test_cam_pos(0, f);
+			}
+			if (input().key_pressed(key_code::num1)) {
+				set_test_cam_pos(1, f);
+			}
+			if (input().key_pressed(key_code::num2)) {
+				set_test_cam_pos(2, f);
+			}
+			if (input().key_pressed(key_code::num3)) {
+				set_test_cam_pos(3, f);
+			}
+			if (input().key_pressed(key_code::num4)) {
+				set_test_cam_pos(4, f);
+			}
+			if (input().key_pressed(key_code::num5)) {
+				set_test_cam_pos(5, f);
+			}
+			if (input().key_pressed(key_code::num6)) {
+				set_test_cam_pos(6, f);
+			}
+			if (input().key_pressed(key_code::num7)) {
+				set_test_cam_pos(7, f);
+			}
+			if (input().key_pressed(key_code::num8)) {
+				set_test_cam_pos(8, f);
+			}
+			if (input().key_pressed(key_code::num9)) {
+				set_test_cam_pos(9, f);
+			}
+		}
+
 		if (avk::input().key_pressed(avk::key_code::i)) {
 			LOG_INFO(std::format("O orbitCam pos: {:.5}f, {:.5}f, {:.5}f | distance from origin: {:.5}f", 
 				mOrbitCam.translation().x, mOrbitCam.translation().y, mOrbitCam.translation().z, glm::length(mOrbitCam.translation())));
@@ -1766,9 +2002,12 @@ ImGui::TextColored(ImVec4(.5f, .3f, .4f, 1.f), "Timestamp Period: %.3f ns", time
 		}
 
 		if (avk::input().key_pressed(avk::key_code::space)) {
+#if TEST_SET_CAM_TO_POS
+#else
 			mStartMeasurement = true;
+#endif
 		}
-#if TEST_DURATION_PER_STEP
+#if defined(TEST_DURATION_PER_STEP)
 		const float MeasureSecsPerStep = TEST_DURATION_PER_STEP;
 #else
 		const float MeasureSecsPerStep = 2.5f;
@@ -1780,8 +2019,11 @@ ImGui::TextColored(ImVec4(.5f, .3f, .4f, 1.f), "Timestamp Period: %.3f ns", time
 					mParametricObjects[ii].set_enabled(true);
 					mParametricObjects[ii].set_tessellation_levels({ static_cast<float>(TEST_INNER_TESS_LEVEL), static_cast<float>(TEST_OUTER_TESS_LEVEL) });
 					mParametricObjects[ii].set_screen_distance_threshold(static_cast<float>(TEST_SCREEN_DISTANCE_THRESHOLD));
-					mParametricObjects[ii].set_adaptive_rendering_on(1 == TEST_USEINDIVIDUAL_PATCH_RES);
+					mParametricObjects[ii].set_adaptive_rendering_on(1 == TEST_USE_ADAPTIVE_TESSELLATION);
 					mParametricObjects[ii].set_how_to_render(TEST_RENDERING_METHOD);
+#if defined(TEST_INITIAL_EVAL_DIMS_X) && defined(TEST_INITIAL_EVAL_DIMS_Y)
+					mParametricObjects[ii].set_eval_dims({ TEST_INITIAL_EVAL_DIMS_X, TEST_INITIAL_EVAL_DIMS_Y, 0, 0 });
+#endif
 
 					mParametricObjects[ii].set_transformation_matrix(glm::mat4{ 1.0f }); // TODO: Use an appropriate one
 
@@ -1794,7 +2036,7 @@ ImGui::TextColored(ImVec4(.5f, .3f, .4f, 1.f), "Timestamp Period: %.3f ns", time
 						LOG_INFO(std::format(" - Tile factor:   {}x{}", TILE_FACTOR_X, TILE_FACTOR_Y));
 						LOG_INFO(std::format(" - Local FB size: {}x{}", LOCAL_FB_X, LOCAL_FB_Y));
 						break;
-					case rendering_variant::Tess_8xSS:
+					case rendering_variant::Tess_8xMS:
 					case rendering_variant::Tess_4xSS_8xMS:
 						LOG_INFO(std::format(" - SAMPLE_COUNT: {}", vk::to_string(SAMPLE_COUNT)));
 					case rendering_variant::Tess_noAA:
@@ -1810,6 +2052,53 @@ ImGui::TextColored(ImVec4(.5f, .3f, .4f, 1.f), "Timestamp Period: %.3f ns", time
 			fill_object_data_buffer();
 			mRenderExtra3DModel = 1 == TEST_ENABLE_3D_MODEL;
 			mGatherPipelineStats = 1 == TEST_GATHER_PIPELINE_STATS;
+
+#if TEST_SET_OPTIMAL_COPY_AND_OUTPUT_CONFIG
+#if TEST_RESET_COPY_AND_OUTPUT_CONFIG_AFTER_TEST
+			mSavedRenderVariantDataTransferEnabled = mRenderVariantDataTransferEnabled;
+			mSavedOutputResultOfRenderVariantIndex = mOutputResultOfRenderVariantIndex;
+#endif
+			// Do not perform useless data transfers:
+			// Reminder: 
+			//	ImGui::Checkbox("Tess. noAA -> Point-based", &mRenderVariantDataTransferEnabled[0]);
+			//	ImGui::Checkbox("Point-based -> 8xMS", &mRenderVariantDataTransferEnabled[1]);
+			//	ImGui::Checkbox("8xMS -> 4xSS+8xMS", &mRenderVariantDataTransferEnabled[2]);
+			//	ImGui::Unindent();
+			//
+			//	ImGui::Combo("-> results -> backbuffer", &mOutputResultOfRenderVariantIndex, "After tess. noAA\0After point-based\0After 8xMS\0After 4xSS+8xMS\0");
+			switch (TEST_RENDERING_METHOD)
+			{
+				case rendering_variant::Tess_noAA:
+					mRenderVariantDataTransferEnabled[0] = false;
+					mRenderVariantDataTransferEnabled[1] = false;
+					mRenderVariantDataTransferEnabled[2] = false;
+					mOutputResultOfRenderVariantIndex = 0;
+					break;
+				case rendering_variant::Tess_8xMS:
+					mRenderVariantDataTransferEnabled[0] = false;
+					mRenderVariantDataTransferEnabled[1] = false;
+					mRenderVariantDataTransferEnabled[2] = false;
+					mOutputResultOfRenderVariantIndex = 2;
+					break;
+				case rendering_variant::Tess_4xSS_8xMS:
+					mRenderVariantDataTransferEnabled[0] = false;
+					mRenderVariantDataTransferEnabled[1] = false;
+					mRenderVariantDataTransferEnabled[2] = false;
+					mOutputResultOfRenderVariantIndex = 3;
+					break;
+				case rendering_variant::PointRendered_direct:
+					break;
+				case rendering_variant::PointRendered_4xSS_local_fb:
+					break;
+				case rendering_variant::Hybrid:
+					mRenderVariantDataTransferEnabled[0] = true;
+					mRenderVariantDataTransferEnabled[1] = true;
+					mRenderVariantDataTransferEnabled[2] = true;
+					mOutputResultOfRenderVariantIndex = 3;
+					break;
+			}
+#endif
+
 #endif
 #if TEST_MODE_ON && !TEST_ALLOW_GATHER_STATS
 			if(mGatherPipelineStats) {
@@ -1843,6 +2132,7 @@ ImGui::TextColored(ImVec4(.5f, .3f, .4f, 1.f), "Timestamp Period: %.3f ns", time
 			std::get<double>(mMeasurementFrameCounters[0]) = curTime;
 			std::get<float>(mMeasurementFrameCounters[0]) = mDistanceFromOrigin;
 			mMeasurementIndexLastFrame = 0;
+			mIgnoreFramesCounter = NUM_CONCURRENT_FRAMES;
 		}
 		if (mMeasurementInProgress) {
 			auto curTime = time().absolute_time_dp();
@@ -1879,7 +2169,11 @@ ImGui::TextColored(ImVec4(.5f, .3f, .4f, 1.f), "Timestamp Period: %.3f ns", time
 					}
 			    }
 #else
+#if TEST_COUNT_SEASHELL_COUNTER
+				LOG_INFO("Measurement results (elapsed time, camera distance, num seashells rendered (avg.),       whatever         , FPS):");
+#else
 				LOG_INFO("Measurement results (elapsed time, camera distance, unique pixels (avg.), num patches out to render (avg.), FPS):");
+#endif
 			    for (auto [elapsedTime, dist, numGlyphs, numPatches, cnt] : mMeasurementFrameCounters) {
 					if (cnt != 0 && elapsedTime != 0.0) {
 						LOG_INFO(std::format("({:5.2f}, \t{:5.1f}, \t{:12}, \t{:12}, \t{:7.2f}", elapsedTime, dist, numGlyphs / cnt, numPatches / cnt, cnt / elapsedTime));
@@ -1898,6 +2192,13 @@ ImGui::TextColored(ImVec4(.5f, .3f, .4f, 1.f), "Timestamp Period: %.3f ns", time
 					}
 				}
 #endif
+
+#if TEST_SET_OPTIMAL_COPY_AND_OUTPUT_CONFIG
+#if TEST_RESET_COPY_AND_OUTPUT_CONFIG_AFTER_TEST
+				mRenderVariantDataTransferEnabled = mSavedRenderVariantDataTransferEnabled;
+				mOutputResultOfRenderVariantIndex = mSavedOutputResultOfRenderVariantIndex;
+#endif
+#endif
 			}
             else {
 				// FLY & MEASURE!
@@ -1906,42 +2207,31 @@ ImGui::TextColored(ImVec4(.5f, .3f, .4f, 1.f), "Timestamp Period: %.3f ns", time
 				if (curIdx != mMeasurementIndexLastFrame) {
 					std::get<double>(mMeasurementFrameCounters[curIdx-1]) = curTime;
 					std::get<float>(mMeasurementFrameCounters[curIdx]) = glm::length(glm::vec3{ mOrbitCam.translation().x, 0.0f, mOrbitCam.translation().z });
+					mIgnoreFramesCounter = NUM_CONCURRENT_FRAMES;
 				}
+				if (mIgnoreFramesCounter-- < 0) {
 #if TEST_GATHER_TIMER_QUERIES && STATS_ENABLED
-				std::get<2>(mMeasurementFrameCounters[curIdx]) += mLastTotalRenderDuration;
-				std::get<3>(mMeasurementFrameCounters[curIdx]) += mLastLodStageDuration;
+					std::get<2>(mMeasurementFrameCounters[curIdx]) += mLastTotalRenderDuration;
+					std::get<3>(mMeasurementFrameCounters[curIdx]) += mLastLodStageDuration;
 #else
-				std::get<2>(mMeasurementFrameCounters[curIdx]) += mCounterValues[1];
-				std::get<3>(mMeasurementFrameCounters[curIdx]) += mNumPxFillPatchesCreated[0] + mNumPxFillPatchesCreated[1] + mNumPxFillPatchesCreated[2] + mNumPxFillPatchesCreated[3] + mNumPxFillPatchesCreated[4];
+#if defined(TEST_COUNT_SEASHELL_COUNTER) && TEST_COUNT_SEASHELL_COUNTER == 1
+					LOG_INFO(std::format("seashells visible = {}", mCounterValues[3]));
+					std::get<2>(mMeasurementFrameCounters[curIdx]) += mCounterValues[3];
+#else
+					std::get<2>(mMeasurementFrameCounters[curIdx]) += mCounterValues[1];
+#endif
+					std::get<3>(mMeasurementFrameCounters[curIdx]) += mNumPxFillPatchesCreated[0] + mNumPxFillPatchesCreated[1] + mNumPxFillPatchesCreated[2] + mNumPxFillPatchesCreated[3] + mNumPxFillPatchesCreated[4];
 #endif 
 #if TEST_GATHER_PATCH_COUNTS
-				for (int b = 0; b < MAX_PATCH_SUBDIV_STEPS; ++b) {
-					mMeasurementPatchCounts[curIdx][b] += mPatchesCreatedPerLevel[b];
+					for (int b = 0; b < MAX_PATCH_SUBDIV_STEPS; ++b) {
+						mMeasurementPatchCounts[curIdx][b] += mPatchesCreatedPerLevel[b];
+					}
+#endif
+					std::get<int>(mMeasurementFrameCounters[curIdx]) += 1;
 				}
-#endif
-				std::get<int>(mMeasurementFrameCounters[curIdx]) += 1;
-            	auto f = static_cast<float>((curTime - curIdx * MeasureSecsPerStep - mMeasurementStartTime) / MeasureSecsPerStep);
 
-#if TEST_MODE_ON
-            	float camCoords = TEST_CAMDIST * glm::pow(TEST_CAMERA_DELTA_POW, static_cast<float>(curIdx));
-				bool translateY = TEST_TRANSLATE_Y;
-				bool translateZ = TEST_TRANSLATE_Z;
-				auto camPos = glm::angleAxis(f * glm::two_pi<float>(), avk::up())
-            						* glm::vec3{ 0.0f, translateY ? camCoords : TEST_CAM_Y_SHIFT, translateZ ? camCoords : 0.0f };
-				//auto camPos = glm::vec3{ 0.0f, translateY ? camCoords : TEST_CAM_Y_SHIFT, translateZ ? camCoords : 0.0f };
-#else
-				auto curDist = (mDistanceFromOrigin + mMeasurementMoveCameraDelta * curIdx);
-				auto camPos = glm::angleAxis(f * glm::two_pi<float>(), up()) * glm::vec3{ 0.0f, 4.0f, 20.0f };
-				camPos *= curDist / glm::length(camPos);
-#endif
-
-				mOrbitCam.set_translation(camPos);
-				mOrbitCam.set_pivot_distance(glm::length(camPos));
-#if TEST_MODE_ON
-				mOrbitCam.look_at(glm::vec3{0.0f, TEST_CAM_Y_SHIFT, 0.0f});
-#else
-				mOrbitCam.look_at(glm::vec3{0.0f});
-#endif
+				auto f = static_cast<float>((curTime - curIdx * MeasureSecsPerStep - mMeasurementStartTime) / MeasureSecsPerStep);
+				set_test_cam_pos(curIdx, f);
 				mMeasurementIndexLastFrame = curIdx;
 			}
 		}
@@ -2117,6 +2407,10 @@ ImGui::TextColored(ImVec4(.5f, .3f, .4f, 1.f), "Timestamp Period: %.3f ns", time
         uboData.mGatherPipelineStats                       = mGatherPipelineStats;
         uboData.mAbsoluteTime                              = (mAnimationPaused ? mAnimationPauseTime : time().absolute_time()) - mTimeToSubtract;
         uboData.mDeltaTime                                 = time().delta_time();
+		if (!input().key_down(key_code::f)) { // If [F] is NOT pressed, the current frustum are updated to the current view/projection matrices
+			mSavedFrustumPlanes = extract_planes_from_projmat(mQuakeCam.projection_and_view_matrix());
+		}
+		uboData.mFrustumPlanes                             = mSavedFrustumPlanes;
 		// Update in host-coherent buffer:
         auto emptyCmd = mFrameDataBuffers[inFlightIndex]->fill(&uboData, 0);
 		
@@ -2196,6 +2490,50 @@ ImGui::TextColored(ImVec4(.5f, .3f, .4f, 1.f), "Timestamp Period: %.3f ns", time
 		}
 #endif
 
+		std::vector<recorded_commands_t> commandsnoAA;
+		std::vector<recorded_commands_t> commands8xSS;
+		std::vector<recorded_commands_t> commands4xSS8xMS;
+		if (mGridOfSeashellsRenderingVariant == grid_of_seashells_rendering_variant::discrete_lods && mSeashellLodDrawCalls.size() > 0) {
+			std::vector<recorded_commands_t>& targetVec = mGridOfSeashellsAAVariant == rendering_variant::Tess_noAA ? commandsnoAA    : mGridOfSeashellsAAVariant == rendering_variant::Tess_8xMS ? commands8xSS      : commands4xSS8xMS;
+			avk::graphics_pipeline& vtxPipe             = mGridOfSeashellsAAVariant == rendering_variant::Tess_noAA ? mVertexPipeline : mGridOfSeashellsAAVariant == rendering_variant::Tess_8xMS ? mVertexPipelineSS : mVertexPipelineMSSS;
+			targetVec = command::gather(
+				command::bind_pipeline(vtxPipe.as_reference()),
+				command::bind_descriptors(vtxPipe->layout(), mDescriptorCache->get_or_create_descriptor_sets({
+					descriptor_binding(0, 0, mFrameDataBuffers[inFlightIndex]),
+					descriptor_binding(0, 1, as_combined_image_samplers(mImageSamplers, layout::shader_read_only_optimal)),
+					descriptor_binding(0, 2, mMaterialBuffer),
+					descriptor_binding(1, 0, mCombinedAttachmentView->as_storage_image(layout::general)),
+#if STATS_ENABLED
+					descriptor_binding(1, 1, mHeatMapImageView->as_storage_image(layout::general)),
+#endif
+					descriptor_binding(2, 0, mCountersSsbo->as_storage_buffer()),
+					descriptor_binding(3, 0, mSeashellLodIndexMapping->as_storage_buffer()),
+					descriptor_binding(3, 1, mSeashellLodDrawParamsBuffer->as_storage_buffer())
+				})),
+				command::many_n_times(static_cast<int>(mSeashellLodDrawCalls.size()), [this,&vtxPipe](int i) {
+					return command::gather(
+						command::push_constants(vtxPipe->layout(), vertex_pipe_push_constants{ 
+							mSeashellLodDrawCalls[i].mModelMatrix,
+							mSeashellLodDrawCalls[i].mMaterialIndex,
+							i
+						}),
+						command::draw_indexed_indirect(
+							mSeashellLodDrawParamsBuffer.as_reference(),
+							// Bind and use the index buffer:
+							//mIndexBuffer.as_reference(), 
+							std::forward_as_tuple(mIndexBuffer.as_reference(), size_t{mSeashellLodDrawCalls[i].mIndexBufferOffset}),
+							// uint32_t aNumberOfDraws, vk::DeviceSize aParametersOffset, uint32_t aParametersStride:
+							1u, static_cast<vk::DeviceSize>(i * sizeof(PaddedVkDrawIndexedIndirectCommand)), static_cast<uint32_t>(sizeof(PaddedVkDrawIndexedIndirectCommand)),
+							// Bind the vertex input buffers in the right order (corresponding to the layout specifiers in the vertex shader)
+							std::forward_as_tuple(mPositionsBuffer.as_reference(), size_t{mSeashellLodDrawCalls[i].mPositionsBufferOffset}), 
+							std::forward_as_tuple(mTexCoordsBuffer.as_reference(), size_t{mSeashellLodDrawCalls[i].mTexCoordsBufferOffset}),
+							std::forward_as_tuple(mNormalsBuffer.as_reference()  , size_t{mSeashellLodDrawCalls[i].mNormalsBufferOffset})
+						)
+					);
+				} )
+			);
+		}
+
 		// Perform the LOD stage:
 		auto [lodStageCommands, firstPing, finalPong] = get_lod_stage_commands();
 
@@ -2224,9 +2562,10 @@ ImGui::TextColored(ImVec4(.5f, .3f, .4f, 1.f), "Timestamp Period: %.3f ns", time
 #endif
                     descriptor_binding(3, 0, mPatchLodBufferPing->as_storage_buffer()),
                     descriptor_binding(3, 1, mPatchLodBufferPong->as_storage_buffer()),
-                    descriptor_binding(3, 2, mPatchLodCountBuffer->as_storage_buffer())
+                    descriptor_binding(3, 2, mPatchLodCountBuffer->as_storage_buffer()),
+					descriptor_binding(4, 0, mSeashellLodDrawParamsBuffer->as_storage_buffer())
 #if SEPARATE_PATCH_TILE_ASSIGNMENT_PASS
-					, descriptor_binding(4, 0, mTilePatchesBuffer->as_storage_buffer())
+					, descriptor_binding(4, 1, mTilePatchesBuffer->as_storage_buffer())
 #endif
 				})),
 				command::dispatch((resolution.x + 15u) / 16u, (resolution.y + 15u) / 16u, 1u),
@@ -2235,6 +2574,20 @@ ImGui::TextColored(ImVec4(.5f, .3f, .4f, 1.f), "Timestamp Period: %.3f ns", time
 #if STATS_ENABLED
 				mTimestampPool->write_timestamp(firstQueryIndex + 1, stage::compute_shader), // measure after clearing
 #endif
+
+				command::bind_pipeline(mSeashellLodSelectionComputePipe.as_reference()),
+				command::bind_descriptors(mSeashellLodSelectionComputePipe->layout(), mDescriptorCache->get_or_create_descriptor_sets({
+					descriptor_binding(0, 0, mFrameDataBuffers[inFlightIndex]),
+					descriptor_binding(1, 0, mCountersSsbo->as_storage_buffer()),
+					descriptor_binding(2, 0, mSeashellLodIndexMapping->as_storage_buffer()),
+					descriptor_binding(2, 1, mSeashellLodDrawParamsBuffer->as_storage_buffer())
+				})),
+				command::push_constants(mSeashellLodSelectionComputePipe->layout(), seashell_lod_selection_push_constants {
+					static_cast<int>(mSeashellLodDrawCalls.size()),
+					mGridOfSeashellsQualitySetting
+				}),
+				command::dispatch(roundUpToMultipleOf(SEASHELL_GRID_DIM * SEASHELL_GRID_DIM / 256, 256), 1u, 1u),
+
 				
 			// 1) Initialize:
 			initCommands,
@@ -2269,26 +2622,31 @@ ImGui::TextColored(ImVec4(.5f, .3f, .4f, 1.f), "Timestamp Period: %.3f ns", time
 #if STATS_ENABLED
 							descriptor_binding(1, 1, mHeatMapImageView->as_storage_image(layout::general)),
 #endif
-							descriptor_binding(2, 0, mCountersSsbo->as_storage_buffer())
+							descriptor_binding(2, 0, mCountersSsbo->as_storage_buffer()),
+							descriptor_binding(3, 0, mSeashellLodIndexMapping->as_storage_buffer()),
+							descriptor_binding(3, 1, mSeashellLodDrawParamsBuffer->as_storage_buffer())
 						})),
-						command::many_n_times(static_cast<int>(mDrawCalls.size()), [this](int i) {
+						command::many_n_times(static_cast<int>(mSponzaDrawCalls.size()), [this](int i) {
 							return command::gather(
 								command::push_constants(mVertexPipeline->layout(), vertex_pipe_push_constants{ 
-									mDrawCalls[i].mModelMatrix,
-									mDrawCalls[i].mMaterialIndex
+									mSponzaDrawCalls[i].mModelMatrix,
+									mSponzaDrawCalls[i].mMaterialIndex,
+									0
 								}),
 								command::draw_indexed(
 									// Bind and use the index buffer:
-									std::forward_as_tuple(mIndexBuffer.as_reference(), size_t{mDrawCalls[i].mIndexBufferOffset}, mDrawCalls[i].mNumElements),
+									std::forward_as_tuple(mIndexBuffer.as_reference(), size_t{mSponzaDrawCalls[i].mIndexBufferOffset}, mSponzaDrawCalls[i].mNumElements),
 									// Bind the vertex input buffers in the right order (corresponding to the layout specifiers in the vertex shader)
-									std::forward_as_tuple(mPositionsBuffer.as_reference(), size_t{mDrawCalls[i].mPositionsBufferOffset}), 
-									std::forward_as_tuple(mTexCoordsBuffer.as_reference(), size_t{mDrawCalls[i].mTexCoordsBufferOffset}),
-									std::forward_as_tuple(mNormalsBuffer.as_reference()  , size_t{mDrawCalls[i].mNormalsBufferOffset})
+									std::forward_as_tuple(mPositionsBuffer.as_reference(), size_t{mSponzaDrawCalls[i].mPositionsBufferOffset}), 
+									std::forward_as_tuple(mTexCoordsBuffer.as_reference(), size_t{mSponzaDrawCalls[i].mTexCoordsBufferOffset}),
+									std::forward_as_tuple(mNormalsBuffer.as_reference()  , size_t{mSponzaDrawCalls[i].mNormalsBufferOffset})
 								)
 							);
 						} )
 					); }
 				),
+
+				commandsnoAA,
 
 #if STATS_ENABLED
 				mTimestampPool->write_timestamp(firstQueryIndex + 4, stage::color_attachment_output), // measure after rendering sponza
@@ -2315,7 +2673,7 @@ ImGui::TextColored(ImVec4(.5f, .3f, .4f, 1.f), "Timestamp Period: %.3f ns", time
 				}),
 				command::draw_vertices_indirect(
 					mIndirectPxFillCountBuffer.as_reference(), 
-					get_rendering_variant_index(rendering_variant::Tess_noAA) * sizeof(VkDrawIndirectCommand), 
+					get_rendering_variant_index(rendering_variant::Tess_noAA) * sizeof(VkDrawIndexedIndirectCommand), 
 					sizeof(VkDrawIndirectCommand), 
 					1u) // <-- Exactly ONE draw (but potentially a lot of instances), use the one at [0]
 				
@@ -2453,6 +2811,9 @@ ImGui::TextColored(ImVec4(.5f, .3f, .4f, 1.f), "Timestamp Period: %.3f ns", time
 					// Draw a a full-screen quad:
 					command::draw(6, 1, 0, 1)
 				); }),
+
+				
+				commands8xSS,
 				
 				command::next_subpass(),
 
@@ -2485,7 +2846,6 @@ ImGui::TextColored(ImVec4(.5f, .3f, .4f, 1.f), "Timestamp Period: %.3f ns", time
 					get_rendering_variant_index(rendering_variant::Tess_8xMS) * sizeof(VkDrawIndirectCommand), 
 					sizeof(VkDrawIndirectCommand), 
 					1u) // <-- Exactly ONE draw (but potentially a lot of instances), use the one at [1]
-
 			)),
 
 
@@ -2508,6 +2868,8 @@ ImGui::TextColored(ImVec4(.5f, .3f, .4f, 1.f), "Timestamp Period: %.3f ns", time
 					// Draw a a full-screen quad:
 					command::draw(6, 1, 0, 1)
 				); }),
+
+				commands4xSS8xMS,
 				
 				command::next_subpass(),
 
@@ -2540,7 +2902,6 @@ ImGui::TextColored(ImVec4(.5f, .3f, .4f, 1.f), "Timestamp Period: %.3f ns", time
 					get_rendering_variant_index(rendering_variant::Tess_4xSS_8xMS) * sizeof(VkDrawIndirectCommand), 
 					sizeof(VkDrawIndirectCommand), 
 					1u) // <-- Exactly ONE draw (but potentially a lot of instances), use the one at [1]
-
 			)),
 #else 
 #if STATS_ENABLED
@@ -2660,7 +3021,12 @@ private: // v== Member variables ==v
 	avk::buffer mMaterialBuffer;
 	std::vector<avk::image_sampler> mImageSamplers;
 
-	std::vector<data_for_draw_call> mDrawCalls;
+	std::vector<data_for_draw_call> mSponzaDrawCalls;
+
+	std::vector<data_for_draw_call> mSeashellLodDrawCalls;
+	avk::buffer						mSeashellLodDrawParamsBuffer;
+	avk::buffer						mSeashellLodIndexMapping;
+	avk::compute_pipeline			mSeashellLodSelectionComputePipe;
 
 	avk::compute_pipeline mInitPatchesComputePipe;
 	avk::compute_pipeline mInitKnitYarnComputePipe;
@@ -2746,6 +3112,8 @@ private: // v== Member variables ==v
 	avk::buffer mIndirectPxFillCountBuffer;
 
     avk::graphics_pipeline mVertexPipeline;
+    avk::graphics_pipeline mVertexPipelineSS;
+    avk::graphics_pipeline mVertexPipelineMSSS;
     avk::graphics_pipeline mTessPipelinePxFillNoaa;
     avk::graphics_pipeline mTessPipelinePxFillMultisampled;
     avk::graphics_pipeline mTessPipelinePxFillSupersampled;
@@ -2768,6 +3136,7 @@ private: // v== Member variables ==v
 	std::vector<glm::vec3> mSpherePositions;
 
 	bool mStartMeasurement = false;
+	int  mIgnoreFramesCounter = 3; //< A counter to ignore some frames after switching to another distance (to prevent wrong results)
 	float mDistanceFromOrigin = 22.0f;
 	bool mMeasurementInProgress = false;
 	double mMeasurementStartTime = 0.0;
@@ -2829,6 +3198,16 @@ private: // v== Member variables ==v
 	bool mEnableSampleShadingFor4xSS8xMS;
 	std::array<bool, 3> mRenderVariantDataTransferEnabled;
 	int  mOutputResultOfRenderVariantIndex;
+#if TEST_MODE_ON
+	std::array<bool, 3> mSavedRenderVariantDataTransferEnabled;
+	int  mSavedOutputResultOfRenderVariantIndex;
+#endif
+
+	std::array<glm::vec4, 6> mSavedFrustumPlanes;
+	grid_of_seashells_rendering_variant mGridOfSeashellsRenderingVariant = grid_of_seashells_rendering_variant::dont;
+	rendering_variant mGridOfSeashellsAAVariant;
+	int mGridOfSeashellsMaterialIndex;
+	float mGridOfSeashellsQualitySetting = 4.0f;
 
 }; // vk_parametric_curves_app
 
@@ -2850,7 +3229,7 @@ int main() // <== Starting point ==
 		mainWnd->request_srgb_framebuffer(false);
 		mainWnd->enable_resizing(true);
 		mainWnd->set_presentaton_mode(avk::presentation_mode::mailbox);
-		mainWnd->set_number_of_concurrent_frames(3u);
+		mainWnd->set_number_of_concurrent_frames(NUM_CONCURRENT_FRAMES);
 		mainWnd->set_image_usage_properties(avk::image_usage::general_storage_image | avk::image_usage::color_attachment);
 		mainWnd->open();
 

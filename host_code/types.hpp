@@ -13,7 +13,6 @@ struct data_for_draw_call
 	glm::mat4 mModelMatrix;
 
 	int32_t mMaterialIndex;
-	int32_t mPixelsOnMeridian;
 };
 
 /** Contains the data for each draw call */
@@ -25,9 +24,7 @@ struct loaded_model_data
 	std::vector<uint32_t> mIndices;
 
 	glm::mat4 mModelMatrix;
-
 	int32_t mMaterialIndex;
-	int32_t mPixelsOnMeridian;
 };
 
 struct frame_data_ubo
@@ -41,6 +38,8 @@ struct frame_data_ubo
     // Debug sliders:
     glm::vec4            mDebugSliders;
     glm::ivec4           mDebugSlidersi;
+    // Frustum culling for LODs of seashells:
+	std::array<glm::vec4, 6> mFrustumPlanes;
     // Common, global settings:
     VkBool32             mHeatMapEnabled;
     VkBool32             mGatherPipelineStats;
@@ -68,7 +67,8 @@ enum struct parametric_object_type : int32_t
     Seashell1,
     Seashell2,
     Seashell3,
-    GiantWorm
+    GiantWorm,
+    GridOfSeashells
 };
 
 enum struct rendering_variant : int
@@ -145,7 +145,7 @@ static const char* get_rendering_variant_description(rendering_variant aRenderMe
 
 // ATTENTION: Whenever you add a new enum item  ^^^  here, also add it to the string  vvv  here!
 static const char* PARAMETRIC_OBJECT_TYPE_UI_STRING
-	= "Plane\0Sphere\0Palm Tree Trunk\0JohisHeart\0Spiky Heart\0SH Glyph\0SH Brain Dataset\0Single Yarn Curve\0Single Fiber Curve\0Curtain Yarn Curves\0Curtain Fiber Curves\0Seashell 1\0Seashell 2\0Seashell 3\0Giant Worm\0";
+	= "Plane\0Sphere\0Palm Tree Trunk\0JohisHeart\0Spiky Heart\0SH Glyph\0SH Brain Dataset\0Single Yarn Curve\0Single Fiber Curve\0Curtain Yarn Curves\0Curtain Fiber Curves\0Seashell 1\0Seashell 2\0Seashell 3\0Giant Worm\0Grid of Seashells\0";
 
 // Data about one parametric object:
 class parametric_object
@@ -162,7 +162,7 @@ public:
         , mTransformationMatrix{ aTransformationMatrix }
         , mMaterialIndex{ aMaterialIndex }
         , mRenderingMethod{ rendering_variant::Tess_noAA }
-        , mScreenDistanceThreshold{ 84.0f }
+        , mScreenDistanceThreshold{ 64.0f }
         , mParametersEpsilon{ 0.005f, 0.005f }
         , mTessLevels{ 16.0f, 16.0f }
         , mSamplingFactors{ 1.0f, 1.0f }
@@ -332,6 +332,7 @@ struct vertex_pipe_push_constants
 {
 	glm::mat4 mModelMatrix;
     int32_t   mMatIndex;
+    int32_t   mLod;
 };
 
 struct copy_to_backbuffer_push_constants
@@ -363,4 +364,21 @@ struct standalone_tess_push_constants
 struct patch_into_tess_push_constants
 {
     int32_t mPxFillParamsBufferOffset;
+};
+
+struct PaddedVkDrawIndexedIndirectCommand {
+    uint32_t    indexCount;
+    uint32_t    instanceCount;
+    uint32_t    firstIndex;
+    int32_t     vertexOffset;
+    uint32_t    firstInstance;
+    int32_t     _padding0;
+    uint32_t    _padding1;
+    float       _padding2;
+};
+
+struct seashell_lod_selection_push_constants
+{
+    int   mNumLods;
+    float mQuality;
 };

@@ -7,7 +7,8 @@
 #define NUM_MODELS_PER_DIM			7
 
 // Maximum number of struct object_data entries in the respective buffer:
-#define MAX_OBJECTS					100
+// (5k needed for the grid of seashells; otherwise, < 100 would be sufficient)
+#define MAX_OBJECTS					5200
 
 // Maximum number of subdivision steps that divides patches into smaller parts:
 // (8 steps are enough to subdivide 8192x8192 down into 32x32)
@@ -26,7 +27,7 @@
 // Index that represents the hybrid variant:
 #define HYBRID_VARIANT_INDEX		5
 
-// The vertex buffers offer  space for 67M vertices each (=> 800MB for positions data):
+// The vertex buffers offer  space for 67M vertices each (=> 800MB for positions data, 500MB for texture coordinates, 800MB for normals):
 #define MAX_VERTICES				 67108864
 // The index  buffer  offers space for 67M vertices (=> 500MB for index data):
 #define MAX_INDICES					134217728
@@ -71,3 +72,8 @@
 #define SH_BRAIN_DATA_SIZE_X      140
 #define SH_BRAIN_DATA_SIZE_Y      140
 #define SH_BRAIN_ELEMENT_OFFSET    25.0
+
+#define SEASHELL_MAX_LODS          10
+// Seashell grid is 71x71 = 5041
+#define SEASHELL_GRID_DIM          71
+#define SEASHELL_LOD_IDS_STRIDE    5200

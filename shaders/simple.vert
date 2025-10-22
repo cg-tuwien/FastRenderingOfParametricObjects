@@ -7,7 +7,12 @@
 #include "../shader_includes/host_device_shared.h"
 #include "../shader_includes/util/ui64_conv.glsl"
 #include "../shader_includes/types.glsl"
+
+// ###### BOUND RESOURCES #################################
+#include "../shader_includes/util/glsl_helpers.glsl"
 #include "../shader_includes/common_ubo.glsl"
+layout(set = 3, binding = 0) buffer SeashellLodIndexMapping { uint mMappedIndex[]; } uSeashellLodIndexMapping;
+layout(set = 3, binding = 1) buffer SeashellLodDrawParamsBuffer { VkDrawIndirectCommand mDrawParams[]; } uSeashellLodDrawParamsBuffer;
 
 layout (location = 0) in vec3 inPosition; 
 layout (location = 1) in vec2 inTexCoord;
@@ -21,6 +26,7 @@ layout(push_constant) uniform PushConstants
 {
     mat4 mModelMatrix;
     int  mMatIndex;
+    int  mLod;
 }
 pushConstants;
 
@@ -58,8 +64,21 @@ vec3 vertexColors[MAX_COLORS] = {
 // ###### MAIN ###########################
 void main() {
 	vec4 posWS = pushConstants.mModelMatrix * vec4(inPosition.xyz, 1.0);
+
+    // The following if block is for handling the LODs of seashells; it is inactive for Sponza + Terrain:
+    // (Note: One could argue that this shader is no longer that simple.vert ^^)
+    if (gl_InstanceIndex > 0) {
+        int mappingIndex  = int(gl_InstanceIndex.x) - 1;
+        int seashellIndex = int(uSeashellLodIndexMapping.mMappedIndex[SEASHELL_LOD_IDS_STRIDE * pushConstants.mLod + mappingIndex]);
+
+        int x = (seashellIndex - 1) / 71;
+        int y = (seashellIndex - 1) % 71;
+        vec3 seashellPos = vec3(5.0 * (x - 36), 0.0, 5.0 * (y - 36));
+        posWS += vec4(seashellPos, 0.0);
+    }
+
 	v_out.positionWS = posWS.xyz;
-	v_out.normalWS   = inNormal;
+	v_out.normalWS   = mat3(pushConstants.mModelMatrix) * inNormal;
     v_out.texCoords  = inTexCoord;
     v_out.shadingUserParams = vec3(0.0);
     v_out.matIndex   = pushConstants.mMatIndex;

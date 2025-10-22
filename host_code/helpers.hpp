@@ -61,8 +61,19 @@ uint64_t depth_to_ui64(float depth)
     return static_cast<uint64_t>(*reinterpret_cast<uint32_t*>(&depth));
 }
 
-
 uint64_t combine_depth_and_color(uint64_t depthEncoded, uint64_t colorEncoded)
 {
     return (depthEncoded << 32) | colorEncoded;
+}
+
+std::array<glm::vec4, 6> extract_planes_from_projmat(glm::mat4 projViewMat)
+{
+    std::array<glm::vec4, 6> result;
+    for (int i = 4; i--; ) { result[0][i] = projViewMat[i][3] + projViewMat[i][0]; }
+    for (int i = 4; i--; ) { result[1][i] = projViewMat[i][3] - projViewMat[i][0]; }
+    for (int i = 4; i--; ) { result[2][i] = projViewMat[i][3] + projViewMat[i][1]; }
+    for (int i = 4; i--; ) { result[3][i] = projViewMat[i][3] - projViewMat[i][1]; }
+    for (int i = 4; i--; ) { result[4][i] = projViewMat[i][3] + projViewMat[i][2]; }
+    for (int i = 4; i--; ) { result[5][i] = projViewMat[i][3] - projViewMat[i][2]; }
+    return result;
 }
