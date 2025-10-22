@@ -12,7 +12,9 @@ Parametric Seashell | Parametric Fiber Curve | Curtain of Fiber Curves | Spheric
 ![Parametrically defined seashell model](./assets/po-seashell3.png)  |  ![Parametrically defined fiber curves](./assets/po-fiber-curve-single.png) |  ![Curtain made of hundreds of thousands of fiber curves](./assets/po-blue-curtain.png) |  ![Spherical Harmonics glyph can be parametrically defined](./assets/po-single-sh-glyph.png)
 | Parametric description of a seashell model | Parametric description of six intertwined fiber curves | A curtain made of 358k fiber curves, which are rendered fully opaque | SH functions classify as parametric functions; can be used for detailed medical visualization
 
-Further information can be found in [our paper](), in the used framework [Auto-Vk-Toolkit](), in source code comments, and below in section [Hints, Q&A](#hints-qa).
+When the program is run, it will present the window shown in _Figure 1_ in the user interface (UI), which contains controls to enable/disable various parametrically defined objects, along with controls to change their position, and change their rendering method. 
+Further settings and information, like the frames per second, can be found in another UI window.
+Information about the implementation and the structure of the source code can be found in [our paper](https://www.cg.tuwien.ac.at/research/publications/2024/unterguggenberger-2024-fropo/), in the used framework [Auto-Vk-Toolkit](https://github.com/cg-tuwien/Auto-Vk-Toolkit), in source code comments, and below in section [Hints, Q&A](#hints-qa).
 
 # Setup
 
