@@ -1,10 +1,6 @@
-Accompanying source code of our EGPGV 2024 'best' paper:     
-**[Fast Rendering of Parametric Objects on Modern GPUs](https://www.cg.tuwien.ac.at/research/publications/2024/unterguggenberger-2024-fropo/)**     
-and its extended edition     
-**Real-Time Rendering Methods with Adaptive Levels of Detail for Fast Rendering of Parametric Objects on Modern GPUs**     
-
+Accompanying source code of our EGPGV 2024 'best' paper: **[Fast Rendering of Parametric Objects on Modern GPUs](https://www.cg.tuwien.ac.at/research/publications/2024/unterguggenberger-2024-fropo/)**     
+and its extended edition: **Real-Time Rendering Methods with Adaptive Levels of Detail for Fast Rendering of Parametric Objects on Modern GPUs**     
 by Johannes Unterguggenberger¹², Lukas Lipp¹, Michael Wimmer¹, Markus Steinberger²³, Bernhard Kerbl¹, and Markus Schütz¹      
-
 ¹ [TU Wien](https://www.tuwien.at/), Institute of Visual Computing & Human-Centered Technology, [Research Unit of Computer Graphics](https://www.cg.tuwien.ac.at/)       
 ² Huawei Technologies, Austria        
 ³ Graz University of Technology, Austria     
@@ -33,13 +29,18 @@ Information about the implementation and the structure of the source code can be
 
 *) Some buffers are pre-allocated, totalling approximately 3 gigabytes. See `MAX_VERTICES` and `MAX_INDICES` in code.
 
-**Setup:**
+**Pull, Build, and Run:**
 - Clone this repository
 - Pull submodules: `git submodule update --init --recursive`
 - Open `FastRenderingOfParametricObjects.sln`
 - Select the project `FastRenderingOfPaametricObjects` as the startup project
 - Build All and wait for the [Post Build Helper](https://github.com/cg-tuwien/Auto-Vk-Toolkit/tree/master/visual_studio#post-build-helper) to have deployed all the assets
 - Debug/Run the solution
+
+# Replicability of Results
+
+To replicate the results presented in our papers, please proceed as follows:
+-
 
 # Hints, Q&A
 
