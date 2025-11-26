@@ -17,3 +17,5 @@
 #define TEST_SCREEN_DISTANCE_THRESHOLD 62
 #define TEST_USE_ADAPTIVE_TESSELLATION  1
 #define TEST_ENABLE_3D_MODEL           0
+
+#define TEST_RENDERING_METHOD          rendering_variant::Tess_noAA

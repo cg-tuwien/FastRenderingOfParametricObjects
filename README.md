@@ -1,6 +1,13 @@
-**Accompanying source code of our EGPGV 2024 'best' paper: [Fast Rendering of Parametric Objects on Modern GPUs](https://www.cg.tuwien.ac.at/research/publications/2024/unterguggenberger-2024-fropo/)**     
-by Johannes Unterguggenberger, Lukas Lipp, Michael Wimmer, Bernhard Kerbl, and Markus Schütz      
-[Research Unit of Computer Graphics](https://www.cg.tuwien.ac.at/), [TU Wien](https://www.tuwien.at/)
+Accompanying source code of our EGPGV 2024 'best' paper:     
+**[Fast Rendering of Parametric Objects on Modern GPUs](https://www.cg.tuwien.ac.at/research/publications/2024/unterguggenberger-2024-fropo/)**     
+and its extended edition     
+**Real-Time Rendering Methods with Adaptive Levels of Detail for Fast Rendering of Parametric Objects on Modern GPUs**     
+
+by Johannes Unterguggenberger¹², Lukas Lipp¹, Michael Wimmer¹, Markus Steinberger²³, Bernhard Kerbl¹, and Markus Schütz¹      
+
+¹ [TU Wien](https://www.tuwien.at/), Institute of Visual Computing & Human-Centered Technology, [Research Unit of Computer Graphics](https://www.cg.tuwien.ac.at/)       
+² Huawei Technologies, Austria        
+³ Graz University of Technology, Austria     
 
 ![Screenshot of the UI section to enable/disable parametric objects](parametric_objects_screenshot.png "Parametric Objects UI section")      
 _Figure 1:_ A screenshot of the UI section which allows enabling and disabling of different kinds of parametric objects.

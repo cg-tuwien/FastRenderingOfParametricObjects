@@ -46,7 +46,8 @@
 //#include "perf_tests/test_fiber_curves.hpp"
 //#include "perf_tests/test_seashell.hpp"
 //#include "perf_tests/test_grid_of_seashells_discrete_lods.hpp"
-#include "perf_tests/test_grid_of_seashells.hpp"
+//#include "perf_tests/test_grid_of_seashells.hpp"
+#include "perf_tests/test_sh_glyph.hpp"
 
 
 static std::array<parametric_object, 15> PredefinedParametricObjects {{

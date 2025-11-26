@@ -224,6 +224,9 @@
     <ClInclude Include="host_code\perf_tests\test_grid_of_seashells_discrete_lods.hpp">
       <Filter>host_code\perf_tests</Filter>
     </ClInclude>
+    <ClInclude Include="host_code\perf_tests\test_sh_glyph.hpp">
+      <Filter>host_code\perf_tests</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Image Include="assets\po-johis-heart.png">

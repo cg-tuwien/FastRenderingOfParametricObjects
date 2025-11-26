@@ -33,6 +33,7 @@
     <ClInclude Include="host_code\perf_tests\test_grid_of_seashells_discrete_lods.hpp" />
     <ClInclude Include="host_code\perf_tests\test_knit_yarn.hpp" />
     <ClInclude Include="host_code\perf_tests\test_seashell.hpp" />
+    <ClInclude Include="host_code\perf_tests\test_sh_glyph.hpp" />
     <ClInclude Include="host_code\types.hpp" />
     <ClInclude Include="precompiled_headers\cg_stdafx.hpp" />
     <ClInclude Include="precompiled_headers\cg_targetver.hpp" />
