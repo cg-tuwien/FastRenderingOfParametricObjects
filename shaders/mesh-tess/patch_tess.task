@@ -84,8 +84,8 @@ void main()
     int subdivV = max(1, int(ceil(levelV)));
 
     // Clamp to mesh shader limits
-    subdivU = min(subdivU, 32);
-    subdivV = min(subdivV, 32);
+    subdivU = min(subdivU, 64);
+    subdivV = min(subdivV, 64);
 
     // Fill task payload for the mesh shader
     taskOut.mPxFillId   = pxFillId;
