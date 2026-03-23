@@ -1,0 +1,158 @@
+#version 460
+#extension GL_EXT_mesh_shader : require
+#extension GL_EXT_nonuniform_qualifier                   : require
+#extension GL_EXT_shader_image_int64                     : require
+#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
+#extension GL_GOOGLE_include_directive                   : enable
+#extension GL_EXT_debug_printf                           : enable
+
+#include "../../shader_includes/host_device_shared.h"
+#include "../../shader_includes/util/ui64_conv.glsl"
+#include "../../shader_includes/util/glsl_helpers.glsl"
+#include "../../shader_includes/types.glsl"
+#include "../../shader_includes/common_ubo.glsl"
+
+// Bound resources (same as tessellation pipeline)
+layout(set = 2, binding = 0) buffer SsboCounters { uint mCounters[4]; } uCounters;
+layout(set = 3, binding = 0) buffer ObjectData   { object_data mElements[]; }  uObjectData;
+layout(set = 4, binding = 0) buffer BigDataset { dataset_sh_coeffs mEntries[]; } uBigDataset; 
+
+#include "../../shader_includes/parametric_functions/shape_functions.glsl"
+#include "../../shader_includes/parametric_curve_helpers.glsl"
+
+layout(push_constant) uniform PushConstants
+{
+    int   mPxFillParamsBufferOffset;
+}
+pushConstants;
+
+// Must match the struct in the task shader exactly
+struct TaskPayload
+{
+    uint  mPxFillId;
+    uint  mObjectId;
+    uvec3 mUserData;
+    vec2  mParamsFrom;
+    vec2  mParamsTo;
+    int   mSubdivU;
+    int   mSubdivV;
+};
+taskPayloadSharedEXT TaskPayload taskOut;
+
+// Each mesh workgroup handles one quad cell => 4 vertices, 2 triangles
+layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+layout(triangles, max_vertices = 4, max_primitives = 2) out;
+
+// Output to fragment shader (mirrors tese output)
+layout (location = 0) out PerVertexData
+{
+    vec3 positionWS;
+    vec3 normalWS;
+    vec2 texCoords;
+    vec3 shadingUserParams;
+    flat int matIndex;
+    flat vec3 color;
+} mesh_out[];
+
+#define MAX_COLORS 13
+vec3 vertexColors[MAX_COLORS] = vec3[](
+    vec3(0.987, 0.537, 0.490), // Saturated Peach
+    vec3(0.698, 0.911, 0.989), // Saturated Sky Blue
+    vec3(0.850, 0.996, 0.737), // Saturated Mint Green
+    vec3(0.996, 0.651, 0.529), // Saturated Apricot
+    vec3(0.698, 0.741, 0.890), // Saturated Lavender
+    vec3(0.949, 0.651, 0.898), // Saturated Lilac
+    vec3(0.800, 0.964, 0.651), // Saturated Pistachio
+    vec3(0.996, 0.600, 0.690), // Saturated Coral
+    vec3(0.851, 0.937, 0.651), // Saturated Mint
+    vec3(0.996, 0.827, 0.580), // Saturated Banana
+    vec3(0.600, 0.867, 0.996), // Saturated Baby Blue
+    vec3(0.851, 0.600, 0.949), // Saturated Orchid
+    vec3(0.851, 0.839, 0.600)  // Saturated Beige
+);
+
+// Helper: evaluate one vertex of the parametric surface and fill mesh outputs
+void emitVertex(uint idx, vec2 myParams, float du, float dv,
+                uint objectId, uvec3 userData, mat4 tM, int curveIndex, int matIndex,
+                uint colorSeed)
+{
+    vec4 rawWS   = paramToWS(myParams.x, myParams.y, curveIndex, userData);
+    vec4 posWS   = tM * rawWS;
+    vec4 posCS   = toCS(posWS);
+
+    vec4 rawWS_u = paramToWS(myParams.x + du, myParams.y,      curveIndex, userData);
+    vec4 posWS_u = tM * rawWS_u;
+    vec4 rawWS_v = paramToWS(myParams.x,      myParams.y + dv, curveIndex, userData);
+    vec4 posWS_v = tM * rawWS_v;
+
+    vec3 rawNormalWS = calculateNormalWS(posWS.xyz, posWS_u.xyz, posWS_v.xyz, curveIndex, userData);
+
+    gl_MeshVerticesEXT[idx].gl_Position   = posCS;
+    mesh_out[idx].positionWS              = posWS.xyz;
+    mesh_out[idx].normalWS                = normalize(rawNormalWS);
+    mesh_out[idx].texCoords               = getParamTexCoords(myParams.x, myParams.y, curveIndex, userData, posWS.xyz);
+    mesh_out[idx].shadingUserParams       = getParamShadingUserParams(myParams.x, myParams.y, curveIndex, userData, rawWS.xyz, objectId);
+    mesh_out[idx].matIndex                = matIndex;
+    mesh_out[idx].color                   = vertexColors[colorSeed % MAX_COLORS];
+}
+
+void main()
+{
+    // Identify which cell of the subdivided patch this workgroup handles
+    uint iu = gl_WorkGroupID.x; // [0 .. subdivU-1]
+    uint iv = gl_WorkGroupID.y; // [0 .. subdivV-1]
+
+    // Read task payload
+    uint  objectId  = taskOut.mObjectId;
+    uvec3 userData  = taskOut.mUserData;
+    vec2  pFrom     = taskOut.mParamsFrom;
+    vec2  pTo       = taskOut.mParamsTo;
+    int   subdivU   = taskOut.mSubdivU;
+    int   subdivV   = taskOut.mSubdivV;
+
+    // Corner params of the full patch (same layout as tese's p00..p11)
+    vec2 p00 = pFrom;
+    vec2 p01 = vec2(pTo.x,   pFrom.y);
+    vec2 p10 = vec2(pFrom.x, pTo.y);
+    vec2 p11 = pTo;
+
+    // Compute the four (su, sv) corners of this cell
+    float su0 = float(iu)     / float(subdivU);
+    float su1 = float(iu + 1) / float(subdivU);
+    float sv0 = float(iv)     / float(subdivV);
+    float sv1 = float(iv + 1) / float(subdivV);
+
+    // Bilinear interpolation of params (same formula as patch_go.tese)
+    // For a given (su, sv):  p0 = mix(p00, p01, su);  p1 = mix(p10, p11, su);  result = mix(p0, p1, sv)
+    vec2 params00 = mix(mix(p00, p01, su0), mix(p10, p11, su0), sv0);
+    vec2 params10 = mix(mix(p00, p01, su1), mix(p10, p11, su1), sv0);
+    vec2 params01 = mix(mix(p00, p01, su0), mix(p10, p11, su0), sv1);
+    vec2 params11 = mix(mix(p00, p01, su1), mix(p10, p11, su1), sv1);
+
+    // Deltas for normal estimation (same as tese: range / tessLevel)
+    float du = (p11.x - p00.x) / float(subdivU);
+    float dv = (p11.y - p00.y) / float(subdivV);
+
+    // Object data
+    mat4 tM        = uObjectData.mElements[objectId].mTransformationMatrix;
+    int curveIndex = uObjectData.mElements[objectId].mCurveIndex;
+    int matIndex   = uObjectData.mElements[objectId].mMaterialIndex;
+
+    // Color seed for variety (mirrors tese logic)
+    uint colorBase = taskOut.mPxFillId + iu * 31u + iv * 17u;
+
+    // Set output counts: 4 vertices, 2 triangles
+    SetMeshOutputsEXT(4u, 2u);
+
+    // Emit the 4 corner vertices of this cell
+    //   v0 (su0,sv0)  v1 (su1,sv0)
+    //   v2 (su0,sv1)  v3 (su1,sv1)
+    emitVertex(0u, params00, du, dv, objectId, userData, tM, curveIndex, matIndex, colorBase);
+    emitVertex(1u, params10, du, dv, objectId, userData, tM, curveIndex, matIndex, colorBase + 1u);
+    emitVertex(2u, params01, du, dv, objectId, userData, tM, curveIndex, matIndex, colorBase + 2u);
+    emitVertex(3u, params11, du, dv, objectId, userData, tM, curveIndex, matIndex, colorBase + 3u);
+
+    // Two triangles forming the quad (CCW winding to match original tese)
+    gl_PrimitiveTriangleIndicesEXT[0] = uvec3(0, 1, 2);
+    gl_PrimitiveTriangleIndicesEXT[1] = uvec3(1, 3, 2);
+}

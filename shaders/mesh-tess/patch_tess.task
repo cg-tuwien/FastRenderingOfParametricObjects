@@ -1,0 +1,102 @@
+#version 460
+#extension GL_EXT_mesh_shader : require
+#extension GL_EXT_nonuniform_qualifier                   : require
+#extension GL_EXT_shader_image_int64                     : require
+#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
+#extension GL_GOOGLE_include_directive                   : enable
+#extension GL_EXT_debug_printf                           : enable
+
+#include "../../shader_includes/host_device_shared.h"
+#include "../../shader_includes/util/ui64_conv.glsl"
+#include "../../shader_includes/util/glsl_helpers.glsl"
+#include "../../shader_includes/types.glsl"
+#include "../../shader_includes/common_ubo.glsl"
+
+// Bound resources mirrored from tessellation pipeline
+layout(set = 2, binding = 0) buffer SsboCounters { uint mCounters[4]; } uCounters;
+layout(set = 3, binding = 0) buffer ObjectData   { object_data mElements[]; }  uObjectData;
+layout(set = 3, binding = 1) buffer PxFillParams { px_fill_data mElements[]; } uPxFillParams; 
+layout(set = 3, binding = 2) buffer PxFillCount  { VkDrawIndirectCommand mDrawParams[]; } uPxFillCounts;
+layout(set = 4, binding = 0) buffer BigDataset { dataset_sh_coeffs mEntries[]; } uBigDataset; 
+
+layout(push_constant) uniform PushConstants
+{
+    int   mPxFillParamsBufferOffset;
+}
+pushConstants;
+
+// Task payload passed to each spawned mesh shader workgroup
+struct TaskPayload
+{
+    uint  mPxFillId;
+    uint  mObjectId;
+    uvec3 mUserData;
+    vec2  mParamsFrom;
+    vec2  mParamsTo;
+    int   mSubdivU;
+    int   mSubdivV;
+};
+taskPayloadSharedEXT TaskPayload taskOut;
+
+layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+void main()
+{
+    // Each task shader workgroup handles one patch.
+    // The application dispatches one workgroup per patch via vkCmdDrawMeshTasksEXT(patchCount, 1, 1).
+    uint pxFillId = gl_WorkGroupID.x + uint(pushConstants.mPxFillParamsBufferOffset);
+
+    const uint objectId     = uPxFillParams.mElements[pxFillId].mObjectIdUserData[0];
+    const uvec3 userData    = uPxFillParams.mElements[pxFillId].mObjectIdUserData.yzw;
+    const vec2 epsilons     = uObjectData.mElements[objectId].mLodAndRenderSettings.xy;
+    const bool  useAdaptive = uObjectData.mElements[objectId].mUseAdaptiveDetail == 1;
+    const vec2  tessLevels  = uObjectData.mElements[objectId].mTessAndSamplingSettings.xy;
+
+    // Compute parameter range (same as patch_ready.vert)
+    vec2 paramsFrom = vec2(
+        uPxFillParams.mElements[pxFillId].mParams[0],
+        uPxFillParams.mElements[pxFillId].mParams[2]
+    );
+    vec2 paramsTo = vec2(
+        uPxFillParams.mElements[pxFillId].mParams[1],
+        uPxFillParams.mElements[pxFillId].mParams[3]
+    );
+    vec2 paramsRange = paramsTo - paramsFrom;
+    paramsFrom -= epsilons * paramsRange;
+    paramsTo   += epsilons * paramsRange;
+
+    // Compute subdivision levels (simplified from tesc adaptive logic)
+    float innerTess = tessLevels[0];
+
+    float levelU = innerTess;
+    float levelV = innerTess;
+
+    if (useAdaptive) {
+        const float absoluteMin =  8.0;
+        const float absoluteMax = 64.0;
+        const vec2 screenDists = uPxFillParams.mElements[pxFillId].mScreenDistsHybridData.xy;
+        const float threshold  = uObjectData.mElements[objectId].mLodAndRenderSettings.z;
+
+        levelU = clamp(innerTess * screenDists.x / min(threshold, innerTess), absoluteMin, absoluteMax);
+        levelV = clamp(innerTess * screenDists.y / min(threshold, innerTess), absoluteMin, absoluteMax);
+    }
+
+    int subdivU = max(1, int(ceil(levelU)));
+    int subdivV = max(1, int(ceil(levelV)));
+
+    // Clamp to mesh shader limits
+    subdivU = min(subdivU, 32);
+    subdivV = min(subdivV, 32);
+
+    // Fill task payload for the mesh shader
+    taskOut.mPxFillId   = pxFillId;
+    taskOut.mObjectId   = objectId;
+    taskOut.mUserData   = userData;
+    taskOut.mParamsFrom = paramsFrom;
+    taskOut.mParamsTo   = paramsTo;
+    taskOut.mSubdivU    = subdivU;
+    taskOut.mSubdivV    = subdivV;
+
+    // Spawn a 2D grid of mesh shader workgroups: one per (u, v) subdivision cell.
+    // Each mesh workgroup will generate the geometry for one quad cell of the patch.
+    EmitMeshTasksEXT(uint(subdivU), uint(subdivV), 1u);
+}

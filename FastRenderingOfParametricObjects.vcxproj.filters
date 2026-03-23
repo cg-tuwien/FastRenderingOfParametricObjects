@@ -29,6 +29,9 @@
     <Filter Include="host_code\perf_tests">
       <UniqueIdentifier>{b19b560e-20fb-48a9-a89d-fbfb113a3a68}</UniqueIdentifier>
     </Filter>
+    <Filter Include="shaders\mesh-tess">
+      <UniqueIdentifier>{518dc7f3-51b0-4964-98a1-2873e971b8da}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <None Include="shaders\frag_out.frag">
@@ -171,6 +174,12 @@
     </None>
     <None Include="assets\seashell_lod5_835k_tri.fbx">
       <Filter>assets</Filter>
+    </None>
+    <None Include="shaders\mesh-tess\patch_tess.mesh">
+      <Filter>shaders\mesh-tess</Filter>
+    </None>
+    <None Include="shaders\mesh-tess\patch_tess.task">
+      <Filter>shaders\mesh-tess</Filter>
     </None>
   </ItemGroup>
   <ItemGroup>

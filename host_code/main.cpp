@@ -39,6 +39,9 @@
 #define SSAA_ENABLED 1
 #define SSAA_FACTOR  glm::uvec2(2, 2)
 
+// Define the following to tessellate via task/mesh shaders instead of through tessellation shaders:
+#define MESH_SHADER_TESSELLATOR 1
+
 // TEST_MODE: Uncomment one of the following includes to load a specific configuration for test mode.
 //            It will then be tested with the rendering variant assigned to TEST_RENDERING_METHOD.
 //            Once the application has started, start the test with [Space].
@@ -653,14 +656,19 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 
 	// Ts ... optional addtional bindings
 	template <typename... Ts>
-	avk::graphics_pipeline create_tess_pipe(std::string aVert, std::string aTesc, std::string aTese, Ts... args)
+	avk::graphics_pipeline create_tess_pipe(Ts... args)
 	{
 		using namespace avk;
 
 		return context().create_graphics_pipeline_for(
-                vertex_shader(aVert),
-                tessellation_control_shader(aTesc),
-                tessellation_evaluation_shader(aTese),
+#if MESH_SHADER_TESSELLATOR
+				task_shader(					"shaders/mesh-tess/patch_tess.task"),
+				mesh_shader(					"shaders/mesh-tess/patch_tess.mesh"),
+#else
+                vertex_shader(					"shaders/px-fill-tess/patch_ready.vert"),
+                tessellation_control_shader(	"shaders/px-fill-tess/patch_set.tesc"),
+                tessellation_evaluation_shader(	"shaders/px-fill-tess/patch_go.tese"),
+#endif
 				fragment_shader("shaders/frag_out.frag"),
                 cfg::front_face::define_front_faces_to_be_counter_clockwise(),
 			    mBackfaceCullingOn ? cfg::culling_mode::cull_back_faces : cfg::culling_mode::disabled,
@@ -1297,7 +1305,7 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 		mDescriptorCache = context().create_descriptor_cache();
 
 		create_buffers();
-		load_sponza_and_terrain();
+		//load_sponza_and_terrain();
 		load_sh_brain_dataset();
 		load_discrete_lods_of_seashells();
 
@@ -1410,9 +1418,6 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 		mUpdater->on(shader_files_changed_event(mFsQuadMStoSSPipe.as_reference())).update(mFsQuadMStoSSPipe);
 
 		mTessPipelinePxFillNoaa = create_tess_pipe(
-			"shaders/px-fill-tess/patch_ready.vert", 
-			"shaders/px-fill-tess/patch_set.tesc", 
-			"shaders/px-fill-tess/patch_go.tese",
 			push_constant_binding_data{shader_type::all, 0, sizeof(patch_into_tess_push_constants)},
 			cfg::shade_per_fragment(),
 			cfg::viewport_depth_scissors_config::from_framebuffer(mFramebufferNoAA.as_reference()),
@@ -1427,9 +1432,6 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 		mUpdater->on(shader_files_changed_event(mTessPipelinePxFillNoaaWireframe.as_reference())).update(mTessPipelinePxFillNoaaWireframe);
 
 		mTessPipelinePxFillMultisampled = create_tess_pipe(
-			"shaders/px-fill-tess/patch_ready.vert", 
-			"shaders/px-fill-tess/patch_set.tesc", 
-			"shaders/px-fill-tess/patch_go.tese",
 			push_constant_binding_data{shader_type::all, 0, sizeof(patch_into_tess_push_constants)},
 			mEnableSampleShadingFor8xMS ? cfg::shade_per_sample() : cfg::shade_per_fragment(),
 			cfg::viewport_depth_scissors_config::from_framebuffer(mFramebufferMS.as_reference()),
@@ -1444,9 +1446,6 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 		mUpdater->on(shader_files_changed_event(mTessPipelinePxFillMultisampledWireframe.as_reference())).update(mTessPipelinePxFillMultisampledWireframe);
 
 		mTessPipelinePxFillSupersampled = create_tess_pipe(
-			"shaders/px-fill-tess/patch_ready.vert", 
-			"shaders/px-fill-tess/patch_set.tesc", 
-			"shaders/px-fill-tess/patch_go.tese",
 			push_constant_binding_data{shader_type::all, 0, sizeof(patch_into_tess_push_constants)},
 			mEnableSampleShadingFor4xSS8xMS ? cfg::shade_per_sample() : cfg::shade_per_fragment(),
 			cfg::viewport_depth_scissors_config::from_framebuffer(mFramebufferSSMS.as_reference()),
@@ -1540,8 +1539,8 @@ public: // v== avk::invokee overrides which will be invoked by the framework ==v
 		mOrbitCam.set_translation(camPos);
 		mOrbitCam.look_at(glm::vec3{0.0f});
 		mOrbitCam.set_pivot_distance(glm::length(mOrbitCam.translation()));
-		mOrbitCam.set_perspective_projection(glm::radians(45.0f), context().main_window()->aspect_ratio(), 1.0f, 60000.0f);
-		mQuakeCam.set_perspective_projection(glm::radians(45.0f), context().main_window()->aspect_ratio(), 1.0f, 60000.0f);
+		mOrbitCam.set_perspective_projection(glm::radians(45.0f), context().main_window()->aspect_ratio(), 0.25f, 60000.0f);
+		mQuakeCam.set_perspective_projection(glm::radians(45.0f), context().main_window()->aspect_ratio(), 0.25f, 60000.0f);
 		current_composition()->add_element(mOrbitCam);
 		current_composition()->add_element(mQuakeCam);
 		mQuakeCam.disable();
@@ -1820,9 +1819,6 @@ ImGui::TextColored(ImVec4(.5f, .3f, .4f, 1.f), "Timestamp Period: %.3f ns", time
 
 					{
 						auto newTessPipePxFill = create_tess_pipe(
-							"shaders/px-fill-tess/patch_ready.vert", 
-							"shaders/px-fill-tess/patch_set.tesc", 
-							"shaders/px-fill-tess/patch_go.tese",
 							push_constant_binding_data{shader_type::all, 0, sizeof(patch_into_tess_push_constants)},
 							cfg::shade_per_fragment(),
 							cfg::viewport_depth_scissors_config::from_framebuffer(mFramebufferNoAA.as_reference()),
@@ -1840,9 +1836,6 @@ ImGui::TextColored(ImVec4(.5f, .3f, .4f, 1.f), "Timestamp Period: %.3f ns", time
 
 					{
 						auto newTessPipePxFillSpS = create_tess_pipe(
-							"shaders/px-fill-tess/patch_ready.vert", 
-							"shaders/px-fill-tess/patch_set.tesc", 
-							"shaders/px-fill-tess/patch_go.tese",
 							push_constant_binding_data{shader_type::all, 0, sizeof(patch_into_tess_push_constants)},
 							mEnableSampleShadingFor8xMS ? cfg::shade_per_sample() : cfg::shade_per_fragment(),
 							cfg::viewport_depth_scissors_config::from_framebuffer(mFramebufferMS.as_reference()),
@@ -1860,9 +1853,6 @@ ImGui::TextColored(ImVec4(.5f, .3f, .4f, 1.f), "Timestamp Period: %.3f ns", time
 
 					{
 						auto newTessPipePxFillSuSa = create_tess_pipe(
-							"shaders/px-fill-tess/patch_ready.vert", 
-							"shaders/px-fill-tess/patch_set.tesc", 
-							"shaders/px-fill-tess/patch_go.tese",
 							push_constant_binding_data{shader_type::all, 0, sizeof(patch_into_tess_push_constants)},
 							mEnableSampleShadingFor4xSS8xMS ? cfg::shade_per_sample() : cfg::shade_per_fragment(),
 							cfg::viewport_depth_scissors_config::from_framebuffer(mFramebufferSSMS.as_reference()),
@@ -2475,6 +2465,17 @@ ImGui::TextColored(ImVec4(.5f, .3f, .4f, 1.f), "Timestamp Period: %.3f ns", time
 			    mPatchesCreatedPerLevel[i] = patchLodCountBufferContents[i].x;
 			}
 		}
+		else {
+			std::array<VkDrawIndirectCommand, NUM_DIFFERENT_RENDER_VARIANTS> pxFillCountBufferContents;
+			context().record_and_submit_with_fence({
+		        mIndirectPxFillCountBuffer->read_into(pxFillCountBufferContents.data(), 0),
+			}, *mQueue)->wait_until_signalled();
+			mNumPxFillPatchesCreated[0] = pxFillCountBufferContents[0].instanceCount;
+			mNumPxFillPatchesCreated[1] = pxFillCountBufferContents[1].instanceCount;
+			mNumPxFillPatchesCreated[2] = pxFillCountBufferContents[2].instanceCount;
+			mNumPxFillPatchesCreated[3] = pxFillCountBufferContents[3].instanceCount;
+			mNumPxFillPatchesCreated[4] = pxFillCountBufferContents[4].instanceCount;
+		}
 
 		std::vector<recorded_commands_t> commandsBeginStats;
 		std::vector<recorded_commands_t> commandsEndStats;
@@ -2671,12 +2672,19 @@ ImGui::TextColored(ImVec4(.5f, .3f, .4f, 1.f), "Timestamp Period: %.3f ns", time
 				command::push_constants(tessPipePxFillNoaaToBeUsed->layout(), patch_into_tess_push_constants{ 
 					get_rendering_variant_index(rendering_variant::Tess_noAA) * MAX_INDIRECT_DISPATCHES 
 				}),
+#if MESH_SHADER_TESSELLATOR
+				command::draw_mesh_tasks_indirect_ext(
+					mIndirectPxFillCountBuffer.as_reference(), 
+					get_rendering_variant_index(rendering_variant::Tess_noAA) * sizeof(VkDrawIndexedIndirectCommand) + sizeof(uint32_t),
+					1u,
+					sizeof(VkDrawIndirectCommand))
+#else
 				command::draw_vertices_indirect(
 					mIndirectPxFillCountBuffer.as_reference(), 
 					get_rendering_variant_index(rendering_variant::Tess_noAA) * sizeof(VkDrawIndexedIndirectCommand), 
 					sizeof(VkDrawIndirectCommand), 
 					1u) // <-- Exactly ONE draw (but potentially a lot of instances), use the one at [0]
-				
+#endif
 			)),
 
 #if STATS_ENABLED
@@ -3258,6 +3266,17 @@ int main() // <== Starting point ==
 #endif
 			avk::required_device_extensions(VK_EXT_SHADER_IMAGE_ATOMIC_INT64_EXTENSION_NAME),
 			avk::required_device_extensions(VK_KHR_SHADER_DRAW_PARAMETERS_EXTENSION_NAME),
+#if MESH_SHADER_TESSELLATOR
+			avk::required_device_extensions(VK_EXT_MESH_SHADER_EXTENSION_NAME),
+#if VK_HEADER_VERSION >= 239
+			// ... and enable the mesh shader features that we need:
+			[](vk::PhysicalDeviceMeshShaderFeaturesEXT& meshShaderFeatures) {
+				meshShaderFeatures.setMeshShader(VK_TRUE);
+				meshShaderFeatures.setTaskShader(VK_TRUE);
+				meshShaderFeatures.setMeshShaderQueries(VK_TRUE);
+			},
+#endif
+#endif
 			avk::physical_device_features_pNext_chain_entry{ &image64ext },
 			[](vk::PhysicalDeviceFeatures& features) {
 				features.setPipelineStatisticsQuery(VK_TRUE);
